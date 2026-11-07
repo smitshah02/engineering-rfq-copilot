@@ -1,0 +1,39 @@
+
+# Python environments
+.venv/
+venv/
+env/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Testing and tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor temporary files
+*.swp
+*.swo
+
+# Local logs
+*.log
+logs/
+
+/data/rfq_synthetic_data/
+/data/rfq_synthetic_data_v1.1.0.zip
