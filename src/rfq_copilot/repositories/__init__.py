@@ -1,11 +1,18 @@
 """Internal read repositories; callers own sessions and authorize customer scope."""
 
 from rfq_copilot.repositories.queries import (
+    RuleIntegrityError,
+    find_materials,
     get_customer,
     get_manufacturing_capabilities,
     get_material_availability,
     get_rfq,
+    get_rfq_parts,
+    get_rule_version,
     get_workcentre_capacity,
+    list_materials,
+    list_operations,
+    list_part_routing,
     list_pending_approvals,
     list_quotation_history,
 )
@@ -16,19 +23,28 @@ from rfq_copilot.repositories.results import (
     QuotationDetails,
     QuoteVersionDetails,
     RFQDetails,
+    RuleVersionDetails,
     WorkcentreCapacity,
 )
 
 __all__ = [
+    "find_materials",
     "get_customer",
     "get_rfq",
+    "get_rfq_parts",
+    "get_rule_version",
+    "RuleIntegrityError",
     "get_material_availability",
     "get_manufacturing_capabilities",
     "get_workcentre_capacity",
+    "list_materials",
+    "list_operations",
+    "list_part_routing",
     "list_quotation_history",
     "list_pending_approvals",
     "CustomerDetails",
     "RFQDetails",
+    "RuleVersionDetails",
     "MaterialAvailability",
     "ManufacturingCapabilities",
     "WorkcentreCapacity",

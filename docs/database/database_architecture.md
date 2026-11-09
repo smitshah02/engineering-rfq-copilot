@@ -108,7 +108,7 @@ The following tool assignments are proposed responsibilities, constrained by the
 | --- | --- | --- |
 | supervisor | Delegation; conditional get_quote_status for already-authorized caller; no arbitrary SQL | Validate correlation/customer, schema, dependencies and receipts; escalate unreconciled writes and conflicts. |
 | rfq_intake | lookup_customer, get_customer_status, create_rfq → intake/customer services | parts, missing_fields, contradiction_findings, source_evidence → Engineering; incomplete specs block downstream writes. |
-| engineering | get_material_specs, get_supported_operations, check_manufacturing_capability → engineering service | validated_parts, capability_result; pricing rule pin → Pricing; material_ids → Supply. Enforce MFG-001 guard before production use. |
+| engineering | get_material_specs, get_supported_operations, check_manufacturing_capability → engineering service | validated_parts, capability_result; pricing rule pin → Pricing; material_ids → Supply. MFG-001 guard enforced by the application validator since Day 8 (`services/manufacturing.py`). |
 | supply_scheduling | check_material_availability, check_production_capacity, estimate_lead_time → planning service | inventory_status, capacity_status, lead_business_days, snapshot_versions → Review. No stock/capacity writes. |
 | pricing | calculate_quote, get_pricing_breakdown → deterministic pricing/cache service | quote_total_usd, line_breakdown, pricing_rule_version → Review. Cannot override prices. |
 | quotation_review | create_quote_draft, get_quote_status, request_approval → quotation/review services | draft_status, quote_version, manager_review_required, human_release_approval_required → Supervisor. No approve/release tool. |
@@ -152,7 +152,7 @@ Checkpoint commits are separate from business commits. A timeout after a busines
 
 | Finding | Decision / limitation |
 | --- | --- |
-| MFG-001: configured hole_count_max=300 is skipped by scalar-limit path in reference validate_part | Remains open; require explicit future engineering guard and regression test before untrusted production use. Dataset/code unchanged. Positivity constraints alone cannot fix it. |
+| MFG-001: configured hole_count_max=300 is skipped by scalar-limit path in reference validate_part | **Fixed in the application (Day 8):** `check_manufacturing_capability` enforces the rule's `hole_count_max` (0–300, `OUT_OF_RANGE_HOLE_COUNT`) and raises on any rule limit it does not enforce. Regression tests prove 300 passes and 301 fails. The frozen reference `validate_part` still has the limitation and must remain unchanged (dataset v1.1.0 is frozen; it is a test oracle only). |
 | Narrative MCP map has 13 tools; machine-readable contract has 14 | Use contract, including create_rfq. Frozen narrative unchanged. |
 | Required CSV strings include empty values | Business-optional dates/approval fields become NULL. No empty string sentinel FK or bogus zero version. |
 | Prior versions lack prices/lines and rule/snapshot provenance | Preserve 16 metadata-only versions; 80 current versions are priced_partial; no retrospective snapshots. |
@@ -164,7 +164,7 @@ Checkpoint commits are separate from business commits. A timeout after a busines
 | Dataset read-only planning does not define durable reservations or live refresh service | Keep current baseline + immutable snapshot archive; introduce reservation ledgers only with future authorized booking operations. |
 | No LangGraph saver/version selected | Only application workflow metadata is specified. Saver physical checkpoint schema is a later workflow dependency, not guessed Day 5 business DDL. |
 
-The business schema is ready to translate into SQLAlchemy/Alembic with these explicitly documented choices. Production agent integration still depends on the contract/scoping/ingestion/checkpoint decisions above and an MFG-001 fix/guard. Nothing here asserts those services, permissions or database constraints already execute.
+The business schema is ready to translate into SQLAlchemy/Alembic with these explicitly documented choices. Production agent integration still depends on the contract/scoping/ingestion/checkpoint decisions above (the MFG-001 guard was added in the application validator on Day 8). Nothing here asserts those services, permissions or database constraints already execute.
 
 ## 10. Documentation and reference authority
 

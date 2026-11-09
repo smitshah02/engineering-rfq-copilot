@@ -130,3 +130,30 @@ Separate connections confirm **1,089 before / 1,089 after**, 33 tables, unchange
 Ruff root lint, formatting of all 39 Python files, application/model imports, unchanged dependency lockfile and `git diff --check` passed. Exact initial/final Git statuses, full per-table fingerprints, query measurements and all final command exit codes are in [database_components_6_7_results.json](database_components_6_7_results.json). The initial dirty/untracked Components 1–5 are preserved. Credentials remain only in ignored/private settings; the final audit scans actual private URLs/passwords in-memory without displaying them. No staging, commit or push occurred.
 
 **Final decision: COMPONENTS 6 AND 7 COMPLETE.** Stop before Component 8.
+
+## Day 6 additions — parts and rule versions
+
+Two reads extend the same pattern (bound identifiers, `raiseload("*")`, `no_autoflush`, caller-owned session, no commit):
+
+- `get_rfq_parts(session, rfq_id, *, customer_id)` delegates to `get_rfq` and converts runtime `rfq_line_items` to immutable `rfq_copilot.entities.Part` objects in `line_number` order. Returns `None` for a missing or out-of-scope RFQ, `()` for a historical RFQ (no runtime lines). Two SELECTs, same as `get_rfq`.
+- `get_rule_version(session, rule_kind, rule_version, *, expected_sha256=None)` reads one `business.business_rule_versions` row in one SELECT. It raises `RuleIntegrityError` when the stored kind differs, the stored sha256 is malformed, the caller's pin differs, a versioned document declares another version, or a hash-named rule's name no longer matches its stored hash. The document is parsed from PostgreSQL's jsonb text with `parse_float=Decimal` and returned deeply read-only. `fingerprint` is sha256 of that canonical jsonb text and can be recomputed at any time; `sha256` is the seeded source file's hash (provenance), which JSONB storage cannot reproduce.
+
+`Part` checks types only (exact Decimal at the `Numeric(12, 3)` scale, strict int, nonblank ≤64-character identifiers, no unknown keys, no floats). Manufacturing ranges and missing-field findings belong to the Day 8 validator.
+
+## Day 7 addition — material lookup
+
+- `find_materials(session, *, grade=None, category=None, thickness_mm=None, finish_id=None)` returns the material IDs matching every given filter, ordered by ID, in one SELECT. `grade` matches case-insensitively after trimming; `thickness_mm` (exact `Decimal`, compared numerically) and `finish_id` are `EXISTS` checks against `material_thickness_options` and `material_finish_compatibility`. Unknown values return `()`. Arguments are validated before any SQL; the thickness rule is the shared `_thickness` helper also used by `get_material_availability`.
+
+The decisions built on it (supported thickness, finish compatibility, findings) live in `rfq_copilot.services.materials`, not in the repository layer.
+
+## Day 8 addition — part routing
+
+- `list_part_routing(session, part_type)` returns the stored `business.operation_routing` steps for one part type, ordered by `sequence` then `routing_id`, in one SELECT. Unknown part types return `()`. Unlike the routing inside `get_manufacturing_capabilities`, it is not filtered by a material's supported operations, so the validator can detect a routed operation the material does not support.
+
+## Day 12 addition — material catalog rows for costing
+
+- `list_materials(session, material_ids)` returns the `business.materials` rows for the distinct given IDs, ordered by `material_id`, in one SELECT (`raiseload("*")`, `no_autoflush`). An empty list issues no SQL; unknown IDs are simply absent. It is the only service read of `cost_usd_per_kg`; the Day 7 `MaterialSpec` deliberately excludes cost. Costing checks each row's `pricing_rule_version` against the pinned pricing rule.
+
+## Day 13 addition — operation catalog rows for pricing
+
+- `list_operations(session, operation_ids)` returns the `business.operations` rows for the distinct given IDs, ordered by `operation_id`, in one SELECT. An empty list issues no SQL. Pricing uses `is_quoted` to refuse any routed operation that is catalog-only (TD-001).

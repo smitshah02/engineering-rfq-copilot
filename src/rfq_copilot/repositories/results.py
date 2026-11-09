@@ -1,7 +1,9 @@
 """Typed read results. ORM entities remain owned by the caller's session."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from rfq_copilot.models import (
     RFQ,
@@ -69,3 +71,18 @@ class QuoteVersionDetails:
 class QuotationDetails:
     quote: Quote
     versions: tuple[QuoteVersionDetails, ...]
+
+
+@dataclass(frozen=True)
+class RuleVersionDetails:
+    """A verified rule document: read-only, JSON numbers parsed as exact Decimals.
+
+    sha256 is the seeded source file's hash (provenance, not recomputable from JSONB);
+    fingerprint is sha256 of PostgreSQL's canonical jsonb text, recomputable at any time.
+    """
+
+    rule_version: str
+    rule_kind: str
+    sha256: str
+    fingerprint: str
+    document: Mapping[str, Any]
