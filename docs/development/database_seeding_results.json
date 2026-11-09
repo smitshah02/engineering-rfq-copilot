@@ -1,0 +1,1762 @@
+{
+  "commands": {
+    "dry_run": ".venv/bin/python -m rfq_copilot.seeding.cli --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env --dry-run",
+    "focused_tests": ".venv/bin/python -m pytest tests/test_database_seeding.py tests/test_database_seeding_integration.py -q --junitxml=/tmp/rfq_component5_seeding_tests.xml",
+    "full_tests": ".venv/bin/python -m pytest -q --junitxml=/tmp/rfq_component5_full_tests.xml",
+    "independent_queries": ".venv/bin/python /tmp/rfq_component5_verify.py /tmp/rfq_component5_final_database.json",
+    "initial_import": ".venv/bin/python -m rfq_copilot.seeding.cli --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env --apply --confirm-database rfq_copilot_dev",
+    "second_import": ".venv/bin/python -m rfq_copilot.seeding.cli --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env --apply --confirm-database rfq_copilot_dev",
+    "verify": ".venv/bin/python -m rfq_copilot.seeding.cli --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env --verify"
+  },
+  "date": "2026-11-08",
+  "dry_run": {
+    "after_digest": "2e1fadaeba00288473aea3cac35735b57cae9738a0e0e4cfb0d804e6601d3687",
+    "alembic_revision": "20261108_01",
+    "already_existing": 0,
+    "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+    "before_digest": "2e1fadaeba00288473aea3cac35735b57cae9738a0e0e4cfb0d804e6601d3687",
+    "business_csv_files": 17,
+    "conflicted": 0,
+    "counts": {
+      "business.approval_history": 0,
+      "business.approval_requests": 0,
+      "business.audit_events": 0,
+      "business.business_rule_versions": 0,
+      "business.contacts": 0,
+      "business.customers": 0,
+      "business.data_snapshots": 0,
+      "business.finish_material_categories": 0,
+      "business.finishes": 0,
+      "business.idempotency_records": 0,
+      "business.material_finish_compatibility": 0,
+      "business.material_inventory": 0,
+      "business.material_supported_operations": 0,
+      "business.material_thickness_options": 0,
+      "business.materials": 0,
+      "business.operation_routing": 0,
+      "business.operations": 0,
+      "business.permissions": 0,
+      "business.pricing_calculations": 0,
+      "business.procurement_records": 0,
+      "business.production_capacity": 0,
+      "business.quote_line_items": 0,
+      "business.quote_versions": 0,
+      "business.quotes": 0,
+      "business.rfq_attachments": 0,
+      "business.rfq_line_items": 0,
+      "business.rfqs": 0,
+      "business.role_permissions": 0,
+      "business.roles": 0,
+      "business.suppliers": 0,
+      "business.users": 0,
+      "business.workcentres": 0,
+      "orchestration.workflow_runs": 0
+    },
+    "database": "rfq_copilot_dev",
+    "dataset_files": 681,
+    "dataset_version": "1.1.0",
+    "dependency_order": [
+      "business_rule_versions",
+      "customers",
+      "data_snapshots",
+      "operations",
+      "permissions",
+      "roles",
+      "suppliers",
+      "contacts",
+      "finishes",
+      "materials",
+      "role_permissions",
+      "users",
+      "workcentres",
+      "finish_material_categories",
+      "idempotency_records",
+      "material_finish_compatibility",
+      "material_supported_operations",
+      "material_thickness_options",
+      "operation_routing",
+      "production_capacity",
+      "rfqs",
+      "material_inventory",
+      "pricing_calculations",
+      "quotes",
+      "rfq_attachments",
+      "rfq_line_items",
+      "workflow_runs",
+      "procurement_records",
+      "quote_versions",
+      "approval_requests",
+      "audit_events",
+      "quote_line_items",
+      "approval_history"
+    ],
+    "duration_seconds": 0.4199,
+    "excluded": [
+      "evaluation/**",
+      "rfq_scenarios/**",
+      "attachments/**"
+    ],
+    "final_state": "empty",
+    "initial_state": "empty",
+    "inserted": 0,
+    "invalid": 0,
+    "mapped_files": 28,
+    "mode": "dry-run",
+    "postgresql_version_num": 180006,
+    "protected_hashes": 637,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_business_records": 811,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 70,
+        "sources": [
+          "transactional_data/approval_history.csv"
+        ]
+      },
+      "business.approval_requests": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.audit_events": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.business_rule_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 9,
+        "sources": [
+          "config/manufacturing_rules.json",
+          "config/pricing_rules.json",
+          "config/approval_policies.json",
+          "config/workflow_state_rules.json",
+          "contracts/entity_schemas.json",
+          "contracts/tool_schemas.json",
+          "contracts/business_constraints.json",
+          "contracts/agent_coordination_policy.json",
+          "contracts/agent_handoff_schema.json"
+        ]
+      },
+      "business.contacts": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/contacts.csv"
+        ]
+      },
+      "business.customers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/customers.csv"
+        ]
+      },
+      "business.data_snapshots": {
+        "classification": "deterministic_transformation",
+        "expected": 2,
+        "sources": [
+          "operations_data/material_inventory.csv",
+          "operations_data/production_capacity.csv",
+          "config/generation_config.yaml"
+        ]
+      },
+      "business.finish_material_categories": {
+        "classification": "deterministic_transformation",
+        "expected": 19,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.finishes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 7,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.idempotency_records": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.material_finish_compatibility": {
+        "classification": "deterministic_transformation",
+        "expected": 50,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_inventory": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 90,
+        "sources": [
+          "operations_data/material_inventory.csv"
+        ]
+      },
+      "business.material_supported_operations": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_thickness_options": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.materials": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 15,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.operation_routing": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 28,
+        "sources": [
+          "operations_data/operation_routing.csv"
+        ]
+      },
+      "business.operations": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/operations.csv"
+        ]
+      },
+      "business.permissions": {
+        "classification": "deterministic_transformation",
+        "expected": 12,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.pricing_calculations": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.procurement_records": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 12,
+        "sources": [
+          "operations_data/procurement_records.csv"
+        ]
+      },
+      "business.production_capacity": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "operations_data/production_capacity.csv"
+        ]
+      },
+      "business.quote_line_items": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 100,
+        "sources": [
+          "transactional_data/quote_line_items.csv"
+        ]
+      },
+      "business.quote_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 96,
+        "sources": [
+          "transactional_data/quote_versions.csv",
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.quotes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.rfq_attachments": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfq_line_items": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfqs": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_rfqs.json"
+        ]
+      },
+      "business.role_permissions": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 27,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.roles": {
+        "classification": "deterministic_transformation",
+        "expected": 6,
+        "sources": [
+          "master_data/users.csv",
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.suppliers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 6,
+        "sources": [
+          "master_data/suppliers.csv"
+        ]
+      },
+      "business.users": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 24,
+        "sources": [
+          "master_data/users.csv"
+        ]
+      },
+      "business.workcentres": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/workcentres.csv"
+        ]
+      },
+      "orchestration.workflow_runs": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      }
+    },
+    "transaction": "read_only",
+    "validated_records": 1089
+  },
+  "environment": {
+    "alembic": "1.20.1",
+    "asyncpg": "0.32.0",
+    "database": "rfq_copilot_dev",
+    "dataset": "1.1.0",
+    "postgresql": "18.6",
+    "python": "3.12.14",
+    "revision": "20261108_01",
+    "sqlalchemy": "2.1.8"
+  },
+  "evaluation_protection": {
+    "ground_truth_imported": false,
+    "hidden_files_only_streamed_for_hashing": true,
+    "hidden_labels_in_summaries": false,
+    "hidden_outputs_imported": false,
+    "parsed_sources_are_fixed_allowlist": true,
+    "scenario_inputs_imported": false
+  },
+  "exit_codes": {
+    "dry_run": 0,
+    "focused_tests": 0,
+    "full_tests": 0,
+    "independent_queries": 0,
+    "initial_import": 0,
+    "second_import": 0,
+    "verify": 0
+  },
+  "files_changed_by_component_5": {
+    "data/rfq_seed_snapshots/.gitignore": "Keep the two backend operational CSV artifacts outside Git",
+    "docs/dev_log/day_05.md": "Append-only Component 5 execution record",
+    "docs/development/database_seeding.md": "Pre-import mapping audit and complete operator/developer runbook",
+    "docs/development/database_seeding_results.json": "Structured CLI, independent query, regression and Git evidence",
+    "docs/development/database_seeding_verification_report.md": "This executed thirteen-part report",
+    "pyproject.toml": "Declare the already-installed jsonschema/PyYAML runtime validators",
+    "src/rfq_copilot/seeding/__init__.py": "Seeding package and sanitized validation error",
+    "src/rfq_copilot/seeding/cli.py": "Explicit dry-run/apply/verify actions, confirmation and safe JSON exit reporting",
+    "src/rfq_copilot/seeding/loader.py": "Whole-baseline transaction, locking, snapshots, exact idempotency and verification",
+    "src/rfq_copilot/seeding/mapping.py": "Complete Day 4 projections, historical joins, native/key validation and dependency ordering",
+    "src/rfq_copilot/seeding/safety.py": "Live identity, approved local target, head and physical schema verification",
+    "src/rfq_copilot/seeding/sources.py": "Fixed source allowlist, strict CSV/JSON access and archive/manifest integrity",
+    "src/rfq_copilot/seeding/transform.py": "Exact decimals/JSON, dates, timezones, booleans and NULL conversion",
+    "src/rfq_copilot/seeding/validation.py": "Nested Part/scalar guards and cross-record catalog/quote/approval validation",
+    "tests/test_database_migrations.py": "Retain full physical checks and fingerprint seeded development rows; isolated tests still require empty tables",
+    "tests/test_database_seeding.py": "98 source/mapping/conversion/security/CLI cases",
+    "tests/test_database_seeding_integration.py": "25 isolated real PostgreSQL atomicity/conflict/rollback/cancellation cases",
+    "uv.lock": "Lock those validators and their existing transitive dependencies"
+  },
+  "git_after": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? data/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_connection.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? docs/development/database_seeding.md\n?? docs/development/database_seeding_results.json\n?? docs/development/database_seeding_verification_report.md\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? src/rfq_copilot/seeding/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_integration.py\n?? tests/test_database_migrations.py\n?? tests/test_database_seeding.py\n?? tests/test_database_seeding_integration.py\n?? tests/test_orm_models.py\n",
+  "git_before": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_connection.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_integration.py\n?? tests/test_database_migrations.py\n?? tests/test_orm_models.py\n",
+  "independent_fingerprints_unchanged": true,
+  "independent_queries": {
+    "canonical_values_checked": 9587,
+    "check_violations": 0,
+    "checks_evaluated": 207,
+    "current_priced_partial": 80,
+    "duplicates": 0,
+    "foreign_key_violations": 0,
+    "foreign_keys_checked": 64,
+    "identity": {
+      "database": "rfq_copilot_dev",
+      "oid": 16389,
+      "username": "rfq_copilot_dev",
+      "version": 180006
+    },
+    "not_null_violations": 0,
+    "older_metadata_only": 16,
+    "revision": [
+      "20261108_01"
+    ],
+    "scenario_rfqs": 0,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "distinct_primary_keys": 70,
+        "duplicates": 0,
+        "expected_from_independent_source": 70,
+        "not_null_violations": 0,
+        "rows": 70,
+        "server_data_md5": "39252933e7ef4d7195f7c47ec6b1d010"
+      },
+      "business.approval_requests": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.audit_events": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.business_rule_versions": {
+        "distinct_primary_keys": 9,
+        "duplicates": 0,
+        "expected_from_independent_source": 9,
+        "not_null_violations": 0,
+        "rows": 9,
+        "server_data_md5": "5fef26485b54865ee5c58d7b1ba90c9d"
+      },
+      "business.contacts": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "26bbea7372f743fc93731acaf419d4e8"
+      },
+      "business.customers": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "092731bfb08fef34026209dd25bd262c"
+      },
+      "business.data_snapshots": {
+        "distinct_primary_keys": 2,
+        "duplicates": 0,
+        "expected_from_independent_source": 2,
+        "not_null_violations": 0,
+        "rows": 2,
+        "server_data_md5": "f92fad00209a97b4df7e49cdaf182e6b"
+      },
+      "business.finish_material_categories": {
+        "distinct_primary_keys": 19,
+        "duplicates": 0,
+        "expected_from_independent_source": 19,
+        "not_null_violations": 0,
+        "rows": 19,
+        "server_data_md5": "65026ac2bf998b3c2cf557965a5f2742"
+      },
+      "business.finishes": {
+        "distinct_primary_keys": 7,
+        "duplicates": 0,
+        "expected_from_independent_source": 7,
+        "not_null_violations": 0,
+        "rows": 7,
+        "server_data_md5": "f09806467e5f0a2ed2109faf26bd58a8"
+      },
+      "business.idempotency_records": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.material_finish_compatibility": {
+        "distinct_primary_keys": 50,
+        "duplicates": 0,
+        "expected_from_independent_source": 50,
+        "not_null_violations": 0,
+        "rows": 50,
+        "server_data_md5": "b957062f4f87a07e93bd5d342993fc90"
+      },
+      "business.material_inventory": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c301b4f16d5d33560421c8e1b7830e3"
+      },
+      "business.material_supported_operations": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "54810ef149262369e5782c89c87dcdc6"
+      },
+      "business.material_thickness_options": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c0fce69e8b638d35aec70e95913fc12"
+      },
+      "business.materials": {
+        "distinct_primary_keys": 15,
+        "duplicates": 0,
+        "expected_from_independent_source": 15,
+        "not_null_violations": 0,
+        "rows": 15,
+        "server_data_md5": "1dad164c8d2506f84134ef48c1856495"
+      },
+      "business.operation_routing": {
+        "distinct_primary_keys": 28,
+        "duplicates": 0,
+        "expected_from_independent_source": 28,
+        "not_null_violations": 0,
+        "rows": 28,
+        "server_data_md5": "2cd1370263a52057b4f300199ebd912d"
+      },
+      "business.operations": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "01302bf4ed3f742a7902926c86f56abf"
+      },
+      "business.permissions": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "a7e16cc1d81b54cf171dc61a55440b7f"
+      },
+      "business.pricing_calculations": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.procurement_records": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "1f1c8ead03aed3fe502c82ad2b512a24"
+      },
+      "business.production_capacity": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "e866b64a33add31f06c14d73d5ee72d3"
+      },
+      "business.quote_line_items": {
+        "distinct_primary_keys": 100,
+        "duplicates": 0,
+        "expected_from_independent_source": 100,
+        "not_null_violations": 0,
+        "rows": 100,
+        "server_data_md5": "d6b7bea65ae6205c5ac55bc0719cb777"
+      },
+      "business.quote_versions": {
+        "distinct_primary_keys": 96,
+        "duplicates": 0,
+        "expected_from_independent_source": 96,
+        "not_null_violations": 0,
+        "rows": 96,
+        "server_data_md5": "64a41430d288190acbb02e6ac3efaefb"
+      },
+      "business.quotes": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "fe54a11929cd9ac563f05f338d571441"
+      },
+      "business.rfq_attachments": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfq_line_items": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfqs": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "5a2c6e22d0dfbbc2c0792aabb6ef5bda"
+      },
+      "business.role_permissions": {
+        "distinct_primary_keys": 27,
+        "duplicates": 0,
+        "expected_from_independent_source": 27,
+        "not_null_violations": 0,
+        "rows": 27,
+        "server_data_md5": "3a759273def6c1f8dc4d92e1d5a40e66"
+      },
+      "business.roles": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "88a584356f47cbe4122f434bf58c42eb"
+      },
+      "business.suppliers": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "d213659494dc074bc178e31b4d4766e3"
+      },
+      "business.users": {
+        "distinct_primary_keys": 24,
+        "duplicates": 0,
+        "expected_from_independent_source": 24,
+        "not_null_violations": 0,
+        "rows": 24,
+        "server_data_md5": "15241b5249d5cbe1b4e79f0d497536a1"
+      },
+      "business.workcentres": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "3e8959665188adebbd087a064c5b86e8"
+      },
+      "orchestration.workflow_runs": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      }
+    },
+    "target": "development",
+    "test_database": {
+      "original_catalog_restored": true,
+      "schemas": [
+        "public"
+      ],
+      "user_relations": 0
+    },
+    "total_records": 1089
+  },
+  "initial_import": {
+    "after_digest": "266643daaee70e9a2442c11af09e0af33a72ffeac07a9e6e26e2d4b3579a5073",
+    "alembic_revision": "20261108_01",
+    "already_existing": 0,
+    "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+    "before_digest": "2e1fadaeba00288473aea3cac35735b57cae9738a0e0e4cfb0d804e6601d3687",
+    "business_csv_files": 17,
+    "conflicted": 0,
+    "counts": {
+      "business.approval_history": 70,
+      "business.approval_requests": 0,
+      "business.audit_events": 0,
+      "business.business_rule_versions": 9,
+      "business.contacts": 40,
+      "business.customers": 40,
+      "business.data_snapshots": 2,
+      "business.finish_material_categories": 19,
+      "business.finishes": 7,
+      "business.idempotency_records": 0,
+      "business.material_finish_compatibility": 50,
+      "business.material_inventory": 90,
+      "business.material_supported_operations": 90,
+      "business.material_thickness_options": 90,
+      "business.materials": 15,
+      "business.operation_routing": 28,
+      "business.operations": 8,
+      "business.permissions": 12,
+      "business.pricing_calculations": 0,
+      "business.procurement_records": 12,
+      "business.production_capacity": 80,
+      "business.quote_line_items": 100,
+      "business.quote_versions": 96,
+      "business.quotes": 80,
+      "business.rfq_attachments": 0,
+      "business.rfq_line_items": 0,
+      "business.rfqs": 80,
+      "business.role_permissions": 27,
+      "business.roles": 6,
+      "business.suppliers": 6,
+      "business.users": 24,
+      "business.workcentres": 8,
+      "orchestration.workflow_runs": 0
+    },
+    "database": "rfq_copilot_dev",
+    "dataset_files": 681,
+    "dataset_version": "1.1.0",
+    "dependency_order": [
+      "business_rule_versions",
+      "customers",
+      "data_snapshots",
+      "operations",
+      "permissions",
+      "roles",
+      "suppliers",
+      "contacts",
+      "finishes",
+      "materials",
+      "role_permissions",
+      "users",
+      "workcentres",
+      "finish_material_categories",
+      "idempotency_records",
+      "material_finish_compatibility",
+      "material_supported_operations",
+      "material_thickness_options",
+      "operation_routing",
+      "production_capacity",
+      "rfqs",
+      "material_inventory",
+      "pricing_calculations",
+      "quotes",
+      "rfq_attachments",
+      "rfq_line_items",
+      "workflow_runs",
+      "procurement_records",
+      "quote_versions",
+      "approval_requests",
+      "audit_events",
+      "quote_line_items",
+      "approval_history"
+    ],
+    "duration_seconds": 0.4258,
+    "excluded": [
+      "evaluation/**",
+      "rfq_scenarios/**",
+      "attachments/**"
+    ],
+    "final_state": "identical",
+    "initial_state": "empty",
+    "inserted": 1089,
+    "invalid": 0,
+    "mapped_files": 28,
+    "mode": "apply",
+    "postgresql_version_num": 180006,
+    "protected_hashes": 637,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_business_records": 811,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 70,
+        "sources": [
+          "transactional_data/approval_history.csv"
+        ]
+      },
+      "business.approval_requests": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.audit_events": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.business_rule_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 9,
+        "sources": [
+          "config/manufacturing_rules.json",
+          "config/pricing_rules.json",
+          "config/approval_policies.json",
+          "config/workflow_state_rules.json",
+          "contracts/entity_schemas.json",
+          "contracts/tool_schemas.json",
+          "contracts/business_constraints.json",
+          "contracts/agent_coordination_policy.json",
+          "contracts/agent_handoff_schema.json"
+        ]
+      },
+      "business.contacts": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/contacts.csv"
+        ]
+      },
+      "business.customers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/customers.csv"
+        ]
+      },
+      "business.data_snapshots": {
+        "classification": "deterministic_transformation",
+        "expected": 2,
+        "sources": [
+          "operations_data/material_inventory.csv",
+          "operations_data/production_capacity.csv",
+          "config/generation_config.yaml"
+        ]
+      },
+      "business.finish_material_categories": {
+        "classification": "deterministic_transformation",
+        "expected": 19,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.finishes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 7,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.idempotency_records": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.material_finish_compatibility": {
+        "classification": "deterministic_transformation",
+        "expected": 50,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_inventory": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 90,
+        "sources": [
+          "operations_data/material_inventory.csv"
+        ]
+      },
+      "business.material_supported_operations": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_thickness_options": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.materials": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 15,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.operation_routing": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 28,
+        "sources": [
+          "operations_data/operation_routing.csv"
+        ]
+      },
+      "business.operations": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/operations.csv"
+        ]
+      },
+      "business.permissions": {
+        "classification": "deterministic_transformation",
+        "expected": 12,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.pricing_calculations": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.procurement_records": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 12,
+        "sources": [
+          "operations_data/procurement_records.csv"
+        ]
+      },
+      "business.production_capacity": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "operations_data/production_capacity.csv"
+        ]
+      },
+      "business.quote_line_items": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 100,
+        "sources": [
+          "transactional_data/quote_line_items.csv"
+        ]
+      },
+      "business.quote_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 96,
+        "sources": [
+          "transactional_data/quote_versions.csv",
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.quotes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.rfq_attachments": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfq_line_items": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfqs": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_rfqs.json"
+        ]
+      },
+      "business.role_permissions": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 27,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.roles": {
+        "classification": "deterministic_transformation",
+        "expected": 6,
+        "sources": [
+          "master_data/users.csv",
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.suppliers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 6,
+        "sources": [
+          "master_data/suppliers.csv"
+        ]
+      },
+      "business.users": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 24,
+        "sources": [
+          "master_data/users.csv"
+        ]
+      },
+      "business.workcentres": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/workcentres.csv"
+        ]
+      },
+      "orchestration.workflow_runs": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      }
+    },
+    "transaction": "committed",
+    "validated_records": 1089
+  },
+  "preservation": {
+    "alembic_preserved": true,
+    "application_imports": "PASS",
+    "changed_original_files": [
+      "pyproject.toml",
+      "uv.lock",
+      "tests/test_database_migrations.py",
+      "docs/dev_log/day_05.md"
+    ],
+    "credential_matches": 0,
+    "credentials_scanned_files": 66,
+    "dataset_files_preserved": 681,
+    "day4_documents_preserved": 5,
+    "day5_log_prefix_preserved": true,
+    "dependency_lock": "PASS",
+    "documentation_links": "PASS",
+    "env_ignored": true,
+    "env_mode": "0600",
+    "git_diff_check": "PASS",
+    "git_index_unchanged": true,
+    "installed_versions_preserved": 26,
+    "integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "new_file_whitespace": "PASS",
+    "original_files_preserved": 730,
+    "orm_preserved": true,
+    "python_formatting": "PASS",
+    "ruff_lint": "PASS"
+  },
+  "second_import": {
+    "after_digest": "266643daaee70e9a2442c11af09e0af33a72ffeac07a9e6e26e2d4b3579a5073",
+    "alembic_revision": "20261108_01",
+    "already_existing": 1089,
+    "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+    "before_digest": "266643daaee70e9a2442c11af09e0af33a72ffeac07a9e6e26e2d4b3579a5073",
+    "business_csv_files": 17,
+    "conflicted": 0,
+    "counts": {
+      "business.approval_history": 70,
+      "business.approval_requests": 0,
+      "business.audit_events": 0,
+      "business.business_rule_versions": 9,
+      "business.contacts": 40,
+      "business.customers": 40,
+      "business.data_snapshots": 2,
+      "business.finish_material_categories": 19,
+      "business.finishes": 7,
+      "business.idempotency_records": 0,
+      "business.material_finish_compatibility": 50,
+      "business.material_inventory": 90,
+      "business.material_supported_operations": 90,
+      "business.material_thickness_options": 90,
+      "business.materials": 15,
+      "business.operation_routing": 28,
+      "business.operations": 8,
+      "business.permissions": 12,
+      "business.pricing_calculations": 0,
+      "business.procurement_records": 12,
+      "business.production_capacity": 80,
+      "business.quote_line_items": 100,
+      "business.quote_versions": 96,
+      "business.quotes": 80,
+      "business.rfq_attachments": 0,
+      "business.rfq_line_items": 0,
+      "business.rfqs": 80,
+      "business.role_permissions": 27,
+      "business.roles": 6,
+      "business.suppliers": 6,
+      "business.users": 24,
+      "business.workcentres": 8,
+      "orchestration.workflow_runs": 0
+    },
+    "database": "rfq_copilot_dev",
+    "dataset_files": 681,
+    "dataset_version": "1.1.0",
+    "dependency_order": [
+      "business_rule_versions",
+      "customers",
+      "data_snapshots",
+      "operations",
+      "permissions",
+      "roles",
+      "suppliers",
+      "contacts",
+      "finishes",
+      "materials",
+      "role_permissions",
+      "users",
+      "workcentres",
+      "finish_material_categories",
+      "idempotency_records",
+      "material_finish_compatibility",
+      "material_supported_operations",
+      "material_thickness_options",
+      "operation_routing",
+      "production_capacity",
+      "rfqs",
+      "material_inventory",
+      "pricing_calculations",
+      "quotes",
+      "rfq_attachments",
+      "rfq_line_items",
+      "workflow_runs",
+      "procurement_records",
+      "quote_versions",
+      "approval_requests",
+      "audit_events",
+      "quote_line_items",
+      "approval_history"
+    ],
+    "duration_seconds": 0.3866,
+    "excluded": [
+      "evaluation/**",
+      "rfq_scenarios/**",
+      "attachments/**"
+    ],
+    "final_state": "identical",
+    "initial_state": "identical",
+    "inserted": 0,
+    "invalid": 0,
+    "mapped_files": 28,
+    "mode": "apply",
+    "postgresql_version_num": 180006,
+    "protected_hashes": 637,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_business_records": 811,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 70,
+        "sources": [
+          "transactional_data/approval_history.csv"
+        ]
+      },
+      "business.approval_requests": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.audit_events": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.business_rule_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 9,
+        "sources": [
+          "config/manufacturing_rules.json",
+          "config/pricing_rules.json",
+          "config/approval_policies.json",
+          "config/workflow_state_rules.json",
+          "contracts/entity_schemas.json",
+          "contracts/tool_schemas.json",
+          "contracts/business_constraints.json",
+          "contracts/agent_coordination_policy.json",
+          "contracts/agent_handoff_schema.json"
+        ]
+      },
+      "business.contacts": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/contacts.csv"
+        ]
+      },
+      "business.customers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/customers.csv"
+        ]
+      },
+      "business.data_snapshots": {
+        "classification": "deterministic_transformation",
+        "expected": 2,
+        "sources": [
+          "operations_data/material_inventory.csv",
+          "operations_data/production_capacity.csv",
+          "config/generation_config.yaml"
+        ]
+      },
+      "business.finish_material_categories": {
+        "classification": "deterministic_transformation",
+        "expected": 19,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.finishes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 7,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.idempotency_records": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.material_finish_compatibility": {
+        "classification": "deterministic_transformation",
+        "expected": 50,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_inventory": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 90,
+        "sources": [
+          "operations_data/material_inventory.csv"
+        ]
+      },
+      "business.material_supported_operations": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_thickness_options": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.materials": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 15,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.operation_routing": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 28,
+        "sources": [
+          "operations_data/operation_routing.csv"
+        ]
+      },
+      "business.operations": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/operations.csv"
+        ]
+      },
+      "business.permissions": {
+        "classification": "deterministic_transformation",
+        "expected": 12,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.pricing_calculations": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.procurement_records": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 12,
+        "sources": [
+          "operations_data/procurement_records.csv"
+        ]
+      },
+      "business.production_capacity": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "operations_data/production_capacity.csv"
+        ]
+      },
+      "business.quote_line_items": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 100,
+        "sources": [
+          "transactional_data/quote_line_items.csv"
+        ]
+      },
+      "business.quote_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 96,
+        "sources": [
+          "transactional_data/quote_versions.csv",
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.quotes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.rfq_attachments": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfq_line_items": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfqs": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_rfqs.json"
+        ]
+      },
+      "business.role_permissions": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 27,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.roles": {
+        "classification": "deterministic_transformation",
+        "expected": 6,
+        "sources": [
+          "master_data/users.csv",
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.suppliers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 6,
+        "sources": [
+          "master_data/suppliers.csv"
+        ]
+      },
+      "business.users": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 24,
+        "sources": [
+          "master_data/users.csv"
+        ]
+      },
+      "business.workcentres": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/workcentres.csv"
+        ]
+      },
+      "orchestration.workflow_runs": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      }
+    },
+    "transaction": "committed",
+    "validated_records": 1089
+  },
+  "tests": {
+    "existing_within_full_run": {
+      "case_time_sum_seconds": 6.822,
+      "errors": 0,
+      "failed": 0,
+      "passed": 345,
+      "skipped": 0
+    },
+    "focused_seeding": {
+      "duration_seconds": 11.67,
+      "errors": 0,
+      "failed": 0,
+      "passed": 123,
+      "skipped": 0
+    },
+    "full_regression": {
+      "duration_seconds": 19.73,
+      "errors": 0,
+      "failed": 0,
+      "passed": 468,
+      "skipped": 0
+    },
+    "new_within_full_run": {
+      "case_time_sum_seconds": 12.626,
+      "errors": 0,
+      "failed": 0,
+      "passed": 123,
+      "skipped": 0
+    }
+  },
+  "timezone": "America/New_York",
+  "verify": {
+    "after_digest": "266643daaee70e9a2442c11af09e0af33a72ffeac07a9e6e26e2d4b3579a5073",
+    "alembic_revision": "20261108_01",
+    "already_existing": 1089,
+    "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+    "before_digest": "266643daaee70e9a2442c11af09e0af33a72ffeac07a9e6e26e2d4b3579a5073",
+    "business_csv_files": 17,
+    "conflicted": 0,
+    "counts": {
+      "business.approval_history": 70,
+      "business.approval_requests": 0,
+      "business.audit_events": 0,
+      "business.business_rule_versions": 9,
+      "business.contacts": 40,
+      "business.customers": 40,
+      "business.data_snapshots": 2,
+      "business.finish_material_categories": 19,
+      "business.finishes": 7,
+      "business.idempotency_records": 0,
+      "business.material_finish_compatibility": 50,
+      "business.material_inventory": 90,
+      "business.material_supported_operations": 90,
+      "business.material_thickness_options": 90,
+      "business.materials": 15,
+      "business.operation_routing": 28,
+      "business.operations": 8,
+      "business.permissions": 12,
+      "business.pricing_calculations": 0,
+      "business.procurement_records": 12,
+      "business.production_capacity": 80,
+      "business.quote_line_items": 100,
+      "business.quote_versions": 96,
+      "business.quotes": 80,
+      "business.rfq_attachments": 0,
+      "business.rfq_line_items": 0,
+      "business.rfqs": 80,
+      "business.role_permissions": 27,
+      "business.roles": 6,
+      "business.suppliers": 6,
+      "business.users": 24,
+      "business.workcentres": 8,
+      "orchestration.workflow_runs": 0
+    },
+    "database": "rfq_copilot_dev",
+    "dataset_files": 681,
+    "dataset_version": "1.1.0",
+    "dependency_order": [
+      "business_rule_versions",
+      "customers",
+      "data_snapshots",
+      "operations",
+      "permissions",
+      "roles",
+      "suppliers",
+      "contacts",
+      "finishes",
+      "materials",
+      "role_permissions",
+      "users",
+      "workcentres",
+      "finish_material_categories",
+      "idempotency_records",
+      "material_finish_compatibility",
+      "material_supported_operations",
+      "material_thickness_options",
+      "operation_routing",
+      "production_capacity",
+      "rfqs",
+      "material_inventory",
+      "pricing_calculations",
+      "quotes",
+      "rfq_attachments",
+      "rfq_line_items",
+      "workflow_runs",
+      "procurement_records",
+      "quote_versions",
+      "approval_requests",
+      "audit_events",
+      "quote_line_items",
+      "approval_history"
+    ],
+    "duration_seconds": 0.4069,
+    "excluded": [
+      "evaluation/**",
+      "rfq_scenarios/**",
+      "attachments/**"
+    ],
+    "final_state": "identical",
+    "initial_state": "identical",
+    "inserted": 0,
+    "invalid": 0,
+    "mapped_files": 28,
+    "mode": "verify",
+    "postgresql_version_num": 180006,
+    "protected_hashes": 637,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_business_records": 811,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 70,
+        "sources": [
+          "transactional_data/approval_history.csv"
+        ]
+      },
+      "business.approval_requests": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.audit_events": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.business_rule_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 9,
+        "sources": [
+          "config/manufacturing_rules.json",
+          "config/pricing_rules.json",
+          "config/approval_policies.json",
+          "config/workflow_state_rules.json",
+          "contracts/entity_schemas.json",
+          "contracts/tool_schemas.json",
+          "contracts/business_constraints.json",
+          "contracts/agent_coordination_policy.json",
+          "contracts/agent_handoff_schema.json"
+        ]
+      },
+      "business.contacts": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/contacts.csv"
+        ]
+      },
+      "business.customers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 40,
+        "sources": [
+          "master_data/customers.csv"
+        ]
+      },
+      "business.data_snapshots": {
+        "classification": "deterministic_transformation",
+        "expected": 2,
+        "sources": [
+          "operations_data/material_inventory.csv",
+          "operations_data/production_capacity.csv",
+          "config/generation_config.yaml"
+        ]
+      },
+      "business.finish_material_categories": {
+        "classification": "deterministic_transformation",
+        "expected": 19,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.finishes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 7,
+        "sources": [
+          "master_data/finishes.csv"
+        ]
+      },
+      "business.idempotency_records": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.material_finish_compatibility": {
+        "classification": "deterministic_transformation",
+        "expected": 50,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_inventory": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 90,
+        "sources": [
+          "operations_data/material_inventory.csv"
+        ]
+      },
+      "business.material_supported_operations": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.material_thickness_options": {
+        "classification": "deterministic_transformation",
+        "expected": 90,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.materials": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 15,
+        "sources": [
+          "master_data/materials.csv"
+        ]
+      },
+      "business.operation_routing": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 28,
+        "sources": [
+          "operations_data/operation_routing.csv"
+        ]
+      },
+      "business.operations": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/operations.csv"
+        ]
+      },
+      "business.permissions": {
+        "classification": "deterministic_transformation",
+        "expected": 12,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.pricing_calculations": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.procurement_records": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 12,
+        "sources": [
+          "operations_data/procurement_records.csv"
+        ]
+      },
+      "business.production_capacity": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "operations_data/production_capacity.csv"
+        ]
+      },
+      "business.quote_line_items": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 100,
+        "sources": [
+          "transactional_data/quote_line_items.csv"
+        ]
+      },
+      "business.quote_versions": {
+        "classification": "deterministic_transformation",
+        "expected": 96,
+        "sources": [
+          "transactional_data/quote_versions.csv",
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.quotes": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_quotes.csv"
+        ]
+      },
+      "business.rfq_attachments": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfq_line_items": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      },
+      "business.rfqs": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 80,
+        "sources": [
+          "transactional_data/historical_rfqs.json"
+        ]
+      },
+      "business.role_permissions": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 27,
+        "sources": [
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.roles": {
+        "classification": "deterministic_transformation",
+        "expected": 6,
+        "sources": [
+          "master_data/users.csv",
+          "master_data/roles_permissions.csv"
+        ]
+      },
+      "business.suppliers": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 6,
+        "sources": [
+          "master_data/suppliers.csv"
+        ]
+      },
+      "business.users": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 24,
+        "sources": [
+          "master_data/users.csv"
+        ]
+      },
+      "business.workcentres": {
+        "classification": "direct_with_typed_conversion",
+        "expected": 8,
+        "sources": [
+          "master_data/workcentres.csv"
+        ]
+      },
+      "orchestration.workflow_runs": {
+        "classification": "intentionally_empty",
+        "expected": 0,
+        "sources": []
+      }
+    },
+    "transaction": "read_only",
+    "validated_records": 1089
+  }
+}

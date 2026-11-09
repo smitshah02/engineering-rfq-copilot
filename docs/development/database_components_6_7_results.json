@@ -1,0 +1,1984 @@
+{
+  "commands": {
+    "component6_integrity": ".venv/bin/python -m rfq_copilot.integrity --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env",
+    "component6_tests": ".venv/bin/python -m pytest tests/test_database_integrity.py -q --junitxml=/tmp/rfq_component6_tests.xml",
+    "component7_queries": ".venv/bin/python -m rfq_copilot.repositories.demo --target development --env-file .env",
+    "component7_tests": ".venv/bin/python -m pytest tests/test_database_queries.py -q --junitxml=/tmp/rfq_component7_tests.xml",
+    "diff": "git diff --check",
+    "format": ".venv/bin/ruff format --check src tests alembic",
+    "full_tests": ".venv/bin/python -m pytest -q --junitxml=/tmp/rfq_components67_full_tests.xml",
+    "independent_preservation": ".venv/bin/python /tmp/rfq_component5_verify.py /tmp/rfq_component67_database_after.json",
+    "lock": "uv lock --check",
+    "ruff": ".venv/bin/ruff check ."
+  },
+  "component6_final": {
+    "alembic_revision": "20261108_01",
+    "check_data_checks": 207,
+    "database": "rfq_copilot_dev",
+    "decimal_values_checked": 1353,
+    "definitions": {
+      "additional_unique_constraints": 14,
+      "check_constraints": 207,
+      "columns": 261,
+      "explicit_indexes": 14,
+      "foreign_keys": 64,
+      "primary_keys": 33,
+      "tables": 33,
+      "unique_partial_indexes": 3
+    },
+    "duration_seconds": 0.4658,
+    "empty_runtime_tables": [
+      "business.approval_requests",
+      "business.audit_events",
+      "business.idempotency_records",
+      "business.pricing_calculations",
+      "business.rfq_attachments",
+      "business.rfq_line_items",
+      "orchestration.workflow_runs"
+    ],
+    "fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "foreign_key_data_checks": 64,
+    "populated_tables": 26,
+    "postgresql_version_num": 180006,
+    "preserved": true,
+    "records": 1089,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "source_values_checked": 9587,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "actual": 70,
+        "distinct_primary_keys": 70,
+        "expected": 70,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.approval_requests": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.audit_events": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.business_rule_versions": {
+        "actual": 9,
+        "distinct_primary_keys": 9,
+        "expected": 9,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.contacts": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.customers": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.data_snapshots": {
+        "actual": 2,
+        "distinct_primary_keys": 2,
+        "expected": 2,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finish_material_categories": {
+        "actual": 19,
+        "distinct_primary_keys": 19,
+        "expected": 19,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finishes": {
+        "actual": 7,
+        "distinct_primary_keys": 7,
+        "expected": 7,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.idempotency_records": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_finish_compatibility": {
+        "actual": 50,
+        "distinct_primary_keys": 50,
+        "expected": 50,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_inventory": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_supported_operations": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_thickness_options": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.materials": {
+        "actual": 15,
+        "distinct_primary_keys": 15,
+        "expected": 15,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operation_routing": {
+        "actual": 28,
+        "distinct_primary_keys": 28,
+        "expected": 28,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operations": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.permissions": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.pricing_calculations": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.procurement_records": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.production_capacity": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_line_items": {
+        "actual": 100,
+        "distinct_primary_keys": 100,
+        "expected": 100,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_versions": {
+        "actual": 96,
+        "distinct_primary_keys": 96,
+        "expected": 96,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quotes": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_attachments": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_line_items": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfqs": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.role_permissions": {
+        "actual": 27,
+        "distinct_primary_keys": 27,
+        "expected": 27,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.roles": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.suppliers": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.users": {
+        "actual": 24,
+        "distinct_primary_keys": 24,
+        "expected": 24,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.workcentres": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "orchestration.workflow_runs": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      }
+    },
+    "unique_data_checks": 17,
+    "violations": 0
+  },
+  "component6_gate": {
+    "component6": "PASS",
+    "development_preserved": true,
+    "duration_seconds": 31.24,
+    "failed": 0,
+    "fingerprint": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+    "skipped": 0,
+    "tests_passed": 80
+  },
+  "component6_initial": {
+    "alembic_revision": "20261108_01",
+    "check_data_checks": 207,
+    "database": "rfq_copilot_dev",
+    "decimal_values_checked": 1353,
+    "definitions": {
+      "additional_unique_constraints": 14,
+      "check_constraints": 207,
+      "columns": 261,
+      "explicit_indexes": 14,
+      "foreign_keys": 64,
+      "primary_keys": 33,
+      "tables": 33,
+      "unique_partial_indexes": 3
+    },
+    "duration_seconds": 0.4761,
+    "empty_runtime_tables": [
+      "business.approval_requests",
+      "business.audit_events",
+      "business.idempotency_records",
+      "business.pricing_calculations",
+      "business.rfq_attachments",
+      "business.rfq_line_items",
+      "orchestration.workflow_runs"
+    ],
+    "fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "foreign_key_data_checks": 64,
+    "populated_tables": 26,
+    "postgresql_version_num": 180006,
+    "preserved": true,
+    "records": 1089,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "source_values_checked": 9587,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "actual": 70,
+        "distinct_primary_keys": 70,
+        "expected": 70,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.approval_requests": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.audit_events": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.business_rule_versions": {
+        "actual": 9,
+        "distinct_primary_keys": 9,
+        "expected": 9,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.contacts": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.customers": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.data_snapshots": {
+        "actual": 2,
+        "distinct_primary_keys": 2,
+        "expected": 2,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finish_material_categories": {
+        "actual": 19,
+        "distinct_primary_keys": 19,
+        "expected": 19,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finishes": {
+        "actual": 7,
+        "distinct_primary_keys": 7,
+        "expected": 7,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.idempotency_records": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_finish_compatibility": {
+        "actual": 50,
+        "distinct_primary_keys": 50,
+        "expected": 50,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_inventory": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_supported_operations": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_thickness_options": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.materials": {
+        "actual": 15,
+        "distinct_primary_keys": 15,
+        "expected": 15,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operation_routing": {
+        "actual": 28,
+        "distinct_primary_keys": 28,
+        "expected": 28,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operations": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.permissions": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.pricing_calculations": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.procurement_records": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.production_capacity": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_line_items": {
+        "actual": 100,
+        "distinct_primary_keys": 100,
+        "expected": 100,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_versions": {
+        "actual": 96,
+        "distinct_primary_keys": 96,
+        "expected": 96,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quotes": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_attachments": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_line_items": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfqs": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.role_permissions": {
+        "actual": 27,
+        "distinct_primary_keys": 27,
+        "expected": 27,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.roles": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.suppliers": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.users": {
+        "actual": 24,
+        "distinct_primary_keys": 24,
+        "expected": 24,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.workcentres": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "orchestration.workflow_runs": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      }
+    },
+    "unique_data_checks": 17,
+    "violations": 0
+  },
+  "component7": {
+    "after_fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "alembic_revision": "20261108_01",
+    "before_fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "database": "rfq_copilot_dev",
+    "examples": {
+      "customer": {
+        "duration_ms": 2.439,
+        "input": {
+          "customer_id": "CUST-001"
+        },
+        "result": {
+          "contacts": 1,
+          "customer_id": "CUST-001"
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "manufacturing_capabilities": {
+        "duration_ms": 4.321,
+        "input": {
+          "material_id": "MAT-001",
+          "part_type": "flat_panel"
+        },
+        "result": {
+          "finishes": 5,
+          "operations": 6,
+          "routing_rows": 4,
+          "thickness_options": 6,
+          "workcentres": 6
+        },
+        "selects": 6,
+        "status": "PASS"
+      },
+      "material_availability": {
+        "duration_ms": 1.826,
+        "input": {
+          "availability": "all",
+          "material_id": "MAT-001"
+        },
+        "result": {
+          "available_kg": "385.300000",
+          "inventory_rows": 6
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "pending_approvals": {
+        "duration_ms": 1.004,
+        "input": {
+          "customer_id": "CUST-001",
+          "required_role": "sales_manager"
+        },
+        "result": {
+          "pending_requests": 0
+        },
+        "selects": 1,
+        "status": "PASS"
+      },
+      "quotation_history": {
+        "duration_ms": 3.431,
+        "input": {
+          "customer_id": "CUST-001",
+          "rfq_id": "HRFQ-0001"
+        },
+        "result": {
+          "line_items": 2,
+          "metadata_only_versions": 1,
+          "quotations": 1,
+          "versions": 2
+        },
+        "selects": 3,
+        "status": "PASS"
+      },
+      "rfq": {
+        "duration_ms": 2.097,
+        "input": {
+          "customer_id": "CUST-001",
+          "rfq_id": "HRFQ-0001"
+        },
+        "result": {
+          "historical_part_ids": 2,
+          "rfq_id": "HRFQ-0001",
+          "runtime_lines": 0
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "workcentre_capacity": {
+        "duration_ms": 1.468,
+        "input": {
+          "week_end": "2026-11-09",
+          "week_start": "2026-11-09",
+          "workcentre_id": "WC-BND"
+        },
+        "result": {
+          "remaining_hours": "15.0000",
+          "weeks": 1
+        },
+        "selects": 2,
+        "status": "PASS"
+      }
+    },
+    "missing_identifiers": {
+      "customer": true,
+      "manufacturing_capabilities": true,
+      "material_availability": true,
+      "pending_approvals": true,
+      "quotation_history": true,
+      "rfq": true,
+      "workcentre_capacity": true
+    },
+    "postgresql_version_num": 180006,
+    "read_only": true,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "status": "PASS"
+  },
+  "date": "2026-11-08",
+  "environment": {
+    "alembic": "1.20.1",
+    "asyncpg": "0.32.0",
+    "dataset": "1.1.0",
+    "postgresql": "18.6",
+    "python": "3.12.14",
+    "sqlalchemy": "2.1.8"
+  },
+  "files_created_or_modified": {
+    "docs/dev_log/day_05.md": "Append separate Component 6 and Component 7 execution sections, preserving Components 1\u20135",
+    "docs/development/database_components_6_7_results.json": "Combined structured execution, test, fingerprint and preservation evidence",
+    "docs/development/database_integrity_verification.md": "Component 6 methodology, commands, isolation and executed verification report",
+    "docs/development/database_queries.md": "Component 7 signatures/results, usage, authorization boundaries and actual query report",
+    "src/rfq_copilot/integrity.py": "Read-only schema/data/source verification and complete SHA-256 fingerprints; explicit safe CLI",
+    "src/rfq_copilot/repositories/__init__.py": "Public exports for the seven reads and typed result wrappers",
+    "src/rfq_copilot/repositories/demo.py": "Executable read-only seven-query demonstration with safe summaries and preservation checks",
+    "src/rfq_copilot/repositories/queries.py": "Bound, scoped async reads with eager loading, input validation and no autoflush",
+    "src/rfq_copilot/repositories/results.py": "Typed wrappers distinguishing historical part references, runtime lines and quote revisions",
+    "tests/test_database_integrity.py": "80 real PostgreSQL integrity, invalid operation, rollback, cancellation and source-parity cases",
+    "tests/test_database_queries.py": "45 real query/input/scoping/eager-loading/read-only/session cases"
+  },
+  "final_decision": "COMPONENTS 6 AND 7 COMPLETE",
+  "final_exit_codes": {
+    "component6_integrity": 0,
+    "component6_tests": 0,
+    "component7_queries": 0,
+    "component7_tests": 0,
+    "diff": 0,
+    "format": 0,
+    "full_tests": 0,
+    "independent_preservation": 0,
+    "lock": 0,
+    "ruff": 0
+  },
+  "git_after": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? data/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_components_6_7_results.json\n?? docs/development/database_connection.md\n?? docs/development/database_integrity_verification.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? docs/development/database_queries.md\n?? docs/development/database_seeding.md\n?? docs/development/database_seeding_results.json\n?? docs/development/database_seeding_verification_report.md\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/integrity.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? src/rfq_copilot/repositories/\n?? src/rfq_copilot/seeding/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_integration.py\n?? tests/test_database_integrity.py\n?? tests/test_database_migrations.py\n?? tests/test_database_queries.py\n?? tests/test_database_seeding.py\n?? tests/test_database_seeding_integration.py\n?? tests/test_orm_models.py\n",
+  "git_before": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? data/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_connection.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? docs/development/database_seeding.md\n?? docs/development/database_seeding_results.json\n?? docs/development/database_seeding_verification_report.md\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? src/rfq_copilot/seeding/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_integration.py\n?? tests/test_database_migrations.py\n?? tests/test_database_seeding.py\n?? tests/test_database_seeding_integration.py\n?? tests/test_orm_models.py\n",
+  "independent_after": {
+    "canonical_values_checked": 9587,
+    "check_violations": 0,
+    "checks_evaluated": 207,
+    "current_priced_partial": 80,
+    "duplicates": 0,
+    "foreign_key_violations": 0,
+    "foreign_keys_checked": 64,
+    "identity": {
+      "database": "rfq_copilot_dev",
+      "oid": 16389,
+      "username": "rfq_copilot_dev",
+      "version": 180006
+    },
+    "not_null_violations": 0,
+    "older_metadata_only": 16,
+    "revision": [
+      "20261108_01"
+    ],
+    "scenario_rfqs": 0,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "distinct_primary_keys": 70,
+        "duplicates": 0,
+        "expected_from_independent_source": 70,
+        "not_null_violations": 0,
+        "rows": 70,
+        "server_data_md5": "39252933e7ef4d7195f7c47ec6b1d010"
+      },
+      "business.approval_requests": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.audit_events": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.business_rule_versions": {
+        "distinct_primary_keys": 9,
+        "duplicates": 0,
+        "expected_from_independent_source": 9,
+        "not_null_violations": 0,
+        "rows": 9,
+        "server_data_md5": "5fef26485b54865ee5c58d7b1ba90c9d"
+      },
+      "business.contacts": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "26bbea7372f743fc93731acaf419d4e8"
+      },
+      "business.customers": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "092731bfb08fef34026209dd25bd262c"
+      },
+      "business.data_snapshots": {
+        "distinct_primary_keys": 2,
+        "duplicates": 0,
+        "expected_from_independent_source": 2,
+        "not_null_violations": 0,
+        "rows": 2,
+        "server_data_md5": "f92fad00209a97b4df7e49cdaf182e6b"
+      },
+      "business.finish_material_categories": {
+        "distinct_primary_keys": 19,
+        "duplicates": 0,
+        "expected_from_independent_source": 19,
+        "not_null_violations": 0,
+        "rows": 19,
+        "server_data_md5": "65026ac2bf998b3c2cf557965a5f2742"
+      },
+      "business.finishes": {
+        "distinct_primary_keys": 7,
+        "duplicates": 0,
+        "expected_from_independent_source": 7,
+        "not_null_violations": 0,
+        "rows": 7,
+        "server_data_md5": "f09806467e5f0a2ed2109faf26bd58a8"
+      },
+      "business.idempotency_records": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.material_finish_compatibility": {
+        "distinct_primary_keys": 50,
+        "duplicates": 0,
+        "expected_from_independent_source": 50,
+        "not_null_violations": 0,
+        "rows": 50,
+        "server_data_md5": "b957062f4f87a07e93bd5d342993fc90"
+      },
+      "business.material_inventory": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c301b4f16d5d33560421c8e1b7830e3"
+      },
+      "business.material_supported_operations": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "54810ef149262369e5782c89c87dcdc6"
+      },
+      "business.material_thickness_options": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c0fce69e8b638d35aec70e95913fc12"
+      },
+      "business.materials": {
+        "distinct_primary_keys": 15,
+        "duplicates": 0,
+        "expected_from_independent_source": 15,
+        "not_null_violations": 0,
+        "rows": 15,
+        "server_data_md5": "1dad164c8d2506f84134ef48c1856495"
+      },
+      "business.operation_routing": {
+        "distinct_primary_keys": 28,
+        "duplicates": 0,
+        "expected_from_independent_source": 28,
+        "not_null_violations": 0,
+        "rows": 28,
+        "server_data_md5": "2cd1370263a52057b4f300199ebd912d"
+      },
+      "business.operations": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "01302bf4ed3f742a7902926c86f56abf"
+      },
+      "business.permissions": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "a7e16cc1d81b54cf171dc61a55440b7f"
+      },
+      "business.pricing_calculations": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.procurement_records": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "1f1c8ead03aed3fe502c82ad2b512a24"
+      },
+      "business.production_capacity": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "e866b64a33add31f06c14d73d5ee72d3"
+      },
+      "business.quote_line_items": {
+        "distinct_primary_keys": 100,
+        "duplicates": 0,
+        "expected_from_independent_source": 100,
+        "not_null_violations": 0,
+        "rows": 100,
+        "server_data_md5": "d6b7bea65ae6205c5ac55bc0719cb777"
+      },
+      "business.quote_versions": {
+        "distinct_primary_keys": 96,
+        "duplicates": 0,
+        "expected_from_independent_source": 96,
+        "not_null_violations": 0,
+        "rows": 96,
+        "server_data_md5": "64a41430d288190acbb02e6ac3efaefb"
+      },
+      "business.quotes": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "fe54a11929cd9ac563f05f338d571441"
+      },
+      "business.rfq_attachments": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfq_line_items": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfqs": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "5a2c6e22d0dfbbc2c0792aabb6ef5bda"
+      },
+      "business.role_permissions": {
+        "distinct_primary_keys": 27,
+        "duplicates": 0,
+        "expected_from_independent_source": 27,
+        "not_null_violations": 0,
+        "rows": 27,
+        "server_data_md5": "3a759273def6c1f8dc4d92e1d5a40e66"
+      },
+      "business.roles": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "88a584356f47cbe4122f434bf58c42eb"
+      },
+      "business.suppliers": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "d213659494dc074bc178e31b4d4766e3"
+      },
+      "business.users": {
+        "distinct_primary_keys": 24,
+        "duplicates": 0,
+        "expected_from_independent_source": 24,
+        "not_null_violations": 0,
+        "rows": 24,
+        "server_data_md5": "15241b5249d5cbe1b4e79f0d497536a1"
+      },
+      "business.workcentres": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "3e8959665188adebbd087a064c5b86e8"
+      },
+      "orchestration.workflow_runs": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      }
+    },
+    "target": "development",
+    "test_database": {
+      "original_catalog_restored": true,
+      "schemas": [
+        "public"
+      ],
+      "user_relations": 0
+    },
+    "total_records": 1089
+  },
+  "independent_before": {
+    "canonical_values_checked": 9587,
+    "check_violations": 0,
+    "checks_evaluated": 207,
+    "current_priced_partial": 80,
+    "duplicates": 0,
+    "foreign_key_violations": 0,
+    "foreign_keys_checked": 64,
+    "identity": {
+      "database": "rfq_copilot_dev",
+      "oid": 16389,
+      "username": "rfq_copilot_dev",
+      "version": 180006
+    },
+    "not_null_violations": 0,
+    "older_metadata_only": 16,
+    "revision": [
+      "20261108_01"
+    ],
+    "scenario_rfqs": 0,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "distinct_primary_keys": 70,
+        "duplicates": 0,
+        "expected_from_independent_source": 70,
+        "not_null_violations": 0,
+        "rows": 70,
+        "server_data_md5": "39252933e7ef4d7195f7c47ec6b1d010"
+      },
+      "business.approval_requests": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.audit_events": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.business_rule_versions": {
+        "distinct_primary_keys": 9,
+        "duplicates": 0,
+        "expected_from_independent_source": 9,
+        "not_null_violations": 0,
+        "rows": 9,
+        "server_data_md5": "5fef26485b54865ee5c58d7b1ba90c9d"
+      },
+      "business.contacts": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "26bbea7372f743fc93731acaf419d4e8"
+      },
+      "business.customers": {
+        "distinct_primary_keys": 40,
+        "duplicates": 0,
+        "expected_from_independent_source": 40,
+        "not_null_violations": 0,
+        "rows": 40,
+        "server_data_md5": "092731bfb08fef34026209dd25bd262c"
+      },
+      "business.data_snapshots": {
+        "distinct_primary_keys": 2,
+        "duplicates": 0,
+        "expected_from_independent_source": 2,
+        "not_null_violations": 0,
+        "rows": 2,
+        "server_data_md5": "f92fad00209a97b4df7e49cdaf182e6b"
+      },
+      "business.finish_material_categories": {
+        "distinct_primary_keys": 19,
+        "duplicates": 0,
+        "expected_from_independent_source": 19,
+        "not_null_violations": 0,
+        "rows": 19,
+        "server_data_md5": "65026ac2bf998b3c2cf557965a5f2742"
+      },
+      "business.finishes": {
+        "distinct_primary_keys": 7,
+        "duplicates": 0,
+        "expected_from_independent_source": 7,
+        "not_null_violations": 0,
+        "rows": 7,
+        "server_data_md5": "f09806467e5f0a2ed2109faf26bd58a8"
+      },
+      "business.idempotency_records": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.material_finish_compatibility": {
+        "distinct_primary_keys": 50,
+        "duplicates": 0,
+        "expected_from_independent_source": 50,
+        "not_null_violations": 0,
+        "rows": 50,
+        "server_data_md5": "b957062f4f87a07e93bd5d342993fc90"
+      },
+      "business.material_inventory": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c301b4f16d5d33560421c8e1b7830e3"
+      },
+      "business.material_supported_operations": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "54810ef149262369e5782c89c87dcdc6"
+      },
+      "business.material_thickness_options": {
+        "distinct_primary_keys": 90,
+        "duplicates": 0,
+        "expected_from_independent_source": 90,
+        "not_null_violations": 0,
+        "rows": 90,
+        "server_data_md5": "8c0fce69e8b638d35aec70e95913fc12"
+      },
+      "business.materials": {
+        "distinct_primary_keys": 15,
+        "duplicates": 0,
+        "expected_from_independent_source": 15,
+        "not_null_violations": 0,
+        "rows": 15,
+        "server_data_md5": "1dad164c8d2506f84134ef48c1856495"
+      },
+      "business.operation_routing": {
+        "distinct_primary_keys": 28,
+        "duplicates": 0,
+        "expected_from_independent_source": 28,
+        "not_null_violations": 0,
+        "rows": 28,
+        "server_data_md5": "2cd1370263a52057b4f300199ebd912d"
+      },
+      "business.operations": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "01302bf4ed3f742a7902926c86f56abf"
+      },
+      "business.permissions": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "a7e16cc1d81b54cf171dc61a55440b7f"
+      },
+      "business.pricing_calculations": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.procurement_records": {
+        "distinct_primary_keys": 12,
+        "duplicates": 0,
+        "expected_from_independent_source": 12,
+        "not_null_violations": 0,
+        "rows": 12,
+        "server_data_md5": "1f1c8ead03aed3fe502c82ad2b512a24"
+      },
+      "business.production_capacity": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "e866b64a33add31f06c14d73d5ee72d3"
+      },
+      "business.quote_line_items": {
+        "distinct_primary_keys": 100,
+        "duplicates": 0,
+        "expected_from_independent_source": 100,
+        "not_null_violations": 0,
+        "rows": 100,
+        "server_data_md5": "d6b7bea65ae6205c5ac55bc0719cb777"
+      },
+      "business.quote_versions": {
+        "distinct_primary_keys": 96,
+        "duplicates": 0,
+        "expected_from_independent_source": 96,
+        "not_null_violations": 0,
+        "rows": 96,
+        "server_data_md5": "64a41430d288190acbb02e6ac3efaefb"
+      },
+      "business.quotes": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "fe54a11929cd9ac563f05f338d571441"
+      },
+      "business.rfq_attachments": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfq_line_items": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      },
+      "business.rfqs": {
+        "distinct_primary_keys": 80,
+        "duplicates": 0,
+        "expected_from_independent_source": 80,
+        "not_null_violations": 0,
+        "rows": 80,
+        "server_data_md5": "5a2c6e22d0dfbbc2c0792aabb6ef5bda"
+      },
+      "business.role_permissions": {
+        "distinct_primary_keys": 27,
+        "duplicates": 0,
+        "expected_from_independent_source": 27,
+        "not_null_violations": 0,
+        "rows": 27,
+        "server_data_md5": "3a759273def6c1f8dc4d92e1d5a40e66"
+      },
+      "business.roles": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "88a584356f47cbe4122f434bf58c42eb"
+      },
+      "business.suppliers": {
+        "distinct_primary_keys": 6,
+        "duplicates": 0,
+        "expected_from_independent_source": 6,
+        "not_null_violations": 0,
+        "rows": 6,
+        "server_data_md5": "d213659494dc074bc178e31b4d4766e3"
+      },
+      "business.users": {
+        "distinct_primary_keys": 24,
+        "duplicates": 0,
+        "expected_from_independent_source": 24,
+        "not_null_violations": 0,
+        "rows": 24,
+        "server_data_md5": "15241b5249d5cbe1b4e79f0d497536a1"
+      },
+      "business.workcentres": {
+        "distinct_primary_keys": 8,
+        "duplicates": 0,
+        "expected_from_independent_source": 8,
+        "not_null_violations": 0,
+        "rows": 8,
+        "server_data_md5": "3e8959665188adebbd087a064c5b86e8"
+      },
+      "orchestration.workflow_runs": {
+        "distinct_primary_keys": 0,
+        "duplicates": 0,
+        "expected_from_independent_source": 0,
+        "not_null_violations": 0,
+        "rows": 0,
+        "server_data_md5": "d751713988987e9331980363e24189ce"
+      }
+    },
+    "target": "development",
+    "test_database": {
+      "original_catalog_restored": true,
+      "schemas": [
+        "public"
+      ],
+      "user_relations": 0
+    },
+    "total_records": 1089
+  },
+  "preservation": {
+    "alembic_revision": "20261108_01",
+    "alembic_unchanged": true,
+    "all_33_table_fingerprints_match": true,
+    "application_imports": "PASS",
+    "connection_config_unchanged": true,
+    "credential_matches": 0,
+    "credential_scanned_files": 81,
+    "dataset_files": 681,
+    "dataset_path_bytes_unchanged": true,
+    "day4_documents_unchanged": true,
+    "dependency_files_unchanged": true,
+    "dependency_lock": "PASS",
+    "development_reseeded": false,
+    "development_writes": false,
+    "documentation_links": "PASS",
+    "env_ignored": true,
+    "env_mode": "0600",
+    "evaluation_answers_imported": false,
+    "existing_tests_unchanged": true,
+    "fingerprint_after": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+    "fingerprint_before": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+    "git_diff_check": "PASS",
+    "git_head_unchanged": true,
+    "git_index_unchanged": true,
+    "installed_versions_preserved": 26,
+    "new_migrations": false,
+    "new_whitespace": "PASS",
+    "only_modified_original_file": "docs/dev_log/day_05.md",
+    "original_files_preserved": 750,
+    "orm_unchanged": true,
+    "prior_log_prefix_preserved": true,
+    "protected_hashes": 637,
+    "python_formatting": "PASS",
+    "records_after": 1089,
+    "records_before": 1089,
+    "ruff": "PASS",
+    "seeding_unchanged": true,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "test_database_original_catalog_restored": true,
+    "test_database_user_relations": 0
+  },
+  "resolved_issues": [
+    "Use PostgreSQL dialect-rendered shortened constraint names when comparing FK definitions.",
+    "PostgreSQL 18 reports RESTRICT DELETE as SQLSTATE 23001 and numeric overflow as DBAPI error 22003; tests assert actual appropriate errors.",
+    "DELETE RESTRICT tests select a genuinely referenced user, since the schema permits deleting unreferenced users.",
+    "Source-association corruption fixture disables the primary-contact flag before moving the contact, avoiding an unrelated valid partial-unique rejection.",
+    "Integrity JSON comparison distinguishes booleans from numerically equal integers instead of Python False == 0."
+  ],
+  "tests": {
+    "component6": {
+      "duration_seconds": 31.24,
+      "errors": 0,
+      "failed": 0,
+      "passed": 80,
+      "skipped": 0
+    },
+    "component7": {
+      "duration_seconds": 8.03,
+      "errors": 0,
+      "failed": 0,
+      "passed": 45,
+      "skipped": 0
+    },
+    "full": {
+      "duration_seconds": 54.41,
+      "errors": 0,
+      "failed": 0,
+      "passed": 593,
+      "skipped": 0
+    },
+    "within_full_run": {
+      "component6": {
+        "case_time_seconds": 27.970999999999997,
+        "passed": 80
+      },
+      "component7": {
+        "case_time_seconds": 7.707000000000002,
+        "passed": 45
+      },
+      "previous": {
+        "case_time_seconds": 18.38700000000001,
+        "passed": 468
+      }
+    }
+  },
+  "timezone": "America/New_York",
+  "unresolved_problems": []
+}

@@ -1,0 +1,3048 @@
+{
+  "blocking_issues": [],
+  "commands": {
+    "baseline_markdown_format": ".venv/bin/ruff format --check --config pyproject.toml /tmp/rfq_component8_markdown_baseline",
+    "diff": "git diff --check",
+    "end_to_end": ".venv/bin/python -m pytest tests/test_database_end_to_end.py -q --junitxml=/tmp/rfq_component8_end_to_end.xml",
+    "full_tests": ".venv/bin/python -m pytest -q -ra --junitxml=/tmp/rfq_day5_final_tests.xml > /tmp/rfq_day5_final_pytest.log 2>&1",
+    "integrity_after": ".venv/bin/python -m rfq_copilot.integrity --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env > /tmp/rfq_component8_integrity_after.json",
+    "integrity_before": ".venv/bin/python -m rfq_copilot.integrity --target development --source data/rfq_synthetic_data --archive data/rfq_synthetic_data_v1.1.0.zip --snapshot-dir data/rfq_seed_snapshots --env-file .env > /tmp/rfq_component8_integrity_before.json",
+    "json_green": ".venv/bin/python -m pytest tests/test_database_seeding_integration.py::test_json_type_conflict_is_rejected_without_overwrite tests/test_database_integrity.py::test_json_boolean_cannot_masquerade_as_numeric_zero -q --junitxml=/tmp/rfq_component8_json_green.xml",
+    "json_red": ".venv/bin/python -m pytest tests/test_database_seeding_integration.py::test_json_type_conflict_is_rejected_without_overwrite -q --junitxml=/tmp/rfq_component8_json_red.xml",
+    "lint": ".venv/bin/ruff check .",
+    "live_safety_after": ".venv/bin/python /tmp/rfq_component8_database_safety.py /tmp/rfq_component8_safety_after.json",
+    "live_safety_before": ".venv/bin/python /tmp/rfq_component8_database_safety.py /tmp/rfq_component8_safety_before.json",
+    "lock": "uv lock --check",
+    "optional_markdown_format": ".venv/bin/ruff format --check .",
+    "python_format": ".venv/bin/ruff format --check src tests alembic",
+    "queries": ".venv/bin/python -m rfq_copilot.repositories.demo --target development --env-file .env > /tmp/rfq_component8_queries.json"
+  },
+  "coverage_matrix": [
+    {
+      "area": "Connection",
+      "requirement": "Explicit environment, configuration validation, separate targets",
+      "tests": [
+        "test_database_config.py::test_environment_file_is_explicit_and_process_variables_win",
+        "test_database_config.py::test_invalid_or_unsafe_configuration_fails_without_echoing_values",
+        "test_database_integration.py::test_development_and_test_connections_are_distinct"
+      ]
+    },
+    {
+      "area": "Connection",
+      "requirement": "Credential protection, invalid login, unavailable server",
+      "tests": [
+        "test_database_config.py::test_encoded_password_round_trip_and_redacted_settings",
+        "test_database_integration.py::test_invalid_credentials_fail_without_leaking_secrets",
+        "test_database_integration.py::test_unavailable_server_returns_sanitized_connection_error"
+      ]
+    },
+    {
+      "area": "Sessions",
+      "requirement": "Normal/exception/error rollback, dependency cleanup, permanent close",
+      "tests": [
+        "test_database_integration.py::test_normal_exit_rolls_back_uncommitted_transaction",
+        "test_database_integration.py::test_application_exception_rolls_back_and_propagates",
+        "test_database_integration.py::test_sql_error_rolls_back_and_connection_can_be_reused",
+        "test_database_integration.py::test_dependency_generator_closes_on_early_exit"
+      ]
+    },
+    {
+      "area": "Sessions",
+      "requirement": "Concurrency, cancellation, pool/engine disposal",
+      "tests": [
+        "test_database_integration.py::test_concurrent_tasks_have_distinct_sessions_and_connections",
+        "test_database_integration.py::test_cancelled_query_releases_resources",
+        "test_database_integration.py::test_engine_disposal_closes_pool_and_prevents_reuse"
+      ]
+    },
+    {
+      "area": "ORM",
+      "requirement": "Single base; all columns, types, precision, nullability and PKs",
+      "tests": [
+        "test_orm_models.py::test_exact_registry_and_single_base",
+        "test_orm_models.py::test_all_columns_types_nullability_and_primary_keys_match_day4"
+      ]
+    },
+    {
+      "area": "ORM",
+      "requirement": "FK/UNIQUE/CHECK/default/generated/index parity",
+      "tests": [
+        "test_orm_models.py::test_foreign_and_unique_keys_match_day4",
+        "test_orm_models.py::test_exact_table_and_common_checks_match_day4",
+        "test_orm_models.py::test_insert_defaults_and_computed_values_match_day4",
+        "test_orm_models.py::test_every_documented_index_matches_with_no_redundant_indexes"
+      ]
+    },
+    {
+      "area": "ORM",
+      "requirement": "Relationships, quote cycle, PostgreSQL DDL, import has no IO",
+      "tests": [
+        "test_orm_models.py::test_each_fk_has_a_resolved_bidirectional_relationship",
+        "test_orm_models.py::test_quote_cycle_and_version_pinning_remain_database_constraints",
+        "test_orm_models.py::test_postgresql_ddl_compiles_offline",
+        "test_orm_models.py::test_fresh_module_import_and_metadata_discovery_perform_no_database_io"
+      ]
+    },
+    {
+      "area": "Migrations",
+      "requirement": "Head/repeat upgrade, isolated downgrade/re-upgrade, history, physical parity",
+      "tests": [
+        "test_database_migrations.py::test_real_upgrade_downgrade_reupgrade_and_cleanup",
+        "test_database_migrations.py::test_configuration_metadata_and_revision",
+        "test_database_migrations.py::test_each_physical_table_matches_day4"
+      ]
+    },
+    {
+      "area": "Migrations",
+      "requirement": "Wrong target/role, unsafe cleanup refusal and transactional RESTRICT failure",
+      "tests": [
+        "test_database_migrations.py::test_configuration_never_falls_back_and_errors_hide_password",
+        "test_database_migrations.py::test_live_identity_must_match_endpoint_owner_and_restricted_role",
+        "test_database_migrations.py::test_downgrade_denied_before_database_operations",
+        "test_database_migrations.py::test_real_upgrade_downgrade_reupgrade_and_cleanup"
+      ]
+    },
+    {
+      "area": "Migrations",
+      "requirement": "Missing revision and unexpected schema drift",
+      "tests": [
+        "test_database_seeding_integration.py::test_missing_or_drifted_schema_is_rejected",
+        "test_database_migrations.py::test_development_physical_schema_read_only"
+      ]
+    },
+    {
+      "area": "Sources",
+      "requirement": "File discovery, version/provenance, archive/manifest, missing/corrupt sources",
+      "tests": [
+        "test_database_seeding.py::test_source_inventory_and_checksums",
+        "test_database_seeding.py::test_dataset_version_and_provenance_rejected",
+        "test_database_seeding.py::test_archive_checksum_mismatch",
+        "test_database_seeding.py::test_missing_source_fails_without_disclosing_path",
+        "test_database_seeding.py::test_tampered_copies_are_refused"
+      ]
+    },
+    {
+      "area": "Sources",
+      "requirement": "CSV/JSON schemas, duplicate keys/IDs, FK tuples, exact numeric/time/NULL conversion",
+      "tests": [
+        "test_database_seeding.py::test_malformed_or_uncontracted_csv",
+        "test_database_seeding.py::test_malformed_json_and_duplicate_keys",
+        "test_database_seeding.py::test_duplicate_and_composite_keys_fail",
+        "test_database_seeding.py::test_foreign_key_tuples_fail",
+        "test_database_seeding.py::test_exact_decimal_and_nested_json_precision",
+        "test_database_seeding.py::test_dates_timezones_booleans_and_null_handling"
+      ]
+    },
+    {
+      "area": "Seeding",
+      "requirement": "33-table classification, mapping/dependency order, historical provenance",
+      "tests": [
+        "test_database_seeding.py::test_all_33_table_classifications_and_dependency_order",
+        "test_database_seeding.py::test_historical_projection_provenance",
+        "test_database_seeding.py::test_version_field_discrepancy_is_resolved_without_default"
+      ]
+    },
+    {
+      "area": "Seeding",
+      "requirement": "Dry-run, full import, counts, no-write replay, verification mode",
+      "tests": [
+        "test_database_seeding_integration.py::test_real_dry_run_is_read_only_and_creates_no_artifacts",
+        "test_database_seeding_integration.py::test_full_transactional_import_counts_and_representative_values",
+        "test_database_seeding_integration.py::test_second_import_is_identical_without_insert_update_or_delete",
+        "test_database_seeding_integration.py::test_verification_only_after_import"
+      ]
+    },
+    {
+      "area": "Seeding",
+      "requirement": "Operational conflicts, partial-state refusal, JSON type conflicts",
+      "tests": [
+        "test_database_seeding_integration.py::test_stored_source_conflict_never_overwrites",
+        "test_database_seeding_integration.py::test_partial_state_is_preserved_and_not_merged",
+        "test_database_seeding_integration.py::test_json_type_conflict_is_rejected_without_overwrite"
+      ]
+    },
+    {
+      "area": "Seeding",
+      "requirement": "Late FK/UNIQUE/CHECK/deferred-pointer/application failure; verification failure",
+      "tests": [
+        "test_database_seeding_integration.py::test_late_failure_rolls_back_all_inserted_parents",
+        "test_database_seeding_integration.py::test_postinsert_verification_failure_rolls_back"
+      ]
+    },
+    {
+      "area": "Seeding",
+      "requirement": "Cancellation, contention, commit boundary and immutable artifacts",
+      "tests": [
+        "test_database_seeding_integration.py::test_cancelled_import_rolls_back_and_releases_pool",
+        "test_database_seeding_integration.py::test_concurrent_import_attempt_is_rejected",
+        "test_database_seeding_integration.py::test_owned_run_seed_commits_before_reporting_success",
+        "test_database_seeding_integration.py::test_corrupt_archived_artifact_blocks_replay"
+      ]
+    },
+    {
+      "area": "Evaluation",
+      "requirement": "No ground-truth/scenario readers; indirect nested label and path/symlink boundaries",
+      "tests": [
+        "test_database_seeding.py::test_hidden_files_are_never_json_reader_inputs",
+        "test_database_seeding.py::test_nonoperational_json_reader_refused",
+        "test_database_seeding.py::test_nested_and_cross_record_validation",
+        "test_database_seeding.py::test_path_escape_rejected",
+        "test_database_seeding.py::test_symlink_source_rejected"
+      ]
+    },
+    {
+      "area": "Integrity",
+      "requirement": "All keys, source parity, Decimal, required fields, constraints, runtime emptiness",
+      "tests": [
+        "test_database_integrity.py::test_current_development_integrity_and_preservation",
+        "test_database_integrity.py::test_json_boolean_cannot_masquerade_as_numeric_zero",
+        "test_database_integrity.py::test_valid_fk_but_changed_source_association_detected"
+      ]
+    },
+    {
+      "area": "Integrity",
+      "requirement": "Real invalid INSERT/UPDATE/DELETE; numeric, state and FK enforcement",
+      "tests": [
+        "test_database_integrity.py::test_duplicate_source_primary_key_rejected",
+        "test_database_integrity.py::test_invalid_updates_rejected",
+        "test_database_integrity.py::test_invalid_inserts_rejected",
+        "test_database_integrity.py::test_restrict_delete_preserves_referenced_parent"
+      ]
+    },
+    {
+      "area": "Integrity",
+      "requirement": "Composite/cross-schema keys, partial predicates, approval tuples and dimensions",
+      "tests": [
+        "test_database_integrity.py::test_valid_operation_and_workcentre_with_wrong_composite_pair_rejected",
+        "test_database_integrity.py::test_cross_schema_foreign_key_enforced",
+        "test_database_integrity.py::test_primary_contact_partial_unique_index",
+        "test_database_integrity.py::test_current_version_partial_unique_index",
+        "test_database_integrity.py::test_pending_approval_partial_unique_index",
+        "test_database_integrity.py::test_approval_request_version_triple_foreign_key",
+        "test_database_integrity.py::test_runtime_dimensional_and_composite_uniqueness"
+      ]
+    },
+    {
+      "area": "Transactions",
+      "requirement": "Commit, explicit/exception/multi-record FK/UNIQUE/CHECK rollback, cancellation",
+      "tests": [
+        "test_database_integrity.py::test_owned_session_transaction_boundaries",
+        "test_database_integrity.py::test_multirecord_constraint_failure_is_atomic",
+        "test_database_integrity.py::test_async_cancellation_rolls_back_written_row_and_closes_session"
+      ]
+    },
+    {
+      "area": "Queries",
+      "requirement": "Customer/contacts, missing IDs, scope, historical versus runtime RFQ parts",
+      "tests": [
+        "test_database_queries.py::test_customer_contacts_are_exact_and_scoped",
+        "test_database_queries.py::test_historical_rfq_preserves_part_references_without_runtime_lines",
+        "test_database_queries.py::test_runtime_rfq_lines_remain_distinct_from_historical_ids",
+        "test_database_queries.py::test_invalid_identifiers_fail_before_sql"
+      ]
+    },
+    {
+      "area": "Queries",
+      "requirement": "Inventory/thickness/availability/Decimal, stored capabilities/routing, capacity weeks/hours",
+      "tests": [
+        "test_database_queries.py::test_material_inventory_decimal_totals_and_thickness_filter",
+        "test_database_queries.py::test_inventory_available_and_zero_filters",
+        "test_database_queries.py::test_stored_manufacturing_capabilities_and_routing",
+        "test_database_queries.py::test_workcentre_capacity_week_range_and_hours"
+      ]
+    },
+    {
+      "area": "Queries",
+      "requirement": "Quote versions/line ownership/ordering/root uniqueness; empty/nonempty pending queues",
+      "tests": [
+        "test_database_queries.py::test_quotation_history_all_versions_lines_ordering_and_scope",
+        "test_database_queries.py::test_pending_empty_does_not_reconstruct_historical_events",
+        "test_database_queries.py::test_pending_requests_scope_status_role_and_order"
+      ]
+    },
+    {
+      "area": "Queries",
+      "requirement": "Bound parameters, invalid filters, eager loading, no autoflush, read-only/session cleanup",
+      "tests": [
+        "test_database_queries.py::test_bound_identifier_cannot_inject_sql",
+        "test_database_queries.py::test_bad_thickness_inputs",
+        "test_database_queries.py::test_invalid_week_filters",
+        "test_database_queries.py::test_query_counts_are_bounded_without_lazy_n_plus_one",
+        "test_database_queries.py::test_reads_do_not_autoflush_pending_caller_changes",
+        "test_database_queries.py::test_all_development_reads_preserve_records_and_close_sessions"
+      ]
+    },
+    {
+      "area": "End-to-end",
+      "requirement": "One real clean migration \u2192 source \u2192 seed \u2192 integrity \u2192 replay \u2192 7 reads \u2192 constraint/rollback/cleanup chain",
+      "tests": [
+        "test_database_end_to_end.py::test_complete_day5_database_lifecycle"
+      ]
+    }
+  ],
+  "database_safety_after": {
+    "development": {
+      "authentication_identity": "rfq_copilot_dev",
+      "authentication_method": "scram-sha-256",
+      "identity": {
+        "address": "127.0.0.1",
+        "database": "rfq_copilot_dev",
+        "encoding": "UTF8",
+        "oid": 16389,
+        "owner": "rfq_copilot_dev",
+        "port": 5432,
+        "rolbypassrls": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolsuper": false,
+        "username": "rfq_copilot_dev",
+        "version": 180006
+      },
+      "read_only": "on",
+      "relations": [
+        [
+          "business",
+          "approval_history",
+          "r"
+        ],
+        [
+          "business",
+          "approval_requests",
+          "r"
+        ],
+        [
+          "business",
+          "audit_events",
+          "r"
+        ],
+        [
+          "business",
+          "business_rule_versions",
+          "r"
+        ],
+        [
+          "business",
+          "contacts",
+          "r"
+        ],
+        [
+          "business",
+          "customers",
+          "r"
+        ],
+        [
+          "business",
+          "data_snapshots",
+          "r"
+        ],
+        [
+          "business",
+          "finish_material_categories",
+          "r"
+        ],
+        [
+          "business",
+          "finishes",
+          "r"
+        ],
+        [
+          "business",
+          "idempotency_records",
+          "r"
+        ],
+        [
+          "business",
+          "ix_approval_history_version_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_approval_requests_queue",
+          "i"
+        ],
+        [
+          "business",
+          "ix_audit_correlation_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_audit_rfq_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_contacts_customer_name",
+          "i"
+        ],
+        [
+          "business",
+          "ix_inventory_material_thickness",
+          "i"
+        ],
+        [
+          "business",
+          "ix_procurement_inventory_status",
+          "i"
+        ],
+        [
+          "business",
+          "ix_procurement_supplier_status_eta",
+          "i"
+        ],
+        [
+          "business",
+          "ix_rfqs_customer_submitted",
+          "i"
+        ],
+        [
+          "business",
+          "ix_users_reviewers",
+          "i"
+        ],
+        [
+          "business",
+          "material_finish_compatibility",
+          "r"
+        ],
+        [
+          "business",
+          "material_inventory",
+          "r"
+        ],
+        [
+          "business",
+          "material_supported_operations",
+          "r"
+        ],
+        [
+          "business",
+          "material_thickness_options",
+          "r"
+        ],
+        [
+          "business",
+          "materials",
+          "r"
+        ],
+        [
+          "business",
+          "operation_routing",
+          "r"
+        ],
+        [
+          "business",
+          "operations",
+          "r"
+        ],
+        [
+          "business",
+          "permissions",
+          "r"
+        ],
+        [
+          "business",
+          "pk_approval_history",
+          "i"
+        ],
+        [
+          "business",
+          "pk_approval_requests",
+          "i"
+        ],
+        [
+          "business",
+          "pk_audit_events",
+          "i"
+        ],
+        [
+          "business",
+          "pk_business_rule_versions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_contacts",
+          "i"
+        ],
+        [
+          "business",
+          "pk_customers",
+          "i"
+        ],
+        [
+          "business",
+          "pk_data_snapshots",
+          "i"
+        ],
+        [
+          "business",
+          "pk_finish_material_categories",
+          "i"
+        ],
+        [
+          "business",
+          "pk_finishes",
+          "i"
+        ],
+        [
+          "business",
+          "pk_idempotency_records",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_finish_compatibility",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_inventory",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_supported_operations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_thickness_options",
+          "i"
+        ],
+        [
+          "business",
+          "pk_materials",
+          "i"
+        ],
+        [
+          "business",
+          "pk_operation_routing",
+          "i"
+        ],
+        [
+          "business",
+          "pk_operations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_permissions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_pricing_calculations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_procurement_records",
+          "i"
+        ],
+        [
+          "business",
+          "pk_production_capacity",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quote_line_items",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quote_versions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quotes",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfq_attachments",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfq_line_items",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfqs",
+          "i"
+        ],
+        [
+          "business",
+          "pk_role_permissions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_roles",
+          "i"
+        ],
+        [
+          "business",
+          "pk_suppliers",
+          "i"
+        ],
+        [
+          "business",
+          "pk_users",
+          "i"
+        ],
+        [
+          "business",
+          "pk_workcentres",
+          "i"
+        ],
+        [
+          "business",
+          "pricing_calculations",
+          "r"
+        ],
+        [
+          "business",
+          "procurement_records",
+          "r"
+        ],
+        [
+          "business",
+          "production_capacity",
+          "r"
+        ],
+        [
+          "business",
+          "quote_line_items",
+          "r"
+        ],
+        [
+          "business",
+          "quote_versions",
+          "r"
+        ],
+        [
+          "business",
+          "quotes",
+          "r"
+        ],
+        [
+          "business",
+          "rfq_attachments",
+          "r"
+        ],
+        [
+          "business",
+          "rfq_line_items",
+          "r"
+        ],
+        [
+          "business",
+          "rfqs",
+          "r"
+        ],
+        [
+          "business",
+          "role_permissions",
+          "r"
+        ],
+        [
+          "business",
+          "roles",
+          "r"
+        ],
+        [
+          "business",
+          "suppliers",
+          "r"
+        ],
+        [
+          "business",
+          "uq_approval_requests_approval_request_id_quote_id_quote_version",
+          "i"
+        ],
+        [
+          "business",
+          "uq_approval_requests_pending",
+          "i"
+        ],
+        [
+          "business",
+          "uq_business_rule_versions_rule_kind_sha256",
+          "i"
+        ],
+        [
+          "business",
+          "uq_contacts_primary",
+          "i"
+        ],
+        [
+          "business",
+          "uq_data_snapshots_snapshot_kind_sha256",
+          "i"
+        ],
+        [
+          "business",
+          "uq_idempotency_records_actor_id_customer_id_operation_i_fd7c",
+          "i"
+        ],
+        [
+          "business",
+          "uq_operation_routing_part_type_sequence",
+          "i"
+        ],
+        [
+          "business",
+          "uq_production_capacity_workcentre_id_week_start",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_line_items_quote_id_quote_version_line_number",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_versions_current",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_versions_quote_id_version",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quotes_rfq_id",
+          "i"
+        ],
+        [
+          "business",
+          "uq_rfq_line_items_rfq_id_line_number",
+          "i"
+        ],
+        [
+          "business",
+          "uq_rfq_line_items_rfq_id_part_id",
+          "i"
+        ],
+        [
+          "business",
+          "uq_users_authentication_subject",
+          "i"
+        ],
+        [
+          "business",
+          "uq_workcentres_workcentre_id_operation_id",
+          "i"
+        ],
+        [
+          "business",
+          "users",
+          "r"
+        ],
+        [
+          "business",
+          "workcentres",
+          "r"
+        ],
+        [
+          "orchestration",
+          "ix_workflow_runs_rfq_time",
+          "i"
+        ],
+        [
+          "orchestration",
+          "pk_workflow_runs",
+          "i"
+        ],
+        [
+          "orchestration",
+          "uq_workflow_runs_correlation_id",
+          "i"
+        ],
+        [
+          "orchestration",
+          "workflow_runs",
+          "r"
+        ],
+        [
+          "public",
+          "alembic_version",
+          "r"
+        ],
+        [
+          "public",
+          "alembic_version_pkc",
+          "i"
+        ]
+      ],
+      "schemas": [
+        [
+          "business",
+          "rfq_copilot_dev",
+          "rfq-copilot:20261108_01"
+        ],
+        [
+          "orchestration",
+          "rfq_copilot_dev",
+          "rfq-copilot:20261108_01"
+        ],
+        [
+          "public",
+          "pg_database_owner",
+          "standard public schema"
+        ]
+      ]
+    },
+    "test": {
+      "authentication_identity": "rfq_copilot_dev",
+      "authentication_method": "scram-sha-256",
+      "identity": {
+        "address": "127.0.0.1",
+        "database": "rfq_copilot_test",
+        "encoding": "UTF8",
+        "oid": 16390,
+        "owner": "rfq_copilot_dev",
+        "port": 5432,
+        "rolbypassrls": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolsuper": false,
+        "username": "rfq_copilot_dev",
+        "version": 180006
+      },
+      "read_only": "on",
+      "relations": [],
+      "schemas": [
+        [
+          "public",
+          "pg_database_owner",
+          "standard public schema"
+        ]
+      ]
+    }
+  },
+  "database_safety_before": {
+    "development": {
+      "authentication_identity": "rfq_copilot_dev",
+      "authentication_method": "scram-sha-256",
+      "identity": {
+        "address": "127.0.0.1",
+        "database": "rfq_copilot_dev",
+        "encoding": "UTF8",
+        "oid": 16389,
+        "owner": "rfq_copilot_dev",
+        "port": 5432,
+        "rolbypassrls": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolsuper": false,
+        "username": "rfq_copilot_dev",
+        "version": 180006
+      },
+      "read_only": "on",
+      "relations": [
+        [
+          "business",
+          "approval_history",
+          "r"
+        ],
+        [
+          "business",
+          "approval_requests",
+          "r"
+        ],
+        [
+          "business",
+          "audit_events",
+          "r"
+        ],
+        [
+          "business",
+          "business_rule_versions",
+          "r"
+        ],
+        [
+          "business",
+          "contacts",
+          "r"
+        ],
+        [
+          "business",
+          "customers",
+          "r"
+        ],
+        [
+          "business",
+          "data_snapshots",
+          "r"
+        ],
+        [
+          "business",
+          "finish_material_categories",
+          "r"
+        ],
+        [
+          "business",
+          "finishes",
+          "r"
+        ],
+        [
+          "business",
+          "idempotency_records",
+          "r"
+        ],
+        [
+          "business",
+          "ix_approval_history_version_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_approval_requests_queue",
+          "i"
+        ],
+        [
+          "business",
+          "ix_audit_correlation_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_audit_rfq_time",
+          "i"
+        ],
+        [
+          "business",
+          "ix_contacts_customer_name",
+          "i"
+        ],
+        [
+          "business",
+          "ix_inventory_material_thickness",
+          "i"
+        ],
+        [
+          "business",
+          "ix_procurement_inventory_status",
+          "i"
+        ],
+        [
+          "business",
+          "ix_procurement_supplier_status_eta",
+          "i"
+        ],
+        [
+          "business",
+          "ix_rfqs_customer_submitted",
+          "i"
+        ],
+        [
+          "business",
+          "ix_users_reviewers",
+          "i"
+        ],
+        [
+          "business",
+          "material_finish_compatibility",
+          "r"
+        ],
+        [
+          "business",
+          "material_inventory",
+          "r"
+        ],
+        [
+          "business",
+          "material_supported_operations",
+          "r"
+        ],
+        [
+          "business",
+          "material_thickness_options",
+          "r"
+        ],
+        [
+          "business",
+          "materials",
+          "r"
+        ],
+        [
+          "business",
+          "operation_routing",
+          "r"
+        ],
+        [
+          "business",
+          "operations",
+          "r"
+        ],
+        [
+          "business",
+          "permissions",
+          "r"
+        ],
+        [
+          "business",
+          "pk_approval_history",
+          "i"
+        ],
+        [
+          "business",
+          "pk_approval_requests",
+          "i"
+        ],
+        [
+          "business",
+          "pk_audit_events",
+          "i"
+        ],
+        [
+          "business",
+          "pk_business_rule_versions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_contacts",
+          "i"
+        ],
+        [
+          "business",
+          "pk_customers",
+          "i"
+        ],
+        [
+          "business",
+          "pk_data_snapshots",
+          "i"
+        ],
+        [
+          "business",
+          "pk_finish_material_categories",
+          "i"
+        ],
+        [
+          "business",
+          "pk_finishes",
+          "i"
+        ],
+        [
+          "business",
+          "pk_idempotency_records",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_finish_compatibility",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_inventory",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_supported_operations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_material_thickness_options",
+          "i"
+        ],
+        [
+          "business",
+          "pk_materials",
+          "i"
+        ],
+        [
+          "business",
+          "pk_operation_routing",
+          "i"
+        ],
+        [
+          "business",
+          "pk_operations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_permissions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_pricing_calculations",
+          "i"
+        ],
+        [
+          "business",
+          "pk_procurement_records",
+          "i"
+        ],
+        [
+          "business",
+          "pk_production_capacity",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quote_line_items",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quote_versions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_quotes",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfq_attachments",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfq_line_items",
+          "i"
+        ],
+        [
+          "business",
+          "pk_rfqs",
+          "i"
+        ],
+        [
+          "business",
+          "pk_role_permissions",
+          "i"
+        ],
+        [
+          "business",
+          "pk_roles",
+          "i"
+        ],
+        [
+          "business",
+          "pk_suppliers",
+          "i"
+        ],
+        [
+          "business",
+          "pk_users",
+          "i"
+        ],
+        [
+          "business",
+          "pk_workcentres",
+          "i"
+        ],
+        [
+          "business",
+          "pricing_calculations",
+          "r"
+        ],
+        [
+          "business",
+          "procurement_records",
+          "r"
+        ],
+        [
+          "business",
+          "production_capacity",
+          "r"
+        ],
+        [
+          "business",
+          "quote_line_items",
+          "r"
+        ],
+        [
+          "business",
+          "quote_versions",
+          "r"
+        ],
+        [
+          "business",
+          "quotes",
+          "r"
+        ],
+        [
+          "business",
+          "rfq_attachments",
+          "r"
+        ],
+        [
+          "business",
+          "rfq_line_items",
+          "r"
+        ],
+        [
+          "business",
+          "rfqs",
+          "r"
+        ],
+        [
+          "business",
+          "role_permissions",
+          "r"
+        ],
+        [
+          "business",
+          "roles",
+          "r"
+        ],
+        [
+          "business",
+          "suppliers",
+          "r"
+        ],
+        [
+          "business",
+          "uq_approval_requests_approval_request_id_quote_id_quote_version",
+          "i"
+        ],
+        [
+          "business",
+          "uq_approval_requests_pending",
+          "i"
+        ],
+        [
+          "business",
+          "uq_business_rule_versions_rule_kind_sha256",
+          "i"
+        ],
+        [
+          "business",
+          "uq_contacts_primary",
+          "i"
+        ],
+        [
+          "business",
+          "uq_data_snapshots_snapshot_kind_sha256",
+          "i"
+        ],
+        [
+          "business",
+          "uq_idempotency_records_actor_id_customer_id_operation_i_fd7c",
+          "i"
+        ],
+        [
+          "business",
+          "uq_operation_routing_part_type_sequence",
+          "i"
+        ],
+        [
+          "business",
+          "uq_production_capacity_workcentre_id_week_start",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_line_items_quote_id_quote_version_line_number",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_versions_current",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quote_versions_quote_id_version",
+          "i"
+        ],
+        [
+          "business",
+          "uq_quotes_rfq_id",
+          "i"
+        ],
+        [
+          "business",
+          "uq_rfq_line_items_rfq_id_line_number",
+          "i"
+        ],
+        [
+          "business",
+          "uq_rfq_line_items_rfq_id_part_id",
+          "i"
+        ],
+        [
+          "business",
+          "uq_users_authentication_subject",
+          "i"
+        ],
+        [
+          "business",
+          "uq_workcentres_workcentre_id_operation_id",
+          "i"
+        ],
+        [
+          "business",
+          "users",
+          "r"
+        ],
+        [
+          "business",
+          "workcentres",
+          "r"
+        ],
+        [
+          "orchestration",
+          "ix_workflow_runs_rfq_time",
+          "i"
+        ],
+        [
+          "orchestration",
+          "pk_workflow_runs",
+          "i"
+        ],
+        [
+          "orchestration",
+          "uq_workflow_runs_correlation_id",
+          "i"
+        ],
+        [
+          "orchestration",
+          "workflow_runs",
+          "r"
+        ],
+        [
+          "public",
+          "alembic_version",
+          "r"
+        ],
+        [
+          "public",
+          "alembic_version_pkc",
+          "i"
+        ]
+      ],
+      "schemas": [
+        [
+          "business",
+          "rfq_copilot_dev",
+          "rfq-copilot:20261108_01"
+        ],
+        [
+          "orchestration",
+          "rfq_copilot_dev",
+          "rfq-copilot:20261108_01"
+        ],
+        [
+          "public",
+          "pg_database_owner",
+          "standard public schema"
+        ]
+      ]
+    },
+    "test": {
+      "authentication_identity": "rfq_copilot_dev",
+      "authentication_method": "scram-sha-256",
+      "identity": {
+        "address": "127.0.0.1",
+        "database": "rfq_copilot_test",
+        "encoding": "UTF8",
+        "oid": 16390,
+        "owner": "rfq_copilot_dev",
+        "port": 5432,
+        "rolbypassrls": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolsuper": false,
+        "username": "rfq_copilot_dev",
+        "version": 180006
+      },
+      "read_only": "on",
+      "relations": [],
+      "schemas": [
+        [
+          "public",
+          "pg_database_owner",
+          "standard public schema"
+        ]
+      ]
+    }
+  },
+  "date": "2026-11-08",
+  "environment": {
+    "alembic": "1.20.1",
+    "asyncpg": "0.32.0",
+    "development": "rfq_copilot_dev",
+    "postgresql": "18.6",
+    "pytest": "9.2.0",
+    "python": "3.12.14",
+    "sqlalchemy": "2.1.8",
+    "test": "rfq_copilot_test",
+    "uv": "0.12.12"
+  },
+  "exit_codes": {
+    "baseline_markdown_format": 1,
+    "diff": 0,
+    "end_to_end": 0,
+    "full_tests": 0,
+    "integrity_after": 0,
+    "integrity_before": 0,
+    "json_green": 0,
+    "json_red": 1,
+    "lint": 0,
+    "live_safety_after": 0,
+    "live_safety_before": 0,
+    "lock": 0,
+    "optional_markdown_format": 1,
+    "python_format": 0,
+    "queries": 0
+  },
+  "files_created_or_modified": {
+    "docs/dev_log/day_05.md": "Append-only Component 8 and final Day 5 decision",
+    "docs/development/database_connection.md": "Clarify writable isolated fixtures versus protected development and milestone scope",
+    "docs/development/database_migrations.md": "Distinguish historical empty baseline/test lifecycle from preserved seeded development",
+    "docs/development/database_models.md": "Correct stale pre-migration status and point to current closure evidence",
+    "docs/development/database_queries.md": "Document the reusable session-scoped query verification path",
+    "docs/development/database_seeding.md": "Document type-aware JSON conflict policy",
+    "docs/development/day_05_final_verification_report.md": "Complete Day 5 report, requirements coverage matrix and tracked/untracked review",
+    "docs/development/day_05_final_verification_results.json": "Structured actual test, integration, security, state and Git evidence",
+    "src/rfq_copilot/integrity.py": "Reuse the same comparator without a duplicate private implementation",
+    "src/rfq_copilot/repositories/demo.py": "Extract caller-session query verifier for real lifecycle integration; preserve read-only CLI ownership",
+    "src/rfq_copilot/seeding/loader.py": "Reject stored JSON type conflicts instead of treating them as identical baseline rows",
+    "src/rfq_copilot/seeding/transform.py": "One shared type-aware JSON comparator; booleans differ from numeric zero/one",
+    "tests/test_database_end_to_end.py": "Add complete actual PostgreSQL migration/import/audit/replay/query/recovery/cleanup test",
+    "tests/test_database_seeding_integration.py": "Add reproduced JSON type-conflict regression; previous test content unchanged"
+  },
+  "final_decision": "DAY 5 COMPLETE",
+  "focused_end_to_end": {
+    "duration_seconds": 2.24,
+    "errors": 0,
+    "failed": 0,
+    "passed": 1,
+    "skipped": 0
+  },
+  "git_after": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? data/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_components_6_7_results.json\n?? docs/development/database_connection.md\n?? docs/development/database_integrity_verification.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? docs/development/database_queries.md\n?? docs/development/database_seeding.md\n?? docs/development/database_seeding_results.json\n?? docs/development/database_seeding_verification_report.md\n?? docs/development/day_05_final_verification_report.md\n?? docs/development/day_05_final_verification_results.json\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/integrity.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? src/rfq_copilot/repositories/\n?? src/rfq_copilot/seeding/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_end_to_end.py\n?? tests/test_database_integration.py\n?? tests/test_database_integrity.py\n?? tests/test_database_migrations.py\n?? tests/test_database_queries.py\n?? tests/test_database_seeding.py\n?? tests/test_database_seeding_integration.py\n?? tests/test_orm_models.py\n",
+  "git_before": " M pyproject.toml\n M uv.lock\n?? .env.example\n?? alembic.ini\n?? alembic/\n?? data/\n?? docs/data/\n?? docs/database/\n?? docs/dev_log/\n?? docs/development/database_components_6_7_results.json\n?? docs/development/database_connection.md\n?? docs/development/database_integrity_verification.md\n?? docs/development/database_migrations.md\n?? docs/development/database_models.md\n?? docs/development/database_queries.md\n?? docs/development/database_seeding.md\n?? docs/development/database_seeding_results.json\n?? docs/development/database_seeding_verification_report.md\n?? src/rfq_copilot/__init__.py\n?? src/rfq_copilot/config.py\n?? src/rfq_copilot/database.py\n?? src/rfq_copilot/integrity.py\n?? src/rfq_copilot/migration_safety.py\n?? src/rfq_copilot/models/\n?? src/rfq_copilot/repositories/\n?? src/rfq_copilot/seeding/\n?? tests/conftest.py\n?? tests/test_database_config.py\n?? tests/test_database_integration.py\n?? tests/test_database_integrity.py\n?? tests/test_database_migrations.py\n?? tests/test_database_queries.py\n?? tests/test_database_seeding.py\n?? tests/test_database_seeding_integration.py\n?? tests/test_orm_models.py\n",
+  "integrity_after": {
+    "alembic_revision": "20261108_01",
+    "check_data_checks": 207,
+    "database": "rfq_copilot_dev",
+    "decimal_values_checked": 1353,
+    "definitions": {
+      "additional_unique_constraints": 14,
+      "check_constraints": 207,
+      "columns": 261,
+      "explicit_indexes": 14,
+      "foreign_keys": 64,
+      "primary_keys": 33,
+      "tables": 33,
+      "unique_partial_indexes": 3
+    },
+    "duration_seconds": 0.4792,
+    "empty_runtime_tables": [
+      "business.approval_requests",
+      "business.audit_events",
+      "business.idempotency_records",
+      "business.pricing_calculations",
+      "business.rfq_attachments",
+      "business.rfq_line_items",
+      "orchestration.workflow_runs"
+    ],
+    "fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "foreign_key_data_checks": 64,
+    "populated_tables": 26,
+    "postgresql_version_num": 180006,
+    "preserved": true,
+    "records": 1089,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "source_values_checked": 9587,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "actual": 70,
+        "distinct_primary_keys": 70,
+        "expected": 70,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.approval_requests": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.audit_events": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.business_rule_versions": {
+        "actual": 9,
+        "distinct_primary_keys": 9,
+        "expected": 9,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.contacts": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.customers": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.data_snapshots": {
+        "actual": 2,
+        "distinct_primary_keys": 2,
+        "expected": 2,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finish_material_categories": {
+        "actual": 19,
+        "distinct_primary_keys": 19,
+        "expected": 19,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finishes": {
+        "actual": 7,
+        "distinct_primary_keys": 7,
+        "expected": 7,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.idempotency_records": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_finish_compatibility": {
+        "actual": 50,
+        "distinct_primary_keys": 50,
+        "expected": 50,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_inventory": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_supported_operations": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_thickness_options": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.materials": {
+        "actual": 15,
+        "distinct_primary_keys": 15,
+        "expected": 15,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operation_routing": {
+        "actual": 28,
+        "distinct_primary_keys": 28,
+        "expected": 28,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operations": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.permissions": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.pricing_calculations": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.procurement_records": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.production_capacity": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_line_items": {
+        "actual": 100,
+        "distinct_primary_keys": 100,
+        "expected": 100,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_versions": {
+        "actual": 96,
+        "distinct_primary_keys": 96,
+        "expected": 96,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quotes": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_attachments": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_line_items": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfqs": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.role_permissions": {
+        "actual": 27,
+        "distinct_primary_keys": 27,
+        "expected": 27,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.roles": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.suppliers": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.users": {
+        "actual": 24,
+        "distinct_primary_keys": 24,
+        "expected": 24,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.workcentres": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "orchestration.workflow_runs": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      }
+    },
+    "unique_data_checks": 17,
+    "violations": 0
+  },
+  "integrity_before": {
+    "alembic_revision": "20261108_01",
+    "check_data_checks": 207,
+    "database": "rfq_copilot_dev",
+    "decimal_values_checked": 1353,
+    "definitions": {
+      "additional_unique_constraints": 14,
+      "check_constraints": 207,
+      "columns": 261,
+      "explicit_indexes": 14,
+      "foreign_keys": 64,
+      "primary_keys": 33,
+      "tables": 33,
+      "unique_partial_indexes": 3
+    },
+    "duration_seconds": 0.5337,
+    "empty_runtime_tables": [
+      "business.approval_requests",
+      "business.audit_events",
+      "business.idempotency_records",
+      "business.pricing_calculations",
+      "business.rfq_attachments",
+      "business.rfq_line_items",
+      "orchestration.workflow_runs"
+    ],
+    "fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "foreign_key_data_checks": 64,
+    "populated_tables": 26,
+    "postgresql_version_num": 180006,
+    "preserved": true,
+    "records": 1089,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "source_values_checked": 9587,
+    "status": "PASS",
+    "tables": {
+      "business.approval_history": {
+        "actual": 70,
+        "distinct_primary_keys": 70,
+        "expected": 70,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.approval_requests": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.audit_events": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.business_rule_versions": {
+        "actual": 9,
+        "distinct_primary_keys": 9,
+        "expected": 9,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.contacts": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.customers": {
+        "actual": 40,
+        "distinct_primary_keys": 40,
+        "expected": 40,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.data_snapshots": {
+        "actual": 2,
+        "distinct_primary_keys": 2,
+        "expected": 2,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finish_material_categories": {
+        "actual": 19,
+        "distinct_primary_keys": 19,
+        "expected": 19,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.finishes": {
+        "actual": 7,
+        "distinct_primary_keys": 7,
+        "expected": 7,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.idempotency_records": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_finish_compatibility": {
+        "actual": 50,
+        "distinct_primary_keys": 50,
+        "expected": 50,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_inventory": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_supported_operations": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.material_thickness_options": {
+        "actual": 90,
+        "distinct_primary_keys": 90,
+        "expected": 90,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.materials": {
+        "actual": 15,
+        "distinct_primary_keys": 15,
+        "expected": 15,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operation_routing": {
+        "actual": 28,
+        "distinct_primary_keys": 28,
+        "expected": 28,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.operations": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.permissions": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.pricing_calculations": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.procurement_records": {
+        "actual": 12,
+        "distinct_primary_keys": 12,
+        "expected": 12,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.production_capacity": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_line_items": {
+        "actual": 100,
+        "distinct_primary_keys": 100,
+        "expected": 100,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quote_versions": {
+        "actual": 96,
+        "distinct_primary_keys": 96,
+        "expected": 96,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.quotes": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_attachments": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfq_line_items": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.rfqs": {
+        "actual": 80,
+        "distinct_primary_keys": 80,
+        "expected": 80,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.role_permissions": {
+        "actual": 27,
+        "distinct_primary_keys": 27,
+        "expected": 27,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.roles": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.suppliers": {
+        "actual": 6,
+        "distinct_primary_keys": 6,
+        "expected": 6,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.users": {
+        "actual": 24,
+        "distinct_primary_keys": 24,
+        "expected": 24,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "business.workcentres": {
+        "actual": 8,
+        "distinct_primary_keys": 8,
+        "expected": 8,
+        "null_violations": 0,
+        "status": "PASS"
+      },
+      "orchestration.workflow_runs": {
+        "actual": 0,
+        "distinct_primary_keys": 0,
+        "expected": 0,
+        "null_violations": 0,
+        "status": "PASS"
+      }
+    },
+    "unique_data_checks": 17,
+    "violations": 0
+  },
+  "json_regression": {
+    "green_duration_seconds": 2.06,
+    "green_passed": 2,
+    "red_duration_seconds": 1.36,
+    "red_failed": 1,
+    "reproduced_before_fix": true
+  },
+  "limitations": [
+    "Local database-layer completion only; production application authorization/services/agents and deployment remain later work.",
+    "Historical price/policy/clearance snapshots remain intentionally incomplete.",
+    "Frozen MFG-001 validator remains unchanged; importer enforces its scalar limit independently.",
+    "Three preexisting Markdown code-snippet formatting styles remain unchanged.",
+    "Commit acknowledgement ambiguity requires verification before retry; filesystem snapshots and PostgreSQL are separate resource boundaries."
+  ],
+  "new_test_nodes": [
+    [
+      "test_database_end_to_end",
+      "test_complete_day5_database_lifecycle"
+    ],
+    [
+      "test_database_seeding_integration",
+      "test_json_type_conflict_is_rejected_without_overwrite"
+    ]
+  ],
+  "preservation": {
+    "all_33_fingerprints_match": true,
+    "connection_config_unchanged": true,
+    "credential_matches": 0,
+    "credential_scan_files": 86,
+    "dataset_path_bytes_unchanged": true,
+    "day4_documents_unchanged": true,
+    "dependency_files_unchanged": true,
+    "development_mutations": false,
+    "development_records_after": 1089,
+    "development_records_before": 1089,
+    "development_reseeded": false,
+    "env_ignored": true,
+    "env_mode": "0600",
+    "fingerprint_after": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+    "fingerprint_before": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+    "git_head_unchanged": true,
+    "git_index_unchanged": true,
+    "installed_versions_preserved": 26,
+    "modified_original_files": [
+      "docs/dev_log/day_05.md",
+      "docs/development/database_connection.md",
+      "docs/development/database_migrations.md",
+      "docs/development/database_models.md",
+      "docs/development/database_queries.md",
+      "docs/development/database_seeding.md",
+      "src/rfq_copilot/integrity.py",
+      "src/rfq_copilot/repositories/demo.py",
+      "src/rfq_copilot/seeding/loader.py",
+      "src/rfq_copilot/seeding/transform.py",
+      "tests/test_database_seeding_integration.py"
+    ],
+    "new_migrations": false,
+    "new_versionable_files": [
+      "docs/development/day_05_final_verification_report.md",
+      "docs/development/day_05_final_verification_results.json",
+      "tests/test_database_end_to_end.py"
+    ],
+    "original_files_preserved": 750,
+    "orm_and_alembic_unchanged": true,
+    "previous_593_test_nodes_preserved": true,
+    "previous_seeding_test_body_unchanged": true,
+    "prior_log_prefix_preserved": true,
+    "seven_runtime_tables_empty": true,
+    "source_integrity": {
+      "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+      "business_csv_files": 17,
+      "dataset_files": 681,
+      "dataset_version": "1.1.0",
+      "excluded": [
+        "evaluation/**",
+        "rfq_scenarios/**",
+        "attachments/**"
+      ],
+      "mapped_files": 28,
+      "protected_hashes": 637
+    },
+    "test_catalog_restored": true
+  },
+  "quality": {
+    "dependency_lock": "PASS",
+    "documentation_local_links_checked": 45,
+    "git_diff_check": "PASS",
+    "imports_config_ast": "PASS",
+    "new_untracked_whitespace": "PASS",
+    "optional_markdown_formatting": {
+      "baseline_reconstructed_hashes_match": true,
+      "files": [
+        "docs/data/data_integrity_report.md",
+        "docs/development/database_connection.md",
+        "docs/development/database_queries.md"
+      ],
+      "status": "preexisting_nonblocking_findings"
+    },
+    "python_formatting": "PASS (40 files)",
+    "repository_commit_calls": 0,
+    "ruff": "PASS",
+    "single_foundation": {
+      "DeclarativeBase": 1,
+      "async_sessionmaker": 1,
+      "create_all": 0,
+      "create_async_engine": 1
+    }
+  },
+  "queries": {
+    "after_fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "alembic_revision": "20261108_01",
+    "before_fingerprint": {
+      "sha256": "05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee",
+      "tables": {
+        "business.approval_history": {
+          "rows": 70,
+          "sha256": "b677787abe18f06ce04189d75e6c6ee6c403c83b25bff7c8f86d5b575c27114d"
+        },
+        "business.approval_requests": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.audit_events": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.business_rule_versions": {
+          "rows": 9,
+          "sha256": "7a1f826ac65958bd7b4016375d48f39513c0422ffbcdf36020b7cc97d0ec586b"
+        },
+        "business.contacts": {
+          "rows": 40,
+          "sha256": "d96ed206ce84680e293218efd0822b05142780f698b5da4340a231d55e2a8e62"
+        },
+        "business.customers": {
+          "rows": 40,
+          "sha256": "0186b6b2f6ab0d470fc6e03156c124df54b8fcc5d1b9e85dc51736d0572422da"
+        },
+        "business.data_snapshots": {
+          "rows": 2,
+          "sha256": "44e3e21ffd24994c45820ec9577e80271be2cbc1eaa3e4754ccd9c2302ea2704"
+        },
+        "business.finish_material_categories": {
+          "rows": 19,
+          "sha256": "a699bc4310a3ae0ae74961dc530b3488e5006a1493707df939b6ce888d77d3cf"
+        },
+        "business.finishes": {
+          "rows": 7,
+          "sha256": "f756ddcc12d14e8035b7315d24b8fe3c86c28834517d00aebf156a6961bf9b9c"
+        },
+        "business.idempotency_records": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.material_finish_compatibility": {
+          "rows": 50,
+          "sha256": "e72b009ccc8e0f9794fe8a123ed5d53659e6c3bdca90e598024e44906e611c94"
+        },
+        "business.material_inventory": {
+          "rows": 90,
+          "sha256": "300ab584bb3ed749a08dd22b2738d13f54d376b48edc6873f0b7dd37e82e8f50"
+        },
+        "business.material_supported_operations": {
+          "rows": 90,
+          "sha256": "ba7e4fdf288680c60e08582ace661d1f3ff3abb191a539fdd5bc1f8090c6ab3d"
+        },
+        "business.material_thickness_options": {
+          "rows": 90,
+          "sha256": "ba6b579e4f1a99d193adeda99038057bcd0e821153e937aaf6114e42eff2b177"
+        },
+        "business.materials": {
+          "rows": 15,
+          "sha256": "5c02743990f769e7a9fab5947e335fe77523154f8683bb4da9a3fd61d3216353"
+        },
+        "business.operation_routing": {
+          "rows": 28,
+          "sha256": "01979cd7ebc0709a88bd976b65c620d040d25c3ec1210c37acb826bcb774ea8a"
+        },
+        "business.operations": {
+          "rows": 8,
+          "sha256": "1089a75019f318dee0dc9aa7cec8a90f5001ccdcd561d289448fba77c561c2f3"
+        },
+        "business.permissions": {
+          "rows": 12,
+          "sha256": "07af4e53857610698ffcf9566d67574a3c68b88aa2e4510db29f7f1ea59f2c3d"
+        },
+        "business.pricing_calculations": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.procurement_records": {
+          "rows": 12,
+          "sha256": "8120df771a2e2328518e06f45ab42a5ef83de00efb2778c177eda55899ef2b18"
+        },
+        "business.production_capacity": {
+          "rows": 80,
+          "sha256": "2b9c014404027cc406be82d5d40fe1a0e995c8924d803ef9939a3857cab475fd"
+        },
+        "business.quote_line_items": {
+          "rows": 100,
+          "sha256": "52ada2580dc50fa851ce02a61fc3063fe9c1a6cc0f8ebb5805629d352cd4676c"
+        },
+        "business.quote_versions": {
+          "rows": 96,
+          "sha256": "2a70fd8d6958a2c84423a6bfd58c11bdc4081a57316f17727ae856c1ce27f3bc"
+        },
+        "business.quotes": {
+          "rows": 80,
+          "sha256": "f5b902d91fe049ad7747f9c9c79ba61f35a1377751c510ef3cef29289e3afe09"
+        },
+        "business.rfq_attachments": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfq_line_items": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "business.rfqs": {
+          "rows": 80,
+          "sha256": "ab22aa90d099979796a850073265791cc4a35cb69fcd3f5865b0103358b0e0b6"
+        },
+        "business.role_permissions": {
+          "rows": 27,
+          "sha256": "adf8efeb019631cda0611ad946e2c04ae5ddf0664fc2595e2d649353990ec182"
+        },
+        "business.roles": {
+          "rows": 6,
+          "sha256": "ca36bba4d32f63c35eb4df365cd0c336d233ed6bca6bf9bddb080ffc4b4f8082"
+        },
+        "business.suppliers": {
+          "rows": 6,
+          "sha256": "a7304b0c440182fe21361c9bea963503a87e1d51d3585c9057ddf5d87d97117c"
+        },
+        "business.users": {
+          "rows": 24,
+          "sha256": "c234a0a3f843c85ce9314a7f28e0a4ec7a5677136bd5ade8d2c0bd71087a522c"
+        },
+        "business.workcentres": {
+          "rows": 8,
+          "sha256": "ee02be4536e689dbd8add5ceaa02799aa482d9a94d95f1d6bdeac5dab1585bd7"
+        },
+        "orchestration.workflow_runs": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      }
+    },
+    "database": "rfq_copilot_dev",
+    "examples": {
+      "customer": {
+        "duration_ms": 1.494,
+        "input": {
+          "customer_id": "CUST-001"
+        },
+        "result": {
+          "contacts": 1,
+          "customer_id": "CUST-001"
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "manufacturing_capabilities": {
+        "duration_ms": 3.531,
+        "input": {
+          "material_id": "MAT-001",
+          "part_type": "flat_panel"
+        },
+        "result": {
+          "finishes": 5,
+          "operations": 6,
+          "routing_rows": 4,
+          "thickness_options": 6,
+          "workcentres": 6
+        },
+        "selects": 6,
+        "status": "PASS"
+      },
+      "material_availability": {
+        "duration_ms": 1.595,
+        "input": {
+          "availability": "all",
+          "material_id": "MAT-001"
+        },
+        "result": {
+          "available_kg": "385.300000",
+          "inventory_rows": 6
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "pending_approvals": {
+        "duration_ms": 0.9,
+        "input": {
+          "customer_id": "CUST-001",
+          "required_role": "sales_manager"
+        },
+        "result": {
+          "pending_requests": 0
+        },
+        "selects": 1,
+        "status": "PASS"
+      },
+      "quotation_history": {
+        "duration_ms": 3.227,
+        "input": {
+          "customer_id": "CUST-001",
+          "rfq_id": "HRFQ-0001"
+        },
+        "result": {
+          "line_items": 2,
+          "metadata_only_versions": 1,
+          "quotations": 1,
+          "versions": 2
+        },
+        "selects": 3,
+        "status": "PASS"
+      },
+      "rfq": {
+        "duration_ms": 1.986,
+        "input": {
+          "customer_id": "CUST-001",
+          "rfq_id": "HRFQ-0001"
+        },
+        "result": {
+          "historical_part_ids": 2,
+          "rfq_id": "HRFQ-0001",
+          "runtime_lines": 0
+        },
+        "selects": 2,
+        "status": "PASS"
+      },
+      "workcentre_capacity": {
+        "duration_ms": 1.279,
+        "input": {
+          "week_end": "2026-11-09",
+          "week_start": "2026-11-09",
+          "workcentre_id": "WC-BND"
+        },
+        "result": {
+          "remaining_hours": "15.0000",
+          "weeks": 1
+        },
+        "selects": 2,
+        "status": "PASS"
+      }
+    },
+    "missing_identifiers": {
+      "customer": true,
+      "manufacturing_capabilities": true,
+      "material_availability": true,
+      "pending_approvals": true,
+      "quotation_history": true,
+      "rfq": true,
+      "workcentre_capacity": true
+    },
+    "postgresql_version_num": 180006,
+    "read_only": true,
+    "role": "rfq_copilot_dev",
+    "schema_tables": 33,
+    "status": "PASS"
+  },
+  "tests": {
+    "end_to_end": {
+      "already_existing": 1089,
+      "constraint_rejections": 5,
+      "failure_fingerprint_preserved": true,
+      "first_inserted": 1089,
+      "outer_transaction_rolled_back": true,
+      "physical_tables": 33,
+      "query_operations": 7,
+      "query_results": {
+        "customer": {
+          "duration_ms": 1.434,
+          "input": {
+            "customer_id": "CUST-001"
+          },
+          "result": {
+            "contacts": 1,
+            "customer_id": "CUST-001"
+          },
+          "selects": 2,
+          "status": "PASS"
+        },
+        "manufacturing_capabilities": {
+          "duration_ms": 3.419,
+          "input": {
+            "material_id": "MAT-001",
+            "part_type": "flat_panel"
+          },
+          "result": {
+            "finishes": 5,
+            "operations": 6,
+            "routing_rows": 4,
+            "thickness_options": 6,
+            "workcentres": 6
+          },
+          "selects": 6,
+          "status": "PASS"
+        },
+        "material_availability": {
+          "duration_ms": 1.158,
+          "input": {
+            "availability": "all",
+            "material_id": "MAT-001"
+          },
+          "result": {
+            "available_kg": "385.300000",
+            "inventory_rows": 6
+          },
+          "selects": 2,
+          "status": "PASS"
+        },
+        "pending_approvals": {
+          "duration_ms": 1.172,
+          "input": {
+            "customer_id": "CUST-001",
+            "required_role": "sales_manager"
+          },
+          "result": {
+            "pending_requests": 0
+          },
+          "selects": 1,
+          "status": "PASS"
+        },
+        "quotation_history": {
+          "duration_ms": 2.842,
+          "input": {
+            "customer_id": "CUST-001",
+            "rfq_id": "HRFQ-0001"
+          },
+          "result": {
+            "line_items": 2,
+            "metadata_only_versions": 1,
+            "quotations": 1,
+            "versions": 2
+          },
+          "selects": 3,
+          "status": "PASS"
+        },
+        "rfq": {
+          "duration_ms": 24.321,
+          "input": {
+            "customer_id": "CUST-001",
+            "rfq_id": "HRFQ-0001"
+          },
+          "result": {
+            "historical_part_ids": 2,
+            "rfq_id": "HRFQ-0001",
+            "runtime_lines": 0
+          },
+          "selects": 2,
+          "status": "PASS"
+        },
+        "workcentre_capacity": {
+          "duration_ms": 1.191,
+          "input": {
+            "week_end": "2026-11-09",
+            "week_start": "2026-11-09",
+            "workcentre_id": "WC-BND"
+          },
+          "result": {
+            "remaining_hours": "15.0000",
+            "weeks": 1
+          },
+          "selects": 2,
+          "status": "PASS"
+        }
+      },
+      "remaining_test_rows": 0,
+      "revision": [
+        "20261108_01"
+      ],
+      "second_inserted": 0,
+      "session_released": true,
+      "source_integrity": {
+        "archive_sha256": "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080",
+        "business_csv_files": 17,
+        "dataset_files": 681,
+        "dataset_version": "1.1.0",
+        "excluded": [
+          "evaluation/**",
+          "rfq_scenarios/**",
+          "attachments/**"
+        ],
+        "mapped_files": 28,
+        "protected_hashes": 637
+      },
+      "target": "rfq_copilot_test",
+      "verified_values": 9587
+    },
+    "groups": {
+      "connections": {
+        "case_time_seconds": 5.098,
+        "errors": 0,
+        "failed": 0,
+        "passed": 33,
+        "skipped": 0
+      },
+      "end_to_end": {
+        "case_time_seconds": 1.944,
+        "errors": 0,
+        "failed": 0,
+        "passed": 1,
+        "skipped": 0
+      },
+      "integrity": {
+        "case_time_seconds": 28.50500000000001,
+        "errors": 0,
+        "failed": 0,
+        "passed": 80,
+        "skipped": 0
+      },
+      "migrations": {
+        "case_time_seconds": 1.1260000000000001,
+        "errors": 0,
+        "failed": 0,
+        "passed": 71,
+        "skipped": 0
+      },
+      "orm": {
+        "case_time_seconds": 0.247,
+        "errors": 0,
+        "failed": 0,
+        "passed": 241,
+        "skipped": 0
+      },
+      "queries": {
+        "case_time_seconds": 8.001,
+        "errors": 0,
+        "failed": 0,
+        "passed": 45,
+        "skipped": 0
+      },
+      "seeding": {
+        "case_time_seconds": 12.390000000000002,
+        "errors": 0,
+        "failed": 0,
+        "passed": 124,
+        "skipped": 0
+      }
+    },
+    "pytest_duration_seconds": 57.62,
+    "reported_warnings": 0,
+    "total": {
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "595",
+      "time": "57.610"
+    }
+  },
+  "timezone": "America/New_York",
+  "versionable_inventory": [
+    ".env.example",
+    "alembic.ini",
+    "alembic/README",
+    "alembic/env.py",
+    "alembic/script.py.mako",
+    "alembic/versions/20261108_01_initial_rfq_database_schema.py",
+    "data/rfq_seed_snapshots/.gitignore",
+    "docs/data/data_integrity_report.md",
+    "docs/data/dataset_inventory.md",
+    "docs/data/dataset_schema_analysis.md",
+    "docs/data/multiagent_data_mapping.md",
+    "docs/database/database_architecture.md",
+    "docs/database/dataset_to_database_mapping.md",
+    "docs/database/er_diagram.md",
+    "docs/database/relationships_and_constraints.md",
+    "docs/database/table_schemas.md",
+    "docs/dev_log/day_03.md",
+    "docs/dev_log/day_04.md",
+    "docs/dev_log/day_05.md",
+    "docs/development/database_components_6_7_results.json",
+    "docs/development/database_connection.md",
+    "docs/development/database_integrity_verification.md",
+    "docs/development/database_migrations.md",
+    "docs/development/database_models.md",
+    "docs/development/database_queries.md",
+    "docs/development/database_seeding.md",
+    "docs/development/database_seeding_results.json",
+    "docs/development/database_seeding_verification_report.md",
+    "docs/development/day_05_final_verification_report.md",
+    "docs/development/day_05_final_verification_results.json",
+    "src/rfq_copilot/__init__.py",
+    "src/rfq_copilot/config.py",
+    "src/rfq_copilot/database.py",
+    "src/rfq_copilot/integrity.py",
+    "src/rfq_copilot/migration_safety.py",
+    "src/rfq_copilot/models/__init__.py",
+    "src/rfq_copilot/models/approvals.py",
+    "src/rfq_copilot/models/base.py",
+    "src/rfq_copilot/models/customers.py",
+    "src/rfq_copilot/models/identity.py",
+    "src/rfq_copilot/models/manufacturing.py",
+    "src/rfq_copilot/models/quotations.py",
+    "src/rfq_copilot/models/reliability.py",
+    "src/rfq_copilot/models/rfqs.py",
+    "src/rfq_copilot/models/rules.py",
+    "src/rfq_copilot/models/supply.py",
+    "src/rfq_copilot/repositories/__init__.py",
+    "src/rfq_copilot/repositories/demo.py",
+    "src/rfq_copilot/repositories/queries.py",
+    "src/rfq_copilot/repositories/results.py",
+    "src/rfq_copilot/seeding/__init__.py",
+    "src/rfq_copilot/seeding/cli.py",
+    "src/rfq_copilot/seeding/loader.py",
+    "src/rfq_copilot/seeding/mapping.py",
+    "src/rfq_copilot/seeding/safety.py",
+    "src/rfq_copilot/seeding/sources.py",
+    "src/rfq_copilot/seeding/transform.py",
+    "src/rfq_copilot/seeding/validation.py",
+    "tests/conftest.py",
+    "tests/test_database_config.py",
+    "tests/test_database_end_to_end.py",
+    "tests/test_database_integration.py",
+    "tests/test_database_integrity.py",
+    "tests/test_database_migrations.py",
+    "tests/test_database_queries.py",
+    "tests/test_database_seeding.py",
+    "tests/test_database_seeding_integration.py",
+    "tests/test_orm_models.py",
+    ".editorconfig",
+    ".gitignore",
+    ".python-version",
+    "README.md",
+    "docs/architecture/agent_responsibilities.md",
+    "docs/architecture/business_workflow.md",
+    "docs/architecture/supervisor_langgraph_architecture.md",
+    "docs/development/.gitkeep",
+    "docs/development/dataset_archive.sha256",
+    "pyproject.toml",
+    "src/rfq_copilot/.gitkeep",
+    "tests/.gitkeep",
+    "uv.lock"
+  ]
+}
