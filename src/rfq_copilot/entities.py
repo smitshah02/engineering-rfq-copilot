@@ -54,6 +54,13 @@ class Part:
         """Build from the calculate_quote Part contract shape; floats and unknown keys fail."""
         if not isinstance(data, Mapping):
             raise ValueError("part: expected a mapping.")
+        if "requested_operations" in data:
+            # TD-001: not in the calculate_quote contract. Refuse instead of dropping it, so
+            # an explicit customer request never disappears from the quotation input.
+            raise ValueError(
+                "part.requested_operations is not supported by the quotation contract "
+                "(TD-001); route the request to human review."
+            )
         unknown = set(data) - {f.name for f in fields(cls)}
         if unknown:
             raise ValueError(f"part: unknown fields {sorted(unknown)}.")

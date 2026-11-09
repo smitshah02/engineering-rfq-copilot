@@ -2,13 +2,14 @@
 
 Formulas follow the dataset's reference: blank area by part type, net mass from
 thickness and catalog density, a scrap allowance from the pinned pricing rule, summed
-per (material, thickness). Free stock is the stored quantity_kg - reserved_kg. Nothing
+per (material, thickness). Free stock is the stored quantity_kg - reserved_kg of ONE
+selected inventory snapshot; rows of other snapshots are never read or summed. Nothing
 is reserved, deducted or ordered; procurement facts are passed on for lead-time estimation.
 """
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Context, Decimal, DivisionByZero, Inexact, InvalidOperation, localcontext
+from decimal import Decimal, localcontext
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,13 +18,19 @@ from rfq_copilot.entities import Part
 from rfq_copilot.repositories import (
     MaterialAvailability,
     RuleVersionDetails,
+    SnapshotDetails,
+    SnapshotMismatchError,
     get_material_availability,
+    get_snapshot,
 )
 from rfq_copilot.seeding.transform import decimal_value
-from rfq_copilot.services.manufacturing import ManufacturingCheck, check_manufacturing_capability
+from rfq_copilot.services.manufacturing import (
+    EXACT,
+    ManufacturingCheck,
+    check_manufacturing_capability,
+)
+from rfq_copilot.services.materials import Reads
 
-# Exact arithmetic: any result that would need rounding raises instead of drifting.
-EXACT = Context(prec=60, traps=[Inexact, InvalidOperation, DivisionByZero])
 MM2_PER_M2 = Decimal(1_000_000)
 MM_PER_M = Decimal(1000)
 
@@ -72,6 +79,7 @@ class InventoryCheck:
     scrap_fraction: Decimal
     pricing_rule_version: str
     pricing_rule_fingerprint: str
+    snapshot_id: str | None = None  # the selected inventory snapshot (None: not stated)
 
 
 def scrap_fraction(pricing: RuleVersionDetails) -> Decimal:
@@ -128,8 +136,14 @@ def evaluate_inventory(
     manufacturing: Sequence[ManufacturingCheck],
     stock: Mapping[StockKey, MaterialAvailability],
     pricing: RuleVersionDetails,
+    *,
+    snapshot_id: str | None = None,
 ) -> InventoryCheck:
-    """Pure decision. stock holds the availability read for every (material, thickness)."""
+    """Pure decision. stock holds the availability read for every (material, thickness).
+
+    All stock rows must come from one snapshot (snapshot_id when given); rows of two
+    snapshots would double count, so they raise SnapshotMismatchError.
+    """
     scrap = scrap_fraction(pricing)
     if not parts or len(parts) != len(manufacturing):
         raise ValueError("Each part needs exactly one manufacturing check.")
@@ -143,7 +157,12 @@ def evaluate_inventory(
             scrap,
             pricing.rule_version,
             pricing.fingerprint,
+            snapshot_id,
         )
+
+    seen = {row.snapshot_id for a in stock.values() for row in a.inventory}
+    if len(seen) > 1 or (snapshot_id is not None and seen - {snapshot_id}):
+        raise SnapshotMismatchError("Stock rows come from more than the selected snapshot.")
 
     results = {m.result for m in manufacturing}
     if "needs_clarification" in results:
@@ -204,24 +223,50 @@ async def check_inventory(
     *,
     manufacturing_rules: RuleVersionDetails,
     pricing_rules: RuleVersionDetails,
+    snapshot: SnapshotDetails | None = None,
+    reads: Reads | None = None,
 ) -> InventoryCheck:
-    """Validate each part for manufacturing, then read free stock per (material, thickness)."""
+    """Validate each part for manufacturing, then read free stock per (material, thickness)
+    from one inventory snapshot: the given one, or the only registered one."""
     scrap_fraction(pricing_rules)
     parts = tuple(parts)
     if not parts or not all(isinstance(part, Part) for part in parts):
         raise ValueError("Inventory checks require one or more Parts.")
+    if snapshot is not None and (
+        not isinstance(snapshot, SnapshotDetails) or snapshot.snapshot_kind != "inventory"
+    ):
+        raise ValueError("Inventory checks require an inventory snapshot.")
+    reads = {} if reads is None else reads  # catalog facts are read once per calculation
     manufacturing = tuple(
-        [await check_manufacturing_capability(session, p, manufacturing_rules) for p in parts]
+        [
+            await check_manufacturing_capability(session, p, manufacturing_rules, reads=reads)
+            for p in parts
+        ]
     )
     stock: dict[StockKey, MaterialAvailability] = {}
     if all(m.result == "valid" for m in manufacturing):
+        if snapshot is None:
+            snapshot = await get_snapshot(session, "inventory")
         for part in parts:
             key = (part.material_id, part.thickness_mm)
             if key not in stock:
                 availability = await get_material_availability(
-                    session, part.material_id, thickness_mm=part.thickness_mm
+                    session,
+                    part.material_id,
+                    thickness_mm=part.thickness_mm,
+                    snapshot_id=snapshot.snapshot_id,
                 )
                 if availability is None:
                     raise ValueError(f"Material {part.material_id} disappeared during the check.")
+                if any(r.snapshot_date != snapshot.as_of_date for r in availability.inventory):
+                    raise SnapshotMismatchError(
+                        f"Stock rows of {snapshot.snapshot_id} contradict its as-of date."
+                    )
                 stock[key] = availability
-    return evaluate_inventory(parts, manufacturing, stock, pricing_rules)
+    return evaluate_inventory(
+        parts,
+        manufacturing,
+        stock,
+        pricing_rules,
+        snapshot_id=None if snapshot is None else snapshot.snapshot_id,
+    )

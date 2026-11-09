@@ -179,7 +179,7 @@ async def test_reads_only_bounded_reproducible_with_provenance(populated, seed_d
     with statements(seed_database) as captured:
         first = await check_capacity(populated, parts, inventory, **rule_set, horizon_start=MONDAY)
     # 1 routing read + (workcentre + weeks) for each of laser, bend, inspect, pack.
-    assert len(captured) == 9
+    assert len(captured) == 10  # includes the capacity snapshot selection
     assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
     again = await check_capacity(populated, parts, inventory, **rule_set, horizon_start=MONDAY)
     assert again == first and first.result == "feasible"

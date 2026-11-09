@@ -6,9 +6,10 @@ Only material-dependent findings are produced here. Envelope limits, tolerances,
 bends, holes and operations belong to the manufacturing validator.
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,18 @@ from rfq_copilot.repositories import RuleVersionDetails, get_manufacturing_capab
 MATERIAL_FIELDS = ("material_id", "thickness_mm", "finish_id")
 
 CheckResult = Literal["valid", "unsupported", "needs_clarification"]
+# Request-scoped memo of immutable catalog reads (material specs, finishes, routing),
+# created by one calculation and dropped with it; never module-level, so it cannot go stale.
+Reads = dict[tuple[str, str], Any]
+
+
+async def memo(reads: Reads | None, key: tuple[str, str], load: Callable[[], Awaitable[Any]]):
+    """load() once per key within one calculation; always load() when reads is None."""
+    if reads is None:
+        return await load()
+    if key not in reads:
+        reads[key] = await load()
+    return reads[key]
 
 
 @dataclass(frozen=True)
@@ -113,19 +126,28 @@ def evaluate_material(
 
 
 async def check_part_material(
-    session: AsyncSession, part: Part, rules: RuleVersionDetails
+    session: AsyncSession, part: Part, rules: RuleVersionDetails, *, reads: Reads | None = None
 ) -> MaterialCheck:
     """Load the catalog facts the part names, then decide with evaluate_material."""
     require_manufacturing_rules(rules)
     if not isinstance(part, Part):
         raise ValueError("Material checks require a Part.")
-    spec = None if part.material_id is None else await get_material_spec(session, part.material_id)
+    spec = None
+    if part.material_id is not None:
+        spec = await memo(
+            reads,
+            ("material_spec", part.material_id),
+            lambda: get_material_spec(session, part.material_id),
+        )
     finish_exists = spec is not None and part.finish_id in spec.compatible_finishes
     if part.finish_id is not None and not finish_exists:
         # A compatible finish exists by foreign key; only otherwise ask the finish catalog.
-        with session.no_autoflush:
-            found = await session.scalar(
-                select(Finish.finish_id).where(Finish.finish_id == part.finish_id)
-            )
-        finish_exists = found is not None
+
+        async def load():
+            with session.no_autoflush:
+                return await session.scalar(
+                    select(Finish.finish_id).where(Finish.finish_id == part.finish_id)
+                )
+
+        finish_exists = await memo(reads, ("finish", part.finish_id), load) is not None
     return evaluate_material(part, rules, spec, finish_exists=finish_exists)

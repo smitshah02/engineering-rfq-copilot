@@ -152,3 +152,17 @@ Issues resolved during implementation:
 - A supplemental `ruff format --check .` also inspected Markdown examples and flagged existing quote styles in `docs/data/data_integrity_report.md` and `docs/development/database_connection.md`. Those earlier-component documents were preserved byte-for-byte. The existing Python formatting scope (`src tests`), expanded to `alembic`, passes; root-wide lint also passes.
 
 Final preservation checks matched all 681 frozen dataset files, all 637 protected asset checksums and the archive SHA-256. The five Day 4 documents, all ORM files and Component 2 code/tests/configuration are byte-identical. Development was upgraded only and retains its original database OID/owner; no pre-existing data existed, and no rows were imported. Test is again public-only with zero relations and no version tracker. Secrets remain private/ignored. No Git staging, resetting, cleaning, commit, push or Component 5 work occurred. See the appended [Day 05 log](../dev_log/day_05.md) for command results and Git status snapshots.
+
+## Revision 20261109_01: capacity key per snapshot (approved TD-005, 2026-11-09)
+
+`production_capacity` now has `UNIQUE (workcentre_id, week_start, snapshot_id)`, which replaces `(workcentre_id, week_start)`. Several capacity snapshots can therefore hold the same week. No data changes. `seeding/safety.py` pins `REVISION = "20261109_01"` and the measured shape digest `6cc43f0e...`.
+
+The Day 4 schema documents are unchanged. The tests apply this single approved delta to them, and assert the original key first.
+
+The downgrade back to `20261108_01` restores the old key. PostgreSQL refuses it while overlapping snapshots exist; nothing is deleted.
+
+Development was upgraded with:
+
+```
+.venv/bin/python -m alembic -x target=development -x env_file=.env upgrade head
+```

@@ -1,0 +1,50 @@
+{
+  "admin_does_not_bypass_approval": true,
+  "agent_forbidden_actions": [
+    "approve_quote",
+    "release_quote",
+    "override_prices",
+    "change_customer_status"
+  ],
+  "all_writes_require_authenticated_actor": true,
+  "blocked_customer_statuses": [
+    "on_hold",
+    "inactive"
+  ],
+  "change_reference": "TD-004, approved 2026-11-09",
+  "commercial_review_customer_statuses": [
+    "pending_verification",
+    "credit_restricted"
+  ],
+  "currency": "USD",
+  "draft_creation_policy": "Complete supported specifications and feasible stated delivery schedule; review remains separate",
+  "engineering_review_conditions": [
+    "unsupported_or_unknown_geometry",
+    "borderline_bend_radius",
+    "unresolved_spec_conflict"
+  ],
+  "engineering_review_thresholds": {
+    "borderline_bend_radius": {
+      "definition": "A bent line is borderline when minimum <= stated bend radius < 1.25 x minimum, where minimum = max(rule min_bend_radius_factor, material min_bend_radius_factor) x thickness. An unstated bend radius is not borderline.",
+      "radius_below_minimum_ratio": "1.25"
+    }
+  },
+  "human_release_approval_required": true,
+  "manager_review_policy": {
+    "also_required_for": [
+      "credit_limit_breach",
+      "customer_not_active"
+    ],
+    "quote_total_at_or_above_usd": "7500.00"
+  },
+  "manager_review_threshold_usd": "7500.00",
+  "quote_release_requires": [
+    "current_version_approved",
+    "customer_active",
+    "commercial_clearance",
+    "different_approver_than_creator"
+  ],
+  "release_policy": "Human-only action, approved current quote version, no self approval, customer active, commercial clearance",
+  "supersedes": "approval-v1.1",
+  "version": "approval-v1.2"
+}

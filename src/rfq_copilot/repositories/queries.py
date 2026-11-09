@@ -1,6 +1,5 @@
 """Bound, scoped async reads. Authentication/authorization remains a service duty."""
 
-import hashlib
 import json
 import re
 from collections.abc import Sequence
@@ -13,12 +12,14 @@ from sqlalchemy import Text, cast, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, raiseload, selectinload
 
+from rfq_copilot.canonical import fingerprint
 from rfq_copilot.entities import Part
 from rfq_copilot.models import (
     RFQ,
     ApprovalRequest,
     BusinessRuleVersion,
     Customer,
+    DataSnapshot,
     Material,
     MaterialFinishCompatibility,
     MaterialInventory,
@@ -39,8 +40,10 @@ from rfq_copilot.repositories.results import (
     QuoteVersionDetails,
     RFQDetails,
     RuleVersionDetails,
+    SnapshotDetails,
     WorkcentreCapacity,
 )
+from rfq_copilot.repositories.rule_manifest import TRUSTED_RULES
 from rfq_copilot.seeding.transform import decimal_value
 
 AvailabilityFilter = Literal["all", "available", "unavailable"]
@@ -52,6 +55,10 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 class RuleIntegrityError(ValueError):
     """A stored rule version does not match what the caller pinned or what it claims."""
+
+
+class SnapshotMismatchError(ValueError):
+    """No single snapshot could be selected, or data disagrees with the selected one."""
 
 
 def _identifier(value: str) -> None:
@@ -175,13 +182,64 @@ async def get_rule_version(
         raise RuleIntegrityError(
             f"Rule {rule_version} document declares version {document.get('version')}."
         )
+    # Trust anchor: the version-controlled manifest, not the row's own claims. A changed
+    # document under an unchanged stored sha256 fails here.
+    trusted = TRUSTED_RULES.get(rule_version)
+    if trusted is None:
+        raise RuleIntegrityError(f"Rule {rule_version} is not a registered, approved version.")
+    computed = fingerprint(document)
+    if trusted != (kind, sha256, computed):
+        raise RuleIntegrityError(f"Rule {rule_version} content differs from its approved version.")
     return RuleVersionDetails(
         rule_version=rule_version,
         rule_kind=kind,
         sha256=sha256,
-        fingerprint=hashlib.sha256(text.encode()).hexdigest(),
+        fingerprint=computed,
         document=_freeze(document),
     )
+
+
+async def get_snapshot(
+    session: AsyncSession, snapshot_kind: str, snapshot_id: str | None = None
+) -> SnapshotDetails:
+    """The pinned snapshot of this kind, or the only registered one when nothing is pinned.
+
+    Never guesses: no snapshot, several unpinned snapshots, an unknown pin or a pin of the
+    other kind all raise SnapshotMismatchError. One SELECT.
+    """
+    if snapshot_kind not in ("inventory", "capacity"):
+        raise ValueError("Snapshot kind must be inventory or capacity.")
+    if snapshot_id is not None:
+        _identifier(snapshot_id)
+    last_week = (
+        select(func.max(ProductionCapacity.week_start))
+        .where(ProductionCapacity.snapshot_id == DataSnapshot.snapshot_id)
+        .scalar_subquery()
+    )
+    statement = select(
+        DataSnapshot.snapshot_id,
+        DataSnapshot.snapshot_kind,
+        DataSnapshot.dataset_version,
+        DataSnapshot.as_of_date,
+        last_week,
+    )
+    if snapshot_id is None:
+        statement = statement.where(DataSnapshot.snapshot_kind == snapshot_kind)
+    else:
+        statement = statement.where(DataSnapshot.snapshot_id == snapshot_id)
+    with session.no_autoflush:
+        rows = (await session.execute(statement.order_by(DataSnapshot.snapshot_id).limit(2))).all()
+    if not rows:
+        what = f"snapshot {snapshot_id}" if snapshot_id else f"{snapshot_kind} snapshot"
+        raise SnapshotMismatchError(f"No registered {what}.")
+    if len(rows) > 1:
+        raise SnapshotMismatchError(
+            f"Several {snapshot_kind} snapshots are registered; pin one explicitly."
+        )
+    found_id, kind, version, as_of, week = rows[0]
+    if kind != snapshot_kind:
+        raise SnapshotMismatchError(f"Snapshot {found_id} is {kind}, not {snapshot_kind}.")
+    return SnapshotDetails(found_id, kind, version, as_of, week if kind == "capacity" else None)
 
 
 async def get_material_availability(
@@ -190,9 +248,16 @@ async def get_material_availability(
     *,
     thickness_mm: Decimal | None = None,
     availability: AvailabilityFilter = "all",
+    snapshot_id: str | None = None,
 ) -> MaterialAvailability | None:
-    """Read current generated free kg; positive free stock does not promise feasibility."""
+    """Read generated free kg; positive free stock does not promise feasibility.
+
+    snapshot_id restricts the rows to one inventory snapshot. Calculations always pass it;
+    without it, rows of every stored snapshot are returned (a catalog view, not a total).
+    """
     _identifier(material_id)
+    if snapshot_id is not None:
+        _identifier(snapshot_id)
     if availability not in {"all", "available", "unavailable"}:
         raise ValueError("Availability filter must be all, available or unavailable.")
     _thickness(thickness_mm)
@@ -209,6 +274,8 @@ async def get_material_availability(
         )
         if thickness_mm is not None:
             statement = statement.where(MaterialInventory.thickness_mm == thickness_mm)
+        if snapshot_id is not None:
+            statement = statement.where(MaterialInventory.snapshot_id == snapshot_id)
         if availability == "available":
             statement = statement.where(MaterialInventory.available_kg > 0)
         elif availability == "unavailable":
@@ -399,9 +466,15 @@ async def get_workcentre_capacity(
     *,
     week_start: date | None = None,
     week_end: date | None = None,
+    snapshot_id: str | None = None,
 ) -> WorkcentreCapacity | None:
-    """Read inclusive Monday-week bounds in hours, without scheduling or reserving."""
+    """Read inclusive Monday-week bounds in hours, without scheduling or reserving.
+
+    snapshot_id restricts the weeks to one capacity snapshot; calculations always pass it.
+    """
     _identifier(workcentre_id)
+    if snapshot_id is not None:
+        _identifier(snapshot_id)
     _week(week_start)
     _week(week_end)
     if week_start is not None and week_end is not None and week_start > week_end:
@@ -423,6 +496,8 @@ async def get_workcentre_capacity(
             statement = statement.where(ProductionCapacity.week_start >= week_start)
         if week_end is not None:
             statement = statement.where(ProductionCapacity.week_start <= week_end)
+        if snapshot_id is not None:
+            statement = statement.where(ProductionCapacity.snapshot_id == snapshot_id)
         weeks = tuple(
             (
                 await session.scalars(

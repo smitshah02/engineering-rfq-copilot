@@ -29,7 +29,7 @@ async def test_complete_day5_database_lifecycle(
     assert await session.scalar(text("SELECT current_database()")) == "rfq_copilot_test"
     connection = await session.connection()
     physical = await connection.run_sync(verify_physical, approved)
-    assert physical["revision"] == ["20261108_01"]
+    assert physical["revision"] == ["20261109_01"]
     assert len(physical["columns"]) == 33 and physical["counts"]["f"] == 64
 
     bundle = load_sources(SOURCE, ARCHIVE)

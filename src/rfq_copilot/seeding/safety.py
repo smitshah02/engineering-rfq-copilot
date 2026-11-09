@@ -23,9 +23,10 @@ from rfq_copilot.seeding import SeedError
 from rfq_copilot.seeding.transform import require
 
 ROOT = Path(__file__).resolve().parents[3]
-REVISION = "20261108_01"
-# Frozen in the approved initial revision, independently checked against Day 4 tests.
-SHAPE_DIGEST = "8ef8e5a94fd625915001aa834f4a37cddf20abc122a087f934d227b7424da9ff"
+REVISION = "20261109_01"
+# Managed-object shape at REVISION: the approved initial revision (20261108_01, digest
+# 8ef8e5a9...) plus the approved TD-005 capacity key. Measured on the guarded test database.
+SHAPE_DIGEST = "6cc43f0ecb39614e6ee69d50e94c8916e77dc639ad6b1ae1a59c1315944d590d"
 
 
 def validate_target(config):

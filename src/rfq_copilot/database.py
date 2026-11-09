@@ -91,6 +91,20 @@ class Database:
                 "Database operation failed; check server availability and access."
             ) from None
 
+    @asynccontextmanager
+    async def snapshot_session(self) -> AsyncIterator[AsyncSession]:
+        """A session whose one transaction is REPEATABLE READ and READ ONLY.
+
+        Every statement of an evaluation then sees the same committed database state, and
+        nothing can be written. Commit or roll back ends the snapshot; use one session per
+        evaluation.
+        """
+        async with self.session() as session:
+            await session.execute(
+                text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            )
+            yield session
+
     async def verify_connection(self) -> ConnectionInfo:
         """SELECT 1 and verify database/user identity plus restricted role attributes."""
         try:

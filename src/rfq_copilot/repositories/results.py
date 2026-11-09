@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -78,7 +79,8 @@ class RuleVersionDetails:
     """A verified rule document: read-only, JSON numbers parsed as exact Decimals.
 
     sha256 is the seeded source file's hash (provenance, not recomputable from JSONB);
-    fingerprint is sha256 of PostgreSQL's canonical jsonb text, recomputable at any time.
+    fingerprint is canonical.fingerprint() of the document. Both were checked against the
+    trusted manifest (repositories/rule_manifest.py) when the document was loaded.
     """
 
     rule_version: str
@@ -86,3 +88,18 @@ class RuleVersionDetails:
     sha256: str
     fingerprint: str
     document: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class SnapshotDetails:
+    """One registered inventory or capacity snapshot, selected for a calculation.
+
+    last_week_start is the latest capacity week stored under the snapshot (None for an
+    inventory snapshot, or a capacity snapshot without rows).
+    """
+
+    snapshot_id: str
+    snapshot_kind: str
+    dataset_version: str
+    as_of_date: date
+    last_week_start: date | None

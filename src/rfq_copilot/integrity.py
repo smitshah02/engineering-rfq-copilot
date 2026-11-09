@@ -28,6 +28,7 @@ from rfq_copilot.models import Base
 from rfq_copilot.seeding import SeedError
 from rfq_copilot.seeding.loader import snapshot_artifacts
 from rfq_copilot.seeding.mapping import EMPTY_TABLES, TABLES, SeedPlan, build_plan
+from rfq_copilot.seeding.rules import is_registered_extra
 from rfq_copilot.seeding.safety import validate_target, verify_schema
 from rfq_copilot.seeding.sources import load_sources
 from rfq_copilot.seeding.transform import json_equal, json_value
@@ -240,7 +241,10 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
                     record[col.name] = json_value(record[col.name], "stored JSON")
         key_columns = [c.name for c in table.primary_key]
         lookup = {tuple(r[c] for c in key_columns): r for r in stored}
-        check(count == len(plan.rows[name]), table.fullname, "source count differs")
+        # Approved post-baseline rule versions (seeding/rules.py) are the only extra rows.
+        baseline = {r.get("rule_version") for r in plan.rows[name]}
+        extras = [r for r in stored if is_registered_extra(name, r, baseline)]
+        check(count - len(extras) == len(plan.rows[name]), table.fullname, "source count differs")
         for expected in plan.rows[name]:
             key = tuple(expected[c] for c in key_columns)
             check(key in lookup, table.fullname, "source identifier missing")

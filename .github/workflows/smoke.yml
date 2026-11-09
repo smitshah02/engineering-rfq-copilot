@@ -1,0 +1,17 @@
+# Public smoke checks: lint, lockfile and the tests that need neither PostgreSQL nor the
+# private v1.1.0 dataset. This is NOT the full regression suite (see README "Testing").
+name: smoke
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv lock --check
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check src tests alembic
+      - run: uv run pytest -q -p no:cacheprovider tests/test_database_config.py tests/test_hardening_public.py

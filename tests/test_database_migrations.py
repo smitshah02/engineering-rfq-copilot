@@ -37,7 +37,8 @@ from rfq_copilot.migration_safety import (
 from rfq_copilot.models import Base
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = "20261108_01"
+REVISION = "20261109_01"  # head: initial schema + approved TD-005 capacity key
+INITIAL_REVISION = "20261108_01"
 SENTINEL = "rfq_migration_test_unrelated"
 
 
@@ -484,12 +485,16 @@ def test_configuration_metadata_and_revision():
     config = alembic_config()
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [REVISION]
-    revisions = list(script.walk_revisions())
-    assert len(revisions) == 1
-    revision = revisions[0]
-    assert revision.down_revision is None and revision.dependencies is None
-    assert revision.doc == "initial_rfq_database_schema"
-    assert callable(revision.module.upgrade) and callable(revision.module.downgrade)
+    head, initial = list(script.walk_revisions())
+    assert (head.revision, head.down_revision) == (REVISION, INITIAL_REVISION)
+    assert (initial.revision, initial.down_revision) == (INITIAL_REVISION, None)
+    assert head.dependencies is None and initial.dependencies is None
+    assert (initial.doc, head.doc) == (
+        "initial_rfq_database_schema",
+        "capacity_unique_per_snapshot",
+    )
+    for revision in (head, initial):
+        assert callable(revision.module.upgrade) and callable(revision.module.downgrade)
     assert len(Base.metadata.tables) == 33
     assert config.get_main_option("sqlalchemy.url") is None
 

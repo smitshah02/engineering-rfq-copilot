@@ -1,11 +1,13 @@
 """RFQ business evaluation: the quotation plus the customer and commercial gates.
 
 Combines the multi-part quotation with the verified customer's account status
-and credit position under the pinned approval policy (approval-v1.1), and returns the
+and credit position under the pinned approval policy (approval-v1.1 or v1.2), and returns the
 business outcome: whether a draft may be created, which review is required and why.
 
 It decides; it executes nothing. No draft is persisted, no approval is requested or
-granted, nothing is released. Every release stays a human action (policy and contract).
+granted, nothing is released. Every release stays a human action: that is an architectural
+invariant enforced in code, not a policy setting. A policy that would let an agent release
+or approve a quotation is rejected, and quote_release_authorized_for_agent is always False.
 Workflow failures (retries, outages) belong to the orchestration layer, and document
 contradictions are detected by Intake; they arrive here as an input.
 """
@@ -13,15 +15,17 @@ contradictions are detected by Intake; they arrive here as an input.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rfq_copilot.canonical import fingerprint
 from rfq_copilot.entities import Part
 from rfq_copilot.models import Customer
 from rfq_copilot.repositories import RuleVersionDetails, get_customer, get_rfq
 from rfq_copilot.seeding.transform import decimal_value
+from rfq_copilot.services.manufacturing import EXACT
 from rfq_copilot.services.quotation import Quotation, quote_parts, validate_lines
 
 Outcome = Literal[
@@ -33,6 +37,22 @@ Outcome = Literal[
     "quote_draft_ready_for_approval",
 ]
 CustomerAction = Literal["eligible", "commercial_review", "blocked_release"]
+
+# Invariant, not configuration: no policy value can make this True.
+AGENT_MAY_RELEASE_QUOTE = False
+# Actions every approval policy must forbid to agents.
+AGENT_MUST_NOT = frozenset({"approve_quote", "release_quote"})
+# engineering_review_conditions this service knows. The two gate-covered ones are
+# enforced by a stronger gate that already outranks engineering review: unsupported or
+# incomplete geometry is declined or sent for clarification, and a specification conflict
+# (Intake's contradictions) stops evaluation. borderline_bend_radius is evaluated when the
+# policy states its threshold (approval-v1.2, TD-004): a bent line is borderline when
+# minimum <= stated radius < ratio x minimum; an unstated radius is not borderline. Under a
+# policy without the threshold (approval-v1.1) it cannot be evaluated, and when it could
+# apply (a line is bent) it is reported in unevaluated_review_conditions, never as passed.
+GATE_COVERED_CONDITIONS = frozenset({"unsupported_or_unknown_geometry", "unresolved_spec_conflict"})
+THRESHOLD_CONDITIONS = frozenset({"borderline_bend_radius"})
+EVALUATION_FINGERPRINT_VERSION = "rfq-evaluation-v1"
 
 
 @dataclass(frozen=True)
@@ -60,11 +80,91 @@ class RfqEvaluation:
     quotation: Quotation | None
     approval_rule_version: str
     approval_rule_fingerprint: str
+    unevaluated_review_conditions: tuple[str, ...]
+    borderline_bend_lines: tuple[int, ...]  # line numbers needing engineering review
+    parts: tuple[Part, ...]
+    line_numbers: tuple[int, ...]
+    # sha256 over every input and result above (canonical JSON); see evaluation_fingerprint.
+    evaluation_fingerprint: str
 
 
 def _approval(rules: RuleVersionDetails) -> None:
     if not isinstance(rules, RuleVersionDetails) or rules.rule_kind != "approval":
         raise ValueError("Business evaluation requires an approval rule version.")
+
+
+def require_human_release(approval: RuleVersionDetails) -> None:
+    """Reject any approval policy that would let an agent approve or release a quotation."""
+    _approval(approval)
+    document, rule = approval.document, approval.rule_version
+    forbidden = document.get("agent_forbidden_actions")
+    if isinstance(forbidden, str) or not isinstance(forbidden, Sequence):
+        raise ValueError(f"{rule}.agent_forbidden_actions must be a list.")
+    missing = AGENT_MUST_NOT - set(forbidden)
+    if missing:
+        raise ValueError(
+            f"{rule} would let an agent {sorted(missing)}; human release is mandatory."
+        )
+    if document.get("human_release_approval_required") is not True:
+        raise ValueError(f"{rule}.human_release_approval_required must be true.")
+
+
+def engineering_conditions(approval: RuleVersionDetails) -> frozenset[str]:
+    """The policy's engineering-review conditions; an unknown one fails closed."""
+    declared = approval.document.get("engineering_review_conditions", ())
+    if isinstance(declared, str) or not isinstance(declared, Sequence):
+        raise ValueError(f"{approval.rule_version}.engineering_review_conditions must be a list.")
+    unknown = set(declared) - GATE_COVERED_CONDITIONS - THRESHOLD_CONDITIONS
+    if unknown:
+        raise ValueError(
+            f"{approval.rule_version} has engineering review conditions not enforced: "
+            f"{sorted(unknown)}."
+        )
+    return frozenset(declared)
+
+
+def borderline_ratio(approval: RuleVersionDetails) -> Decimal | None:
+    """The policy's borderline-bend ratio (> 1), or None when the policy states none."""
+    rule = approval.rule_version
+    thresholds = approval.document.get("engineering_review_thresholds")
+    if thresholds is None:
+        return None
+    if not hasattr(thresholds, "keys") or set(thresholds) - THRESHOLD_CONDITIONS:
+        raise ValueError(f"{rule}.engineering_review_thresholds names unknown conditions.")
+    if set(thresholds) - engineering_conditions(approval):
+        raise ValueError(f"{rule} sets a threshold for a condition it does not declare.")
+    setting = thresholds.get("borderline_bend_radius")
+    if setting is None:
+        return None
+    ratio = decimal_value(
+        setting.get("radius_below_minimum_ratio") if hasattr(setting, "get") else None,
+        f"{rule}.engineering_review_thresholds.borderline_bend_radius",
+        12,
+        6,
+    )
+    if ratio <= 1:
+        raise ValueError(f"{rule} borderline bend ratio must be greater than 1.")
+    return ratio
+
+
+def borderline_bend_lines(quotation: Quotation, ratio: Decimal) -> tuple[int, ...]:
+    """Lines whose stated bend radius is at least the minimum but below ratio x minimum."""
+    lines = []
+    for line, part in zip(quotation.lines, quotation.parts, strict=True):
+        minimum = line.manufacturing.min_bend_radius_mm
+        if minimum is None or part.bend_radius_mm is None:
+            continue
+        with localcontext(EXACT):
+            if minimum <= part.bend_radius_mm < minimum * ratio:
+                lines.append(line.line_number)
+    return tuple(lines)
+
+
+def evaluation_fingerprint(fields: dict[str, object]) -> str:
+    """Deterministic identity of one evaluation: parts, customer facts, rule fingerprints,
+    snapshot selection, horizon and every result. Unlike calculation_id (parts and pricing
+    version only) it changes whenever anything that influenced the outcome changes."""
+    return fingerprint({"fingerprint_version": EVALUATION_FINGERPRINT_VERSION, **fields})
 
 
 def customer_action(status: str, approval: RuleVersionDetails) -> CustomerAction:
@@ -101,9 +201,14 @@ def evaluate_outcome(
     quotation: Quotation | None,
     approval_rules: RuleVersionDetails,
     contradictions: Sequence[str] = (),
+    *,
+    parts: Sequence[Part] | None = None,
+    line_numbers: Sequence[int] | None = None,
 ) -> RfqEvaluation:
-    """Pure gate logic. quotation is None only when contradictions stopped evaluation."""
-    _approval(approval_rules)
+    """Pure gate logic. quotation is None only when contradictions stopped evaluation;
+    then parts (and line_numbers) identify what was asked, for the fingerprint."""
+    require_human_release(approval_rules)
+    conditions = engineering_conditions(approval_rules)
     contradictions = tuple(contradictions)
     if not all(isinstance(c, str) and c.strip() for c in contradictions):
         raise ValueError("Contradiction findings must be nonblank text.")
@@ -130,13 +235,35 @@ def evaluate_outcome(
     missing = quotation is not None and quotation.result == "needs_clarification"
     unsupported = quotation is not None and quotation.result == "not_manufacturable"
 
+    if quotation is not None:
+        if parts is not None and tuple(parts) != quotation.parts:
+            raise ValueError("The parts differ from the quotation's parts.")
+        parts, line_numbers = quotation.parts, quotation.line_numbers
+    else:
+        parts = tuple(parts or ())
+        line_numbers = (
+            tuple(range(1, len(parts) + 1)) if line_numbers is None else tuple(line_numbers)
+        )
+        if parts:
+            validate_lines(parts, line_numbers)
+    ratio = borderline_ratio(approval_rules)  # validated even when unused
+    bent = quotation is not None and any(
+        "bend" in line.manufacturing.operations for line in quotation.lines
+    )
+    unevaluated = (
+        ("borderline_bend_radius",)
+        if bent and "borderline_bend_radius" in conditions and ratio is None
+        else ()
+    )
+    borderline = borderline_bend_lines(quotation, ratio) if priced and ratio is not None else ()
+
     if contradictions or missing:
         outcome = "clarification_required"
     elif unsupported:
         outcome = "unsupported_declined"
     elif action == "blocked_release":
         outcome = "customer_hold_blocked_release"
-    elif capacity_problem or late:
+    elif capacity_problem or late or borderline:
         outcome = "engineering_review_required"
     elif action == "commercial_review" or breach:
         outcome = "commercial_review_required"
@@ -154,6 +281,7 @@ def evaluate_outcome(
         ("CREDIT_LIMIT_EXCEEDED", bool(breach)),
         ("CAPACITY_OUT_OF_HORIZON", "CAPACITY_OUT_OF_HORIZON" in findings),
         ("CAPACITY_DATA_MISSING", "CAPACITY_DATA_MISSING" in findings),
+        ("BORDERLINE_BEND_RADIUS", bool(borderline)),  # approval-v1.2; ranks last
     ]
     reason = next((code for code, applies in reasons if applies), None)
 
@@ -171,28 +299,26 @@ def evaluate_outcome(
     if action != "eligible" and "customer_not_active" in also:
         review.append("CUSTOMER_NOT_ACTIVE")
 
-    human_release = document["human_release_approval_required"]
-    if type(human_release) is not bool:
-        raise ValueError(
-            f"{approval_rules.rule_version}.human_release_approval_required must be boolean."
-        )
-    return RfqEvaluation(
+    result = dict(
         outcome=outcome,
         escalation_reason=reason,
         draft_creation_allowed=priced and not contradictions and not findings,
         manager_review_required=bool(review),
         manager_review_reasons=tuple(review),
-        human_release_approval_required=human_release,
+        human_release_approval_required=True,  # require_human_release enforced it
         approval_must_be_human=True,
-        quote_release_authorized_for_agent="release_quote"
-        not in document["agent_forbidden_actions"]
-        and not human_release,
+        quote_release_authorized_for_agent=AGENT_MAY_RELEASE_QUOTE,
         customer=standing,
         contradictions=contradictions,
         quotation=quotation,
         approval_rule_version=approval_rules.rule_version,
         approval_rule_fingerprint=approval_rules.fingerprint,
+        unevaluated_review_conditions=unevaluated,
+        borderline_bend_lines=borderline,
+        parts=parts,
+        line_numbers=line_numbers,
     )
+    return RfqEvaluation(**result, evaluation_fingerprint=evaluation_fingerprint(result))
 
 
 async def evaluate_rfq(
@@ -231,7 +357,14 @@ async def evaluate_rfq(
             inventory_snapshot=inventory_snapshot,
             capacity_snapshot=capacity_snapshot,
         )
-    return evaluate_outcome(details.customer, quotation, approval_rules, contradictions)
+    return evaluate_outcome(
+        details.customer,
+        quotation,
+        approval_rules,
+        contradictions,
+        parts=parts,
+        line_numbers=numbers,
+    )
 
 
 async def evaluate_stored_rfq(

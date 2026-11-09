@@ -171,7 +171,9 @@ async def test_each_service_runs_once_and_only_reads(populated, seed_database):
     populated.expunge_all()
     with statements(seed_database) as captured:
         first = await quote_parts(populated, parts, **rule_set, horizon_start=MONDAY)
-    # Manufacturing 7 x 2 + stock 2 x 2 + routing 2 + workcentres 5 x 2 + materials 1 + operations 1.
+    # Snapshots 2 + manufacturing 7 x 2 (its routing reads are reused by capacity) + stock 2 x 2
+    # + workcentres 5 x 2 + materials 1 + operations 1.
+    # 32 before hardening: +2 snapshot selections, -2 routing reads shared with capacity.
     assert len(captured) == 32
     assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
     assert await quote_parts(populated, parts, **rule_set, horizon_start=MONDAY) == first

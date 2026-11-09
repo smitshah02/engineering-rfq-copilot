@@ -127,6 +127,10 @@ def approved():
             checks=re.findall(r"`([^`]+)`", check_line),
         )
     assert set(tables) == set(APPROVED_TABLES)
+    # Approved after Day 4: TD-005, revision 20261109_01. The Day 4 document stays as
+    # written; this is the only delta, and the original key is asserted before replacing it.
+    assert tables["production_capacity"]["unique"] == [("workcentre_id", "week_start")]
+    tables["production_capacity"]["unique"] = [("workcentre_id", "week_start", "snapshot_id")]
     assert sum(len(table["columns"]) for table in tables.values()) == 261
     assert sum(len(table["fks"]) for table in tables.values()) == 64
     return tables

@@ -2,6 +2,7 @@
 
 from rfq_copilot.repositories.queries import (
     RuleIntegrityError,
+    SnapshotMismatchError,
     find_materials,
     get_customer,
     get_manufacturing_capabilities,
@@ -9,6 +10,7 @@ from rfq_copilot.repositories.queries import (
     get_rfq,
     get_rfq_parts,
     get_rule_version,
+    get_snapshot,
     get_workcentre_capacity,
     list_materials,
     list_operations,
@@ -24,6 +26,7 @@ from rfq_copilot.repositories.results import (
     QuoteVersionDetails,
     RFQDetails,
     RuleVersionDetails,
+    SnapshotDetails,
     WorkcentreCapacity,
 )
 
@@ -34,6 +37,9 @@ __all__ = [
     "get_rfq_parts",
     "get_rule_version",
     "RuleIntegrityError",
+    "SnapshotMismatchError",
+    "get_snapshot",
+    "SnapshotDetails",
     "get_material_availability",
     "get_manufacturing_capabilities",
     "get_workcentre_capacity",

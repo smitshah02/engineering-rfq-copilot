@@ -265,7 +265,9 @@ async def test_reads_only_bounded_and_reproducible(populated, seed_database):
     table = MaterialInventory.__table__
     before = (await populated.execute(select(table).order_by(table.c.inventory_id))).all()
     second = {**PANEL, "part_id": "PANEL-2", "quantity": 3}
-    for parts, count in [([PANEL], 9), ([PANEL, second], 16)]:
+    # +1 for the inventory snapshot selection; the second part shares the first's catalog
+    # reads (request-scoped memo) and stock read, so it costs no SELECT (was 7).
+    for parts, count in [([PANEL], 10), ([PANEL, second], 10)]:
         populated.expunge_all()
         with statements(seed_database) as captured:
             first = await check_inventory(

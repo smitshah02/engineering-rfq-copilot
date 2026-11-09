@@ -58,6 +58,8 @@ class Quotation:
     lead_time: LeadTimeEstimate
     costs: CostEstimate | None
     pricing: PriceCalculation | None
+    parts: tuple[Part, ...]
+    line_numbers: tuple[int, ...]
 
 
 def validate_lines(parts: Sequence[Part], line_numbers: Sequence[int]) -> None:
@@ -149,6 +151,8 @@ def assemble_quotation(
         lead_time,
         costs,
         pricing,
+        parts,
+        line_numbers,
     )
 
 

@@ -1,7 +1,8 @@
 """Production capacity: workcentre hours per routed operation and first-fit weekly planning.
 
-Weekly free hours are the stored remaining_hours (nominal - downtime - scheduled).
-Nothing is reserved or written; the plan only consumes hours in memory, shared by
+Weekly free hours are the stored remaining_hours (nominal - downtime - scheduled) of ONE
+selected capacity snapshot; weeks of other snapshots are never read. Nothing is reserved
+or written; the plan only consumes hours in memory, shared by
 the RFQ's own operations.
 
 The start week is an input: turning procurement delay into a start week, the ready date
@@ -20,13 +21,16 @@ from rfq_copilot.entities import Part
 from rfq_copilot.models import OperationRouting
 from rfq_copilot.repositories import (
     RuleVersionDetails,
+    SnapshotDetails,
+    SnapshotMismatchError,
     WorkcentreCapacity,
+    get_snapshot,
     get_workcentre_capacity,
     list_part_routing,
 )
 from rfq_copilot.seeding.transform import decimal_value
 from rfq_copilot.services.inventory import InventoryCheck
-from rfq_copilot.services.materials import require_manufacturing_rules
+from rfq_copilot.services.materials import Reads, memo, require_manufacturing_rules
 
 # Hours repeat (x / 60, weld length / 65), so they cannot be exact. A fixed context, the
 # reference's Decimal default, keeps results identical whatever the caller's context is.
@@ -82,6 +86,7 @@ class CapacityCheck:
     inventory: InventoryCheck
     pricing_rule_version: str
     pricing_rule_fingerprint: str
+    snapshot_id: str | None = None  # the selected capacity snapshot (None: not stated)
 
 
 def _number(value: object, location: str) -> Decimal:
@@ -170,6 +175,7 @@ def evaluate_capacity(
     pricing_rules: RuleVersionDetails,
     horizon_start: date,
     start_week: int = 0,
+    snapshot_id: str | None = None,
 ) -> CapacityCheck:
     """Pure first-fit plan: each operation takes the first week, at or after the previous
     operation's week, whose free hours cover it. The week cursor never moves back, across
@@ -191,6 +197,7 @@ def evaluate_capacity(
             inventory,
             pricing_rules.rule_version,
             pricing_rules.fingerprint,
+            snapshot_id,
         )
 
     if inventory.result == "needs_clarification":
@@ -207,8 +214,13 @@ def evaluate_capacity(
         for row in reading.weeks:
             index, offset = divmod((row.week_start - horizon_start).days, 7)
             if offset == 0 and 0 <= index:
+                if (workcentre_id, index) in free:
+                    # Two rows for one week: hours would be overwritten or double counted.
+                    raise SnapshotMismatchError(f"{workcentre_id} has two rows for one week.")
                 free[(workcentre_id, index)] = row.remaining_hours
                 snapshots.add(row.snapshot_id)
+    if len(snapshots) > 1 or (snapshot_id is not None and snapshots - {snapshot_id}):
+        raise SnapshotMismatchError("Capacity rows come from more than the selected snapshot.")
     remaining_before = dict(free)
     planned_hours: dict[tuple[str, int], Decimal] = {}
 
@@ -297,23 +309,39 @@ async def check_capacity(
     pricing_rules: RuleVersionDetails,
     horizon_start: date,
     start_week: int = 0,
+    snapshot: SnapshotDetails | None = None,
+    reads: Reads | None = None,
 ) -> CapacityCheck:
-    """Read routing and weekly capacity for the routed workcentres, then plan in memory."""
+    """Read routing and weekly capacity of one capacity snapshot (the given one, or the only
+    registered one) for the routed workcentres, then plan in memory."""
     parts = tuple(parts)
     _validate(parts, inventory, manufacturing_rules, pricing_rules, horizon_start, start_week)
+    if snapshot is not None and (
+        not isinstance(snapshot, SnapshotDetails) or snapshot.snapshot_kind != "capacity"
+    ):
+        raise ValueError("Capacity checks require a capacity snapshot.")
     routing: dict[str, tuple[OperationRouting, ...]] = {}
     capacity: dict[str, WorkcentreCapacity] = {}
     if inventory.result in ("sufficient", "insufficient"):
+        if snapshot is None:
+            snapshot = await get_snapshot(session, "capacity")
         for part in parts:
             if part.part_type not in routing:
-                routing[part.part_type] = await list_part_routing(session, part.part_type)
+                routing[part.part_type] = await memo(
+                    reads,
+                    ("routing", part.part_type),
+                    lambda part_type=part.part_type: list_part_routing(session, part_type),
+                )
         for part, validation in zip(parts, inventory.manufacturing, strict=True):
             stations = {s.operation_id: s.workcentre_id for s in routing[part.part_type]}
             for operation in validation.operations:
                 workcentre_id = stations.get(operation)
                 if workcentre_id is not None and workcentre_id not in capacity:
                     reading = await get_workcentre_capacity(
-                        session, workcentre_id, week_start=horizon_start
+                        session,
+                        workcentre_id,
+                        week_start=horizon_start,
+                        snapshot_id=snapshot.snapshot_id,
                     )
                     if reading is None:
                         raise ValueError(f"Workcentre {workcentre_id} is not in the catalog.")
@@ -327,4 +355,5 @@ async def check_capacity(
         pricing_rules=pricing_rules,
         horizon_start=horizon_start,
         start_week=start_week,
+        snapshot_id=None if snapshot is None else snapshot.snapshot_id,
     )

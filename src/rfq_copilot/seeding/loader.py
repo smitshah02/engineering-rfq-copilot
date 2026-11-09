@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from rfq_copilot.database import Database
 from rfq_copilot.seeding.mapping import TABLES, SeedPlan, key_for, validate_plan
+from rfq_copilot.seeding.rules import is_registered_extra
 from rfq_copilot.seeding.safety import validate_target, verify_live_identity, verify_schema
 from rfq_copilot.seeding.sources import sha256_file
 from rfq_copilot.seeding.transform import json_equal, json_text, json_value, require
@@ -49,6 +50,9 @@ async def database_state(session, plan: SeedPlan):
     if not any(counts.values()):
         return "empty", counts, digest
     for name in plan.order:
+        # Approved post-baseline rule versions (seeding/rules.py) are the only extra rows.
+        baseline = {r.get("rule_version") for r in plan.rows[name]}
+        stored[name] = [r for r in stored[name] if not is_registered_extra(name, r, baseline)]
         require(
             len(stored[name]) == len(plan.rows[name]),
             TABLES[name].fullname,

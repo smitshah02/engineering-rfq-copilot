@@ -245,11 +245,11 @@ class ProcurementRecord(Base):
 
 
 class ProductionCapacity(Base):
-    """Approved Day 4 table production_capacity; database constraints are applied by later migrations."""
+    """Approved Day 4 table production_capacity; since 20261109_01 a week is unique per snapshot."""
 
     __tablename__ = "production_capacity"
     __table_args__ = (
-        UniqueConstraint("workcentre_id", "week_start"),
+        UniqueConstraint("workcentre_id", "week_start", "snapshot_id"),  # revision 20261109_01
         ForeignKeyConstraint(
             ["workcentre_id"],
             ["business.workcentres.workcentre_id"],

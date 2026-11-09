@@ -28,6 +28,7 @@ from rfq_copilot.repositories import (
 )
 from rfq_copilot.seeding.loader import execute_seed
 from rfq_copilot.seeding.mapping import TABLES
+from rfq_copilot.seeding.rules import REGISTERED
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
@@ -459,6 +460,7 @@ async def test_all_development_reads_preserve_records_and_close_sessions(
                         await call(operation, session, seed_plan)
                 assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
                 assert await fingerprint(session) == before
-                assert sum(t["rows"] for t in before["tables"].values()) == 1089
+                # Baseline plus each approved post-baseline rule (approval-v1.2).
+                assert sum(t["rows"] for t in before["tables"].values()) == 1089 + len(REGISTERED)
                 assert await session.scalar(text("SHOW transaction_read_only")) == "on"
         assert database.engine.pool.checkedout() == 0

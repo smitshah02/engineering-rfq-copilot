@@ -150,7 +150,8 @@ async def test_reads_only_bounded_and_reproducible(populated, seed_database):
     with statements(seed_database) as captured:
         first = await estimate(populated, [PANEL], rule_set)
     # Manufacturing (7) + stock (2) + capacity routing (1) + 3 workcentres x 2.
-    assert len(captured) == 16
+    # 16 before hardening: +2 snapshot selections, -1 routing read shared with capacity.
+    assert len(captured) == 17
     assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
     assert await estimate(populated, [PANEL], rule_set) == first
     assert (first.result, first.estimated_ready_date, first.lead_business_days) == (

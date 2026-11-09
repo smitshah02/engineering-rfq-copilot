@@ -177,6 +177,7 @@ async def test_evaluation_reads_only_bounded_and_reproducible(populated, seed_da
             populated, parts, customer_id="CUST-008", **rule_set, horizon_start=MONDAY
         )
     # Customer + contacts (2), then the quotation's 32.
+    # 34 before hardening: +2 snapshot selections, -2 routing reads shared with capacity.
     assert len(captured) == 34
     assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
     again = await evaluate_rfq(

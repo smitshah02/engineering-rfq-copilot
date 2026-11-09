@@ -16,6 +16,10 @@ from rfq_copilot.seeding.transform import json_value, require
 DATASET_VERSION = "1.1.0"
 ARCHIVE_SHA256 = "681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080"
 MANIFEST = "evaluation/checksums.sha256.json"
+ARCHIVE_ROOT = "rfq_synthetic_data/"
+DATASET_FILES = 680  # files in the frozen archive
+# Exact file names only; anything else not in the archive fails verification.
+OS_METADATA = frozenset({".DS_Store"})
 PROTECTED_ROOTS = (
     "master_data",
     "operations_data",
@@ -142,9 +146,25 @@ def load_sources(source: Path, archive: Path) -> SourceBundle:
                 p.relative_to(source).as_posix()
                 for name in PROTECTED_ROOTS
                 for p in (source / name).rglob("*")
-                if p.is_file() and p.relative_to(source).as_posix() != MANIFEST
+                if p.is_file()
+                and p.name not in OS_METADATA
+                and p.relative_to(source).as_posix() != MANIFEST
             }
             require(discovered == set(manifest), "manifest", "protected file set differs")
+            # Strict inventory: the extracted files must be exactly the archive's files,
+            # except for recognized OS metadata that a desktop adds after extraction.
+            archived = {
+                name.removeprefix(ARCHIVE_ROOT)
+                for name in package.namelist()
+                if name.startswith(ARCHIVE_ROOT) and not name.endswith("/")
+            }
+            extracted = {
+                p.relative_to(source).as_posix()
+                for p in source.rglob("*")
+                if p.is_file() and p.name not in OS_METADATA
+            }
+            require(len(archived) == DATASET_FILES, "archive", "unexpected file count")
+            require(extracted == archived, "source", "dataset files differ from frozen archive")
             for relative, digest in manifest.items():
                 require(
                     isinstance(digest, str) and bool(re.fullmatch("[0-9a-f]{64}", digest)),
@@ -173,7 +193,7 @@ def load_sources(source: Path, archive: Path) -> SourceBundle:
             generation,
             {
                 "dataset_version": DATASET_VERSION,
-                "dataset_files": sum(p.is_file() for p in source.rglob("*")),
+                "dataset_files": len(extracted),
                 "protected_hashes": len(manifest),
                 "archive_sha256": ARCHIVE_SHA256,
                 "mapped_files": len(ALLOWED_SOURCES),

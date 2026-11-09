@@ -33,6 +33,7 @@ from rfq_copilot.integrity import (
 )
 from rfq_copilot.seeding.loader import execute_seed, insert_table
 from rfq_copilot.seeding.mapping import EXPECTED_COUNTS, TABLES, build_plan
+from rfq_copilot.seeding.rules import REGISTERED
 from rfq_copilot.seeding.transform import json_text
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
@@ -65,7 +66,7 @@ async def test_current_development_integrity_and_preservation(seed_bundle):
     plan = build_plan(seed_bundle, ROOT / "data/rfq_seed_snapshots")
     result = await run_integrity(config, plan)
     assert result["database"] == "rfq_copilot_dev" and result["role"] == "rfq_copilot_dev"
-    assert result["alembic_revision"] == "20261108_01"
+    assert result["alembic_revision"] == "20261109_01"
     assert result["definitions"] == {
         "tables": 33,
         "columns": 261,
@@ -76,7 +77,9 @@ async def test_current_development_integrity_and_preservation(seed_bundle):
         "explicit_indexes": 14,
         "unique_partial_indexes": 3,
     }
-    assert result["records"] == 1089 and result["source_values_checked"] == 9587
+    # The 1089-record baseline plus each approved post-baseline rule (approval-v1.2).
+    assert result["records"] == 1089 + len(REGISTERED)
+    assert result["source_values_checked"] == 9587
     assert result["decimal_values_checked"] == 1353
     assert result["foreign_key_data_checks"] == 64 and result["check_data_checks"] == 207
     assert result["unique_data_checks"] == 17 and result["violations"] == 0

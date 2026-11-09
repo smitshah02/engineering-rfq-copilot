@@ -11,6 +11,7 @@ instead of being silently ignored, so a new rule cannot be under-enforced.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
+from decimal import Context, Decimal, DivisionByZero, Inexact, InvalidOperation, localcontext
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,10 +22,14 @@ from rfq_copilot.services.materials import (
     MATERIAL_FIELDS,
     CheckResult,
     MaterialCheck,
+    Reads,
     check_part_material,
+    memo,
     require_manufacturing_rules,
 )
 
+# Exact arithmetic: any result that would need rounding raises instead of drifting.
+EXACT = Context(prec=60, traps=[Inexact, InvalidOperation, DivisionByZero])
 SCALAR_LIMITS = frozenset(
     {"min_tolerance_mm", "hole_count_max", "bends_max", "min_bend_radius_factor"}
 )
@@ -41,6 +46,8 @@ class ManufacturingCheck:
     material: MaterialCheck
     rule_version: str
     rule_fingerprint: str
+    # factor x thickness for a part with bends (None without bends or before validation).
+    min_bend_radius_mm: Decimal | None = None
 
 
 def _ranges(rules: RuleVersionDetails) -> dict:
@@ -86,7 +93,9 @@ def evaluate_manufacturing(
     document, limits = rules.document, rules.document["limits"]
     ranges = _ranges(rules)
 
-    def check(result: CheckResult, findings: set[str], operations=()) -> ManufacturingCheck:
+    def check(
+        result: CheckResult, findings: set[str], operations=(), minimum=None
+    ) -> ManufacturingCheck:
         return ManufacturingCheck(
             result,
             tuple(sorted(findings)),
@@ -94,6 +103,7 @@ def evaluate_manufacturing(
             material,
             rules.rule_version,
             rules.fingerprint,
+            minimum,
         )
 
     required = [f for f in document["mandatory_fields"] if f not in MATERIAL_FIELDS]
@@ -124,12 +134,15 @@ def evaluate_manufacturing(
     bends = document["bend_counts"].get(part.part_type, 0)
     if bends > limits["bends_max"]:
         findings.add("OUT_OF_RANGE_BEND_COUNT")
-    if bends and part.bend_radius_mm is not None and part.thickness_mm is not None:
+    minimum = None
+    if bends and part.thickness_mm is not None:
         factor = limits["min_bend_radius_factor"]
         if material.material is not None:
             # A material-specific factor can only tighten the global rule.
             factor = max(factor, material.material.min_bend_radius_factor)
-        if part.bend_radius_mm < part.thickness_mm * factor:
+        with localcontext(EXACT):
+            minimum = part.thickness_mm * factor
+        if part.bend_radius_mm is not None and part.bend_radius_mm < minimum:
             findings.add("BEND_RADIUS_TOO_SMALL")
 
     operations = route_operations(part, routing) if routable else ()
@@ -139,15 +152,19 @@ def evaluate_manufacturing(
     supported = None if material.material is None else material.material.supported_operations
     if any(op in blocked or (supported is not None and op not in supported) for op in operations):
         findings.add("UNSUPPORTED_OPERATION")
-    return check("unsupported" if findings else "valid", findings, operations)
+    return check("unsupported" if findings else "valid", findings, operations, minimum)
 
 
 async def check_manufacturing_capability(
-    session: AsyncSession, part: Part, rules: RuleVersionDetails
+    session: AsyncSession, part: Part, rules: RuleVersionDetails, *, reads: Reads | None = None
 ) -> ManufacturingCheck:
-    """Gather catalog facts and routing, then decide with evaluate_manufacturing."""
-    material = await check_part_material(session, part, rules)
+    """Gather catalog facts and routing, then decide with evaluate_manufacturing.
+
+    reads, when given, shares catalog reads across the parts of one calculation."""
+    material = await check_part_material(session, part, rules, reads=reads)
     routing = ()
     if part.part_type in rules.document["allowed_part_types"]:
-        routing = await list_part_routing(session, part.part_type)
+        routing = await memo(
+            reads, ("routing", part.part_type), lambda: list_part_routing(session, part.part_type)
+        )
     return evaluate_manufacturing(part, rules, material, routing)

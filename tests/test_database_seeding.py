@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import shutil
+import zipfile
 from dataclasses import replace
 from datetime import UTC, date
 from decimal import Decimal
@@ -70,12 +71,69 @@ def changed_csv(bundle, target, change):
 
 
 def test_source_inventory_and_checksums(bundle):
-    assert bundle.integrity["dataset_files"] == 681
+    assert bundle.integrity["dataset_files"] == 680  # the archive; OS metadata is not counted
     assert bundle.integrity["protected_hashes"] == 637
     assert len(bundle.raw) == len(ALLOWED_SOURCES) == 28
     assert all(
         not p.startswith(("evaluation/", "rfq_scenarios/", "attachments/")) for p in bundle.raw
     )
+
+
+@pytest.fixture
+def clean_extraction(tmp_path):
+    """A fresh extraction of the frozen archive, as on a clean install (no .DS_Store)."""
+    with zipfile.ZipFile(ARCHIVE) as package:
+        package.extractall(tmp_path)
+    try:
+        yield tmp_path / "rfq_synthetic_data"
+    finally:
+        shutil.rmtree(tmp_path)  # never leave a stray copy of the hidden files behind
+
+
+def test_clean_extraction_passes_without_os_metadata(clean_extraction):
+    assert not any(p.name == ".DS_Store" for p in clean_extraction.rglob("*"))
+    integrity = load_sources(clean_extraction, ARCHIVE).integrity
+    assert integrity["dataset_files"] == 680
+    assert integrity["protected_hashes"] == 637
+
+
+def test_recognized_os_metadata_is_ignored_anywhere(clean_extraction):
+    (clean_extraction / ".DS_Store").write_bytes(b"\0")
+    (clean_extraction / "master_data/.DS_Store").write_bytes(b"\0")
+    assert load_sources(clean_extraction, ARCHIVE).integrity["dataset_files"] == 680
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "docs/unexpected.md",  # outside the protected roots
+        "notes.txt",
+        "master_data/extra.csv",  # inside a protected root
+        "docs/.DS_Store.bak",  # only exact OS metadata names are recognized
+        "docs/Thumbs.db",
+        "src/__pycache__/generate_data.cpython-312.pyc",
+    ],
+)
+def test_unexpected_dataset_file_fails_verification(clean_extraction, relative):
+    path = clean_extraction / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"unexpected")
+    with pytest.raises(SeedError, match="differ"):
+        load_sources(clean_extraction, ARCHIVE)
+
+
+@pytest.mark.parametrize("relative", ["docs/business_rules.md", "master_data/customers.csv"])
+def test_missing_dataset_file_fails_verification(clean_extraction, relative):
+    (clean_extraction / relative).unlink()
+    with pytest.raises(SeedError, match="differ"):
+        load_sources(clean_extraction, ARCHIVE)
+
+
+def test_changed_protected_file_still_fails_its_checksum(clean_extraction):
+    path = clean_extraction / "master_data/customers.csv"
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(SeedError, match="protected checksum mismatch"):
+        load_sources(clean_extraction, ARCHIVE)
 
 
 def test_hidden_files_are_never_json_reader_inputs(monkeypatch):
