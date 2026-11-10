@@ -1,5 +1,10 @@
 """Internal read repositories; callers own sessions and authorize customer scope."""
 
+from rfq_copilot.repositories.attachments import (
+    add_attachment,
+    list_attachments,
+    rfq_belongs_to,
+)
 from rfq_copilot.repositories.queries import (
     RuleIntegrityError,
     SnapshotMismatchError,
@@ -17,6 +22,7 @@ from rfq_copilot.repositories.queries import (
     list_part_routing,
     list_pending_approvals,
     list_quotation_history,
+    list_rfqs,
 )
 from rfq_copilot.repositories.results import (
     CustomerDetails,
@@ -31,6 +37,9 @@ from rfq_copilot.repositories.results import (
 )
 
 __all__ = [
+    "add_attachment",
+    "list_attachments",
+    "rfq_belongs_to",
     "find_materials",
     "get_customer",
     "get_rfq",
@@ -47,6 +56,7 @@ __all__ = [
     "list_operations",
     "list_part_routing",
     "list_quotation_history",
+    "list_rfqs",
     "list_pending_approvals",
     "CustomerDetails",
     "RFQDetails",

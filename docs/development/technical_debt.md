@@ -11,6 +11,9 @@ Known gaps in the deterministic business services, each with an owner day. Add a
 | TD-005 | Overlapping capacity snapshots cannot be stored (`UNIQUE (workcentre_id, week_start)`) | Phase 2.5 | Phase 2.5 follow-up | Resolved (revision `20261109_01`, see below) |
 | TD-006 | Live snapshot freshness and the planning date belong at the request boundary | Phase 2.5 | Phase 3 (API and tool server) | **Open** |
 | TD-007 | Read consistency and revalidation before persistence | Phase 2.5 | Phase 3 (API), quote-persistence phase | **Open: contract defined** |
+| TD-009 (OBS-1) | Caller-injected `Database` is not verified read-only | Day 18 | Future backend work | **Open** |
+| TD-010 (OBS-2) | `GET /quotes/{quote_id}` searches quotation history in Python | Day 18 | Future backend work | **Open** |
+| TD-011 (OBS-3) | `GET /materials` paginates in Python, not SQL | Day 18 | Future backend work | **Open** |
 
 ## TD-001 — `requested_operations` not modelled
 
@@ -163,3 +166,29 @@ Details and evidence are in the [hardening report addendum](phase_02_5_hardening
   - Any other extra, missing or changed file fails. All 637 protected SHA-256 checks still run.
   - Tests cover a clean extraction, `.DS_Store` in two places, six kinds of unexpected file, missing files and a changed protected file.
 - **Snapshot directory mode.** A clone creates `data/rfq_seed_snapshots/` as 0755 and seeding requires 0700 (fail-closed). The README documents `chmod 700`.
+
+## Day 18 API review observations (recorded 2026-11-10, Day 19)
+
+Verified, non-blocking findings from the Day 18 review. All three stay **OPEN** until a fix lands with the tests below.
+
+### TD-009 (OBS-1): Caller-injected `Database` is not verified read-only
+
+- **Origin:** Day 18, `create_app(database=...)` and `api/db.py`.
+- **Risk:** the lazily built database is created with `read_only=True`, so PostgreSQL refuses writes. A `Database` passed to `create_app` is trusted as is. A writable one would serve the protected GET routes through a session that can write, so one mistaken call in a read path could change data.
+- **Recommended correction:** at first use, check `SHOW default_transaction_read_only` (or `SHOW transaction_read_only`) on the injected database, and refuse with 503 when it is off. Alternatively, run `SET TRANSACTION READ ONLY` at the start of every read session.
+- **Verification:** a test that injects a writable `Database` and gets 503 (or a refused write) from a GET route. The existing read-only lazy-database test still passes.
+- **Day 19 note:** attachment uploads use a separate write path (`get_write_session`). They never reuse the read session or the injected read `Database`, so this finding is neither widened nor fixed.
+
+### TD-010 (OBS-2): Quote lookup loads the customer's history
+
+- **Origin:** Day 18, `GET /api/v1/quotes/{quote_id}`.
+- **Risk:** the route loads every quotation of the customer and searches in Python. Cost grows with history size, and a large history can become a slow request.
+- **Recommended correction:** a repository function that selects one released quote by `(quote_id, customer_id)` in SQL, with the release filter in the WHERE clause.
+- **Verification:** a query-count test with a bounded number of SELECTs, independent of history size. The existing visibility tests still pass: released only, own customer only, 404 otherwise.
+
+### TD-011 (OBS-3): Material pagination happens in Python
+
+- **Origin:** Day 18, `GET /api/v1/materials`.
+- **Risk:** the route fetches every matching material identifier and then slices the page. Cost grows with catalog size.
+- **Recommended correction:** apply `ORDER BY material_id LIMIT/OFFSET` (limit + 1 for `has_more`) in the repository query.
+- **Verification:** a test that the SQL carries LIMIT/OFFSET, plus a parity test showing pages match the current ordering and `has_more` behaviour.

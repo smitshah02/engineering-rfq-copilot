@@ -126,6 +126,27 @@ async def get_rfq(session: AsyncSession, rfq_id: str, *, customer_id: str) -> RF
     )
 
 
+async def list_rfqs(
+    session: AsyncSession, customer_id: str, *, limit: int, offset: int = 0
+) -> tuple[RFQ, ...]:
+    """One customer's RFQ headers, newest first (ties by rfq_id); no lines or relations."""
+    _identifier(customer_id)
+    if type(limit) is not int or not 1 <= limit <= 1000:
+        raise ValueError("limit must be an integer from 1 to 1000.")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("offset must be a non-negative integer.")
+    statement = (
+        select(RFQ)
+        .where(RFQ.customer_id == customer_id)
+        .order_by(RFQ.submitted_at.desc(), RFQ.rfq_id)
+        .limit(limit)
+        .offset(offset)
+        .options(raiseload("*"))
+    )
+    with session.no_autoflush:
+        return tuple((await session.scalars(statement)).all())
+
+
 async def get_rfq_parts(
     session: AsyncSession, rfq_id: str, *, customer_id: str
 ) -> tuple[Part, ...] | None:
