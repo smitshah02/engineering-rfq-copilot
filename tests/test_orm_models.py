@@ -1,5 +1,6 @@
 """Independent expectations come from approved Day 4 documents, never model-generated fixtures."""
 
+import copy
 import html
 import importlib
 import json
@@ -72,6 +73,98 @@ APPROVED_TABLES = (
     "audit_events",
     "workflow_runs",
 )
+# Approved after Day 4: TD-012, revision 20261110_01. Specified here, as TD-005 is below;
+# the Day 4 documents stay as written. It deliberately has no ORM relationships.
+TD012_TABLE = "user_customer_bindings"
+TD012_SPEC = dict(
+    columns=[
+        dict(name="user_id", type="TEXT", nullable=False, default="none", rule="—"),
+        dict(name="customer_id", type="TEXT", nullable=False, default="none", rule="—"),
+        dict(
+            name="created_at",
+            type="TIMESTAMPTZ",
+            nullable=False,
+            default="CURRENT_TIMESTAMP",
+            rule="—",
+        ),  # fmt: skip
+        dict(name="revoked_at", type="TIMESTAMPTZ", nullable=True, default="none", rule="—"),
+    ],
+    pk=("user_id", "customer_id"),
+    unique=[],
+    fks=[
+        dict(local=("user_id",), target="users", remote=("user_id",), deferred=False),
+        dict(local=("customer_id",), target="customers", remote=("customer_id",), deferred=False),
+    ],
+    checks=["revoked_at IS NULL OR revoked_at >= created_at"],
+)
+# Approved Phase 3.5 tables (revisions 20261111_02/03), specified here like TD-012; no
+# ORM relationships. Identity and hex checks come from the shared Day 4 conventions.
+PHASE35_SPECS = {
+    "rfq_assignments": dict(
+        columns=[
+            dict(name="rfq_id", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(name="user_id", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(name="assigned_by", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(
+                name="created_at",
+                type="TIMESTAMPTZ",
+                nullable=False,
+                default="CURRENT_TIMESTAMP",
+                rule="—",
+            ),  # fmt: skip
+            dict(name="revoked_at", type="TIMESTAMPTZ", nullable=True, default="none", rule="—"),
+        ],
+        pk=("rfq_id", "user_id"),
+        unique=[],
+        fks=[
+            dict(local=("rfq_id",), target="rfqs", remote=("rfq_id",), deferred=False),
+            dict(local=("user_id",), target="users", remote=("user_id",), deferred=False),
+            dict(local=("assigned_by",), target="users", remote=("user_id",), deferred=False),
+        ],
+        checks=["revoked_at IS NULL OR revoked_at >= created_at"],
+    ),
+    "token_revocations": dict(
+        columns=[
+            dict(
+                name="revocation_id",
+                type="UUID",
+                nullable=False,
+                default="application UUIDv4",
+                rule="—",
+            ),  # fmt: skip
+            dict(name="user_id", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(
+                name="token_sha256",
+                type="TEXT",
+                nullable=True,
+                default="none",
+                rule="64 lowercase hexadecimal characters",
+            ),  # fmt: skip
+            dict(name="not_before", type="TIMESTAMPTZ", nullable=True, default="none", rule="—"),
+            dict(name="expires_at", type="TIMESTAMPTZ", nullable=True, default="none", rule="—"),
+            dict(name="created_by", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(name="reason", type="TEXT", nullable=False, default="none", rule="—"),
+            dict(
+                name="created_at",
+                type="TIMESTAMPTZ",
+                nullable=False,
+                default="CURRENT_TIMESTAMP",
+                rule="—",
+            ),  # fmt: skip
+        ],
+        pk=("revocation_id",),
+        unique=[],
+        fks=[
+            dict(local=("user_id",), target="users", remote=("user_id",), deferred=False),
+            dict(local=("created_by",), target="users", remote=("user_id",), deferred=False),
+        ],
+        checks=[
+            "(token_sha256 IS NULL) <> (not_before IS NULL)",
+            "length(btrim(reason)) > 0 AND length(reason) <= 200",
+        ],
+    ),
+}
+SCHEMA_TABLES = (*APPROVED_TABLES, TD012_TABLE, *PHASE35_SPECS)
 PG = postgresql.dialect()
 
 
@@ -133,6 +226,19 @@ def approved():
     tables["production_capacity"]["unique"] = [("workcentre_id", "week_start", "snapshot_id")]
     assert sum(len(table["columns"]) for table in tables.values()) == 261
     assert sum(len(table["fks"]) for table in tables.values()) == 64
+    tables[TD012_TABLE] = copy.deepcopy(TD012_SPEC)
+    # Approved Phase 3.5 deltas (20261111_04, 20261111_06): asserted as documented first.
+    roles_check = "role IN ('sales_representative','estimator','manufacturing_engineer','sales_manager','administrator','auditor')"  # fmt: skip
+    assert tables["roles"]["checks"] == [roles_check]
+    tables["roles"]["checks"] = [roles_check[:-1] + ",'identity_operator')"]
+    operation = next(c for c in tables["idempotency_records"]["checks"] if c.startswith("operation IN"))  # fmt: skip
+    assert operation.endswith("'edit_quote_draft')")
+    tables["idempotency_records"]["checks"] = [
+        operation[:-1] + ",'attach_rfq_document')" if c == operation else c
+        for c in tables["idempotency_records"]["checks"]
+    ]
+    for name, spec in PHASE35_SPECS.items():
+        tables[name] = copy.deepcopy(spec)
     return tables
 
 
@@ -151,8 +257,8 @@ def orm_table(name):
 
 
 def test_exact_registry_and_single_base():
-    assert len(MODEL_CLASSES) == len(Base.registry.mappers) == 33
-    assert {table.name for table in Base.metadata.tables.values()} == set(APPROVED_TABLES)
+    assert len(MODEL_CLASSES) == len(Base.registry.mappers) == 36
+    assert {table.name for table in Base.metadata.tables.values()} == set(SCHEMA_TABLES)
     assert {mapper.class_ for mapper in Base.registry.mappers} == set(MODEL_CLASSES)
     assert all(
         model.metadata is Base.metadata and model.registry is Base.registry
@@ -164,11 +270,11 @@ def test_exact_registry_and_single_base():
     }
     assert orm_table("workflow_runs").schema == "orchestration"
     assert all(
-        orm_table(name).schema == "business" for name in APPROVED_TABLES if name != "workflow_runs"
+        orm_table(name).schema == "business" for name in SCHEMA_TABLES if name != "workflow_runs"
     )
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_all_columns_types_nullability_and_primary_keys_match_day4(approved, name):
     expectation = approved[name]
     table = orm_table(name)
@@ -193,7 +299,7 @@ def test_all_columns_types_nullability_and_primary_keys_match_day4(approved, nam
             assert actual.type.as_uuid is True
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_foreign_and_unique_keys_match_day4(approved, name):
     table = orm_table(name)
     expected = approved[name]
@@ -229,7 +335,7 @@ def test_foreign_and_unique_keys_match_day4(approved, name):
     )
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_insert_defaults_and_computed_values_match_day4(approved, name):
     for expected in approved[name]["columns"]:
         column = orm_table(name).c[expected["name"]]
@@ -301,7 +407,7 @@ def expected_shared_checks(table):
     return checks
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_exact_table_and_common_checks_match_day4(approved, name):
     checks = [key for key in orm_table(name).constraints if isinstance(key, CheckConstraint)]
     wanted = approved[name]["checks"] + expected_shared_checks(approved[name])
@@ -341,7 +447,30 @@ def test_every_documented_index_matches_with_no_redundant_indexes():
                 None if where is None else normalized(where),
             )
             assert index.dialect_options["postgresql"]["using"] == "btree"
-    assert found == expectations and len(found) == 14
+    # TD-012 indexes (revision 20261110_01), not in the Day 4 document.
+    expectations["ix_user_customer_bindings_customer_id"] = (
+        TD012_TABLE,
+        ("customer_id",),
+        False,
+        None,
+    )
+    expectations["uq_user_customer_bindings_active_user"] = (
+        TD012_TABLE,
+        ("user_id",),
+        True,
+        normalized("revoked_at IS NULL"),
+    )
+    # Phase 3.5 indexes (20261111_02/03).
+    expectations["ix_rfq_assignments_active_user"] = (
+        "rfq_assignments", ("user_id", "rfq_id"), False, normalized("revoked_at IS NULL"),
+    )  # fmt: skip
+    expectations["uq_token_revocations_token_sha256"] = (
+        "token_revocations", ("token_sha256",), True, normalized("token_sha256 IS NOT NULL"),
+    )  # fmt: skip
+    expectations["ix_token_revocations_user_not_before"] = (
+        "token_revocations", ("user_id", "not_before"), False, normalized("not_before IS NOT NULL"),
+    )  # fmt: skip
+    assert found == expectations and len(found) == 19
 
 
 @pytest.mark.parametrize("name", APPROVED_TABLES)
@@ -420,7 +549,7 @@ def test_quote_cycle_and_version_pinning_remain_database_constraints():
     assert orm_table("approval_history").c.approval_request_id.nullable
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_postgresql_ddl_compiles_offline(name):
     table = orm_table(name)
     ddl = str(CreateTable(table).compile(dialect=PG))
@@ -515,7 +644,7 @@ def fixture_values(spec):
     return values
 
 
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_each_model_constructs_transient_typed_fixtures(approved, name):
     model = next(cls for cls in MODEL_CLASSES if cls.__table__.name == name)
     values = fixture_values(approved[name])
@@ -602,16 +731,16 @@ with ExitStack() as stack:
         stack.enter_context(patch(name, side_effect=forbidden))
     import rfq_copilot.models as models
     configure_mappers()
-    assert len(models.Base.metadata.tables) == 33
+    assert len(models.Base.metadata.tables) == 36
     for cls in models.MODEL_CLASSES:
         assert cls.metadata is models.Base.metadata
-    print('33 models registered without database I/O')
+    print('36 models registered without database I/O')
 """
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, text=True, capture_output=True, timeout=15
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "33 models registered without database I/O"
+    assert result.stdout.strip() == "36 models registered without database I/O"
 
 
 @pytest.mark.asyncio

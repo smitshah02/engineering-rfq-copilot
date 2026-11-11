@@ -50,7 +50,8 @@ class IdempotencyRecord(Base):
             match="SIMPLE",
         ),
         CheckConstraint(
-            "operation IN ('create_rfq','create_quote_draft','request_approval','approve_quote','reject_quote','release_quote','edit_quote_draft')",
+            # attach_rfq_document: approved Phase 3.5 upload idempotency (20261111_04).
+            "operation IN ('create_rfq','create_quote_draft','request_approval','approve_quote','reject_quote','release_quote','edit_quote_draft','attach_rfq_document')",
             name="rule_01",
         ),
         CheckConstraint(

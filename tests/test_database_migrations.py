@@ -15,7 +15,8 @@ from alembic.script import ScriptDirectory
 from alembic.util import CommandError
 from sqlalchemy import inspect, text
 from test_orm_models import (
-    APPROVED_TABLES,
+    SCHEMA_TABLES,
+    TD012_TABLE,
     expected_shared_checks,
 )
 from test_orm_models import (
@@ -37,7 +38,9 @@ from rfq_copilot.migration_safety import (
 from rfq_copilot.models import Base
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = "20261109_01"  # head: initial schema + approved TD-005 capacity key
+REVISION = "20261111_06"  # head: initial, TD-005, TD-012, Phase 3.5 02/03/04/06
+TD012_REVISION = "20261110_01"
+TD005_REVISION = "20261109_01"
 INITIAL_REVISION = "20261108_01"
 SENTINEL = "rfq_migration_test_unrelated"
 
@@ -52,7 +55,7 @@ def alembic_config(target="test", *, allow=False):
 
 
 def qualified(name):
-    assert name in APPROVED_TABLES
+    assert name in SCHEMA_TABLES
     return ("orchestration" if name == "workflow_runs" else "business") + "." + name
 
 
@@ -99,7 +102,7 @@ def catalog(connection):
     )
     inspector = inspect(connection)
     columns = {}
-    for table in APPROVED_TABLES:
+    for table in SCHEMA_TABLES:
         schema, name = qualified(table).split(".")
         columns[table] = inspector.get_columns(name, schema=schema)
         for column in columns[table]:
@@ -238,6 +241,30 @@ def index_expectations():
             predicate=None if predicate == "—" else predicate,
         )
     assert len(result) == 14
+    # TD-012 indexes (revision 20261110_01), not in the Day 4 document.
+    result["ix_user_customer_bindings_customer_id"] = dict(
+        table=TD012_TABLE, columns=["customer_id"], method="B-tree", unique=False, predicate=None
+    )
+    result["uq_user_customer_bindings_active_user"] = dict(
+        table=TD012_TABLE,
+        columns=["user_id"],
+        method="B-tree",
+        unique=True,
+        predicate="revoked_at IS NULL",
+    )
+    # Phase 3.5 indexes (20261111_02/03), not in the Day 4 document.
+    result["ix_rfq_assignments_active_user"] = dict(
+        table="rfq_assignments", columns=["user_id", "rfq_id"], method="B-tree", unique=False,
+        predicate="revoked_at IS NULL",
+    )  # fmt: skip
+    result["uq_token_revocations_token_sha256"] = dict(
+        table="token_revocations", columns=["token_sha256"], method="B-tree", unique=True,
+        predicate="token_sha256 IS NOT NULL",
+    )  # fmt: skip
+    result["ix_token_revocations_user_not_before"] = dict(
+        table="token_revocations", columns=["user_id", "not_before"], method="B-tree", unique=False,
+        predicate="not_before IS NOT NULL",
+    )  # fmt: skip
     return result
 
 
@@ -247,9 +274,9 @@ def verify_physical(connection, approved, *, expect_empty=True):
     wanted_tables = sorted([*qualified(name).split("."), "r"] for name in approved)
     assert result["shape"]["tables"] == wanted_tables
     counts = Counter(row["kind"] for row in result["constraints"])
-    assert {kind: counts[kind] for kind in "pfuc"} == {"p": 33, "f": 64, "u": 14, "c": 207}
+    assert {kind: counts[kind] for kind in "pfuc"} == {"p": 36, "f": 71, "u": 14, "c": 218}
     assert set(counts) <= set("pfucn"), counts
-    assert sum(len(cols) for cols in result["columns"].values()) == 261
+    assert sum(len(cols) for cols in result["columns"].values()) == 278
     assert result["revision"] == [REVISION]
     probes = 0
     for name, expected in approved.items():
@@ -318,8 +345,8 @@ def verify_physical(connection, approved, *, expect_empty=True):
     explicit = {index["name"]: index for index in result["indexes"] if index["supporting"] is None}
     expected_indexes = index_expectations()
     assert explicit.keys() == expected_indexes.keys()
-    assert len(result["indexes"]) == 61
-    assert len([i for i in result["indexes"] if i["supporting"]]) == 47
+    assert len(result["indexes"]) == 69  # + 2 PK + 3 explicit (Phase 3.5)
+    assert len([i for i in result["indexes"] if i["supporting"]]) == 50
     for name, expected in expected_indexes.items():
         index = explicit[name]
         assert index["tab"] == expected["table"]
@@ -485,17 +512,26 @@ def test_configuration_metadata_and_revision():
     config = alembic_config()
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [REVISION]
-    head, initial = list(script.walk_revisions())
-    assert (head.revision, head.down_revision) == (REVISION, INITIAL_REVISION)
-    assert (initial.revision, initial.down_revision) == (INITIAL_REVISION, None)
-    assert head.dependencies is None and initial.dependencies is None
-    assert (initial.doc, head.doc) == (
+    revisions = list(script.walk_revisions())
+    chain = [(r.revision, r.down_revision) for r in revisions]
+    assert chain == [
+        (REVISION, "20261111_04"),
+        ("20261111_04", "20261111_03"),
+        ("20261111_03", "20261111_02"),
+        ("20261111_02", TD012_REVISION),
+        (TD012_REVISION, TD005_REVISION),
+        (TD005_REVISION, INITIAL_REVISION),
+        (INITIAL_REVISION, None),
+    ]  # 20261111_05 stays deferred in alembic/proposed/, outside this history
+    assert all(r.dependencies is None for r in revisions)
+    assert [r.doc for r in reversed(revisions)][:3] == [
         "initial_rfq_database_schema",
         "capacity_unique_per_snapshot",
-    )
-    for revision in (head, initial):
+        "user_customer_bindings",
+    ]
+    for revision in revisions:
         assert callable(revision.module.upgrade) and callable(revision.module.downgrade)
-    assert len(Base.metadata.tables) == 33
+    assert len(Base.metadata.tables) == 36
     assert config.get_main_option("sqlalchemy.url") is None
 
 
@@ -665,7 +701,7 @@ def test_real_upgrade_downgrade_reupgrade_and_cleanup(migration_lifecycle):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("name", APPROVED_TABLES)
+@pytest.mark.parametrize("name", SCHEMA_TABLES)
 def test_each_physical_table_matches_day4(migration_lifecycle, approved, name):
     assert len(migration_lifecycle["first"]["columns"][name]) == len(approved[name]["columns"])
 
@@ -673,10 +709,10 @@ def test_each_physical_table_matches_day4(migration_lifecycle, approved, name):
 @pytest.mark.integration
 def test_independent_checks_indexes_and_empty_data(migration_lifecycle):
     result = migration_lifecycle["first"]
-    assert result["counts"]["c"] == 207
+    assert result["counts"]["c"] == 218  # + 5 token_revocations + 3 rfq_assignments
     assert result["probes"] > 2000
-    assert sum(i["predicate"] is not None for i in result["indexes"]) == 7
-    assert sum(i["predicate"] is not None and i["indisunique"] for i in result["indexes"]) == 3
+    assert sum(i["predicate"] is not None for i in result["indexes"]) == 11
+    assert sum(i["predicate"] is not None and i["indisunique"] for i in result["indexes"]) == 5
 
 
 @pytest.mark.integration
@@ -689,7 +725,7 @@ def test_development_physical_schema_read_only(approved):
                     f"FROM (SELECT to_jsonb(t) AS row_data FROM {qualified(name)} t) source"
                 )
             )
-            for name in APPROVED_TABLES
+            for name in SCHEMA_TABLES
         }
 
     async def verify():
@@ -707,3 +743,102 @@ def test_development_physical_schema_read_only(approved):
 
     result = asyncio.run(verify())
     assert result["revision"] == [REVISION]
+
+
+TD012_CLEANUP = (
+    "DELETE FROM business.user_customer_bindings",
+    "DELETE FROM business.users WHERE user_id = 'U-T'",
+    "DELETE FROM business.customers WHERE customer_id = 'C-T'",
+    "DELETE FROM business.roles WHERE role = 'estimator'",
+)
+
+
+@pytest.mark.integration
+def test_td012_downgrade_refuses_to_drop_bindings_and_reverses_cleanly():
+    """Guarded test target only: a provisioned binding blocks downgrade; nothing is deleted."""
+
+    async def scenario():
+        settings = MigrationSettings.from_arguments(alembic_config(allow=True).cmd_opts.x)
+
+        async def run(action, revision):
+            config = alembic_config(allow=action == "downgrade")
+            await asyncio.to_thread(getattr(command, action), config, revision)
+
+        async with Database(settings.database) as database:
+            async with database.engine.connect() as connection:
+                identity = await connection.run_sync(verify_identity, settings)
+                assert identity["database"] == "rfq_copilot_test"
+                assert await connection.scalar(text("SELECT pg_try_advisory_lock(461441,505)"))
+                await connection.rollback()
+                assert (await connection.run_sync(user_objects))["relations"] == []
+                try:
+                    await run("upgrade", "head")
+                    await connection.execute(
+                        text("INSERT INTO business.roles(role) VALUES ('estimator')")
+                    )
+                    await connection.execute(
+                        text(
+                            "INSERT INTO business.users VALUES ('U-T','T','estimator',"
+                            "'t@x.invalid',TRUE,'r','auth|t')"
+                        )
+                    )
+                    await connection.commit()
+                    customer = text(
+                        "INSERT INTO business.customers VALUES ('C-T','C','i','c','s','US','r',"
+                        "'active','net30',0,0,'ground','none','2026-01-01','threshold_based')"
+                    )
+                    await connection.execute(customer)
+                    await connection.execute(
+                        text(
+                            "INSERT INTO business.user_customer_bindings(user_id, customer_id) "
+                            "VALUES ('U-T','C-T')"
+                        )
+                    )
+                    await connection.commit()
+                    with pytest.raises(CommandError, match="downgrade refused"):
+                        await run("downgrade", TD005_REVISION)
+                    assert (
+                        await connection.scalar(
+                            text("SELECT count(*) FROM business.user_customer_bindings")
+                        )
+                        == 1
+                    )
+                    assert (
+                        await connection.scalar(
+                            text("SELECT version_num FROM public.alembic_version")
+                        )
+                        == REVISION
+                    )
+                    for statement in TD012_CLEANUP:
+                        await connection.execute(text(statement))
+                    await connection.commit()
+                    await run("downgrade", TD005_REVISION)
+                    assert (
+                        await connection.scalar(
+                            text("SELECT to_regclass('business.user_customer_bindings')")
+                        )
+                        is None
+                    )
+                    assert (
+                        await connection.scalar(
+                            text("SELECT version_num FROM public.alembic_version")
+                        )
+                        == TD005_REVISION
+                    )
+                    await run("upgrade", "head")
+                finally:
+                    await connection.rollback()
+                    if await connection.scalar(
+                        text("SELECT to_regclass('business.customers') IS NOT NULL")
+                    ):
+                        for statement in TD012_CLEANUP:
+                            await connection.execute(text(statement))
+                        await connection.commit()
+                        await run("downgrade", "base")
+                    await connection.run_sync(cleanup_test_tracker)
+                    await connection.commit()
+                    assert (await connection.run_sync(user_objects))["relations"] == []
+                    await connection.execute(text("SELECT pg_advisory_unlock(461441,505)"))
+                    await connection.rollback()
+
+    asyncio.run(scenario())

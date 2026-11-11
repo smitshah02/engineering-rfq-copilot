@@ -95,7 +95,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     async def run() -> str:
-        config = DatabaseConfig.from_env(args.target, env_file=args.env_file)
+        config = DatabaseConfig.from_env(args.target, env_file=Path(args.env_file))
         validate_target(config)
         if args.confirm_database != config.url.database:
             raise SeedError("Confirmation does not match the target database.")

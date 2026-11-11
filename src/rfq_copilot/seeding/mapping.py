@@ -31,6 +31,9 @@ EMPTY_TABLES = frozenset(
         "idempotency_records",
         "audit_events",
         "workflow_runs",
+        "user_customer_bindings",  # TD-012: provisioned explicitly, never seeded
+        "rfq_assignments",  # Phase 3.5 (20261111_02): provisioned explicitly, never seeded
+        "token_revocations",  # Phase 3.5 (20261111_03): operator-written, never seeded
     }
 )
 DERIVED_COUNTS = {

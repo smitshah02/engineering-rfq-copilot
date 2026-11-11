@@ -1,0 +1,25 @@
+{
+  "version": "rbac-policy-v2",
+  "builds_on": "dataset v1.1.0 master_data/roles_permissions.csv (27 grants)",
+  "roles": ["identity_operator"],
+  "permissions": [
+    "view_catalog",
+    "view_quote",
+    "attach_rfq_document",
+    "manage_customer_bindings",
+    "revoke_tokens"
+  ],
+  "grants": [
+    ["sales_representative", "view_catalog"],
+    ["estimator", "view_catalog"],
+    ["manufacturing_engineer", "view_catalog"],
+    ["estimator", "view_quote"],
+    ["sales_representative", "view_quote"],
+    ["sales_manager", "view_quote"],
+    ["auditor", "view_quote"],
+    ["sales_representative", "attach_rfq_document"],
+    ["estimator", "attach_rfq_document"],
+    ["identity_operator", "manage_customer_bindings"],
+    ["identity_operator", "revoke_tokens"]
+  ]
+}

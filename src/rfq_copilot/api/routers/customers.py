@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import Principal, require_route_permission
 from rfq_copilot.api.db import get_read_session
 from rfq_copilot.api.schemas.reads import CustomerContact, CustomerProfile
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.get("/me", summary="The verified customer's profile")
 async def me(
-    principal: Annotated[Principal, Depends(get_principal)],
+    principal: Annotated[Principal, Depends(require_route_permission("customer_profile"))],
     session: Annotated[Any, Depends(get_read_session)],
 ) -> CustomerProfile:
     from rfq_copilot.repositories import get_customer

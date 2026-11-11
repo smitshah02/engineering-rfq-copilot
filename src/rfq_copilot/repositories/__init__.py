@@ -5,6 +5,13 @@ from rfq_copilot.repositories.attachments import (
     list_attachments,
     rfq_belongs_to,
 )
+from rfq_copilot.repositories.identity import (
+    customer_binding,
+    eligible_customers,
+    find_active_user,
+    granted_permissions,
+    token_revoked,
+)
 from rfq_copilot.repositories.queries import (
     RuleIntegrityError,
     SnapshotMismatchError,
@@ -12,6 +19,7 @@ from rfq_copilot.repositories.queries import (
     get_customer,
     get_manufacturing_capabilities,
     get_material_availability,
+    get_released_quotation,
     get_rfq,
     get_rfq_parts,
     get_rule_version,
@@ -37,6 +45,11 @@ from rfq_copilot.repositories.results import (
 )
 
 __all__ = [
+    "customer_binding",
+    "granted_permissions",
+    "eligible_customers",
+    "token_revoked",
+    "find_active_user",
     "add_attachment",
     "list_attachments",
     "rfq_belongs_to",
@@ -55,6 +68,7 @@ __all__ = [
     "list_materials",
     "list_operations",
     "list_part_routing",
+    "get_released_quotation",
     "list_quotation_history",
     "list_rfqs",
     "list_pending_approvals",

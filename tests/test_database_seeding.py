@@ -304,10 +304,12 @@ def test_dates_timezones_booleans_and_null_handling():
         convert("", TABLES["users"].c.user_id, "required")
 
 
-def test_all_33_table_classifications_and_dependency_order(plan):
+def test_all_34_table_classifications_and_dependency_order(plan):
     assert {n: len(r) for n, r in plan.rows.items()} == EXPECTED_COUNTS
     assert sum(map(len, plan.rows.values())) == 1089
-    assert len(EMPTY_TABLES) == 7
+    # Seven Day 4 runtime tables, TD-012 bindings and Phase 3.5 assignments/revocations.
+    assert len(EMPTY_TABLES) == 10 and "user_customer_bindings" in EMPTY_TABLES
+    assert {"rfq_assignments", "token_revocations"} <= EMPTY_TABLES
     positions = {n: i for i, n in enumerate(dependency_order())}
     for name, table in TABLES.items():
         for fk in table.foreign_key_constraints:

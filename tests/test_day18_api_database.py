@@ -22,7 +22,7 @@ from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
 
 from rfq_copilot.api.app import create_app
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER, Principal, get_principal
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_read_session
 from rfq_copilot.models import RFQ, Material, Quote
@@ -31,12 +31,17 @@ from rfq_copilot.seeding.mapping import TABLES
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
+# Day 21: an injected principal is permission-checked like a real one; these reads need
+# exactly these grants (business.role_permissions names).
+READS = frozenset({VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS})
+
+
 DEV = ApiSettings(environment="development")
 
 
 def app_for(principal_id, session=None, database=None):
     app = create_app(DEV, database=database)
-    app.dependency_overrides[get_principal] = lambda: Principal(principal_id)
+    app.dependency_overrides[get_principal] = lambda: Principal(principal_id, READS)
     if session is not None:
 
         async def shared():
@@ -210,7 +215,7 @@ async def test_only_released_quotes_are_visible_and_only_to_their_customer(popul
         ("/api/v1/rfqs", 1),
         ("/api/v1/rfqs/{rfq}", 2),
         ("/api/v1/materials", 2),
-        ("/api/v1/quotes/RFQ-NOT-A-QUOTE", 3),
+        ("/api/v1/quotes/RFQ-NOT-A-QUOTE", 1),  # TD-010: keyed lookup, was 3
     ],
 )
 async def test_reads_are_bounded_selects_only(populated, seed_database, seed_plan, path, selects):

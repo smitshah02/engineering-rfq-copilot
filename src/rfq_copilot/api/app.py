@@ -25,6 +25,7 @@ from rfq_copilot.api.routers import (
     rfqs,
     system,
 )
+from rfq_copilot.api.tokens import TokenVerifier
 
 if TYPE_CHECKING:
     from rfq_copilot.database import Database
@@ -99,6 +100,9 @@ def create_app(
         exception_handlers={RequestValidationError: request_validation_handler},
     )
     app.state.settings = settings
+    # Loads and checks the public key now: an unsafe key stops startup. None when the
+    # trust boundary is not configured (bearer requests then answer 503).
+    app.state.token_verifier = TokenVerifier.from_settings(settings)
     app.state.database = database
     app.state.owns_database = False
     app.state.write_database = None

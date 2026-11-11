@@ -10,6 +10,10 @@ described below; only attachment uploads use ``get_write_session``.
   refuses writes), owned by the application and disposed at shutdown.
 - Each request gets its own ``AsyncSession`` from ``Database.session()``, which rolls
   back and closes it on success, error or cancellation. Nothing commits.
+- Every read transaction starts with ``SET TRANSACTION READ ONLY`` (TD-009), issued from
+  the session's ``after_begin`` event, so PostgreSQL refuses writes even when an injected
+  ``Database`` was built writable. It runs only when the route queries (a request that
+  fails validation still does no I/O); a failure is the same opaque 503.
 - Database modules are imported lazily, so the application and its database-free
   endpoints start without them.
 """
@@ -52,15 +56,22 @@ async def get_read_session(
     principal: Annotated[Principal, Depends(get_principal)],
     database: Annotated[Any, Depends(get_database)],
 ) -> AsyncIterator["AsyncSession"]:
+    from sqlalchemy import event
+
     from rfq_copilot.database import DatabaseError
 
     try:
         async with database.session() as session:
+            event.listen(session.sync_session, "after_begin", _read_only_transaction)
             yield session
     except DatabaseError:
         # Database.session already replaced driver errors with a URL-free message; the
         # client gets neither that nor SQL, parameters or a traceback.
         raise unavailable() from None
+
+
+def _read_only_transaction(session, transaction, connection) -> None:
+    connection.exec_driver_sql("SET TRANSACTION READ ONLY")
 
 
 async def get_write_database(request: Request) -> "Database":

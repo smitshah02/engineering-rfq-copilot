@@ -14,4 +14,4 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check src tests alembic
-      - run: uv run pytest -q -p no:cacheprovider tests/test_database_config.py tests/test_hardening_public.py tests/test_api.py tests/test_api_schemas.py tests/test_api_reads.py tests/test_attachments.py
+      - run: uv run pytest -q -p no:cacheprovider tests/test_database_config.py tests/test_hardening_public.py tests/test_api.py tests/test_api_schemas.py tests/test_api_reads.py tests/test_attachments.py tests/test_auth.py tests/test_rbac.py tests/test_phase3_hardening.py tests/test_phase3_reconcile.py tests/test_phase35_completion.py

@@ -33,7 +33,7 @@ class AttachmentMetadata(BaseModel):
 class AttachmentList(BaseModel):
     model_config = _STRICT
 
-    items: list[AttachmentMetadata]
+    items: tuple[AttachmentMetadata, ...]
 
 
 class PdfPage(BaseModel):
@@ -51,7 +51,7 @@ class PdfExtraction(BaseModel):
     kind: Literal["pdf"]
     status: Literal["text", "no_text"]
     page_count: int
-    pages: list[PdfPage]
+    pages: tuple[PdfPage, ...]
     truncated: bool
 
 
@@ -77,7 +77,7 @@ class BomExtraction(BaseModel):
     model_config = _STRICT
 
     kind: Literal["bom"]
-    rows: list[BomRow]
+    rows: tuple[BomRow, ...]
 
 
 class AttachmentUploadResponse(AttachmentMetadata):
@@ -99,4 +99,4 @@ class AttachmentRejection(BaseModel):
     code: Literal["ATTACHMENT_REJECTED"]
     message: str
     reason: RejectReason
-    issues: list[BomIssue]
+    issues: tuple[BomIssue, ...]

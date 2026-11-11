@@ -9,17 +9,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload
 
 from rfq_copilot.models import RFQ, RFQAttachment
-from rfq_copilot.repositories.queries import _identifier
+from rfq_copilot.repositories.queries import _identifier, assigned_to
 
 # Every uploaded file is customer supplied (dataset value: customer_supplied_simulated).
 SOURCE_ROLE = "customer_supplied"
 
 
-async def rfq_belongs_to(session: AsyncSession, rfq_id: str, *, customer_id: str) -> bool:
+async def rfq_belongs_to(
+    session: AsyncSession, rfq_id: str, *, customer_id: str, assigned_user: str | None = None
+) -> bool:
     _identifier(rfq_id)
     _identifier(customer_id)
-    owned = exists().where(RFQ.rfq_id == rfq_id, RFQ.customer_id == customer_id)
-    return bool(await session.scalar(select(owned)))
+    conditions = [RFQ.rfq_id == rfq_id, RFQ.customer_id == customer_id]
+    if assigned_user is not None:
+        conditions.append(assigned_to(assigned_user))
+    return bool(await session.scalar(select(exists().where(*conditions))))
 
 
 def add_attachment(
@@ -51,7 +55,7 @@ def add_attachment(
 
 
 async def list_attachments(
-    session: AsyncSession, rfq_id: str, *, customer_id: str
+    session: AsyncSession, rfq_id: str, *, customer_id: str, assigned_user: str | None = None
 ) -> tuple[RFQAttachment, ...]:
     """Attachments of one of the customer's RFQs, ordered by id; empty if not theirs."""
     _identifier(rfq_id)
@@ -63,5 +67,7 @@ async def list_attachments(
         .order_by(RFQAttachment.attachment_id)
         .options(raiseload("*"))
     )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
     with session.no_autoflush:
         return tuple((await session.scalars(statement)).all())

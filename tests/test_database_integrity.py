@@ -36,6 +36,21 @@ from rfq_copilot.seeding.mapping import EXPECTED_COUNTS, TABLES, build_plan
 from rfq_copilot.seeding.rules import REGISTERED
 from rfq_copilot.seeding.transform import json_text
 
+
+def expected_records(overlay_state):
+    """Baseline + registered rules + the rows of the reported overlay (pinned file)."""
+    from rfq_copilot.schema_contract import active
+    from rfq_copilot.seeding.policy import policy_rows
+
+    base = 1089 + len(REGISTERED)
+    if overlay_state == "absent":
+        return base
+    assert overlay_state is not None and overlay_state.startswith("applied:")
+    version = overlay_state.removeprefix("applied:")
+    assert version in active().policy_overlays
+    return base + sum(len(rows) for rows in policy_rows(version).values())
+
+
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 ROOT = Path(__file__).resolve().parents[1]
 POPULATED = sorted(n for n, count in EXPECTED_COUNTS.items() if count)
@@ -66,24 +81,26 @@ async def test_current_development_integrity_and_preservation(seed_bundle):
     plan = build_plan(seed_bundle, ROOT / "data/rfq_seed_snapshots")
     result = await run_integrity(config, plan)
     assert result["database"] == "rfq_copilot_dev" and result["role"] == "rfq_copilot_dev"
-    assert result["alembic_revision"] == "20261109_01"
+    # Head 20261111_06 (TD-012 + Phase 3.5); values measured on the seeded test DB.
+    assert result["alembic_revision"] == "20261111_06"
     assert result["definitions"] == {
-        "tables": 33,
-        "columns": 261,
-        "primary_keys": 33,
-        "foreign_keys": 64,
+        "tables": 36,
+        "columns": 278,
+        "primary_keys": 36,
+        "foreign_keys": 71,
         "additional_unique_constraints": 14,
-        "check_constraints": 207,
-        "explicit_indexes": 14,
-        "unique_partial_indexes": 3,
+        "check_constraints": 218,
+        "explicit_indexes": 19,
+        "unique_partial_indexes": 5,
     }
-    # The 1089-record baseline plus each approved post-baseline rule (approval-v1.2).
-    assert result["records"] == 1089 + len(REGISTERED)
+    # The 1089-record baseline, each approved post-baseline rule (approval-v1.2) and, if
+    # applied, exactly one overlay the active contract accepts (complete; partial fails).
+    assert result["records"] == expected_records(result["policy_overlay"])
     assert result["source_values_checked"] == 9587
     assert result["decimal_values_checked"] == 1353
-    assert result["foreign_key_data_checks"] == 64 and result["check_data_checks"] == 207
-    assert result["unique_data_checks"] == 17 and result["violations"] == 0
-    assert result["populated_tables"] == 26 and len(result["empty_runtime_tables"]) == 7
+    assert result["foreign_key_data_checks"] == 71 and result["check_data_checks"] == 218
+    assert result["unique_data_checks"] == 19 and result["violations"] == 0
+    assert result["populated_tables"] == 26 and len(result["empty_runtime_tables"]) == 10
     assert result["preserved"]
 
 

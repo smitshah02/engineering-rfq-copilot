@@ -24,7 +24,13 @@ from test_database_seeding_integration import session as session
 
 import rfq_copilot.repositories as repositories
 from rfq_copilot.api.app import create_app
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import (
+    CREATE_RFQ,
+    VIEW_ASSIGNED_RFQS,
+    VIEW_CUSTOMER,
+    Principal,
+    get_principal,
+)
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_read_session, get_write_session
 from rfq_copilot.attachments import extract_bom, extract_pdf
@@ -32,6 +38,11 @@ from rfq_copilot.models import RFQ, RFQAttachment
 
 pytestmark = pytest.mark.integration
 async_test = pytest.mark.asyncio(loop_scope="module")
+
+# Day 21: an injected principal is permission-checked like a real one; upload needs
+# create_rfq and the metadata list view_assigned_rfqs.
+UPLOADS = frozenset({CREATE_RFQ, VIEW_ASSIGNED_RFQS})
+
 
 DATASET = Path(__file__).resolve().parents[1] / "data" / "rfq_synthetic_data"
 
@@ -47,7 +58,7 @@ def app_for(principal_id, joined, storage):
     storage = storage if storage.name == "store" else storage / "store"
     app = create_app(ApiSettings(environment="development", attachment_dir=storage))
     if principal_id is not None:
-        app.dependency_overrides[get_principal] = lambda: Principal(principal_id)
+        app.dependency_overrides[get_principal] = lambda: Principal(principal_id, UPLOADS)
 
     async def shared():
         yield joined
@@ -236,7 +247,9 @@ async def test_lazily_created_write_database_is_separate_and_writable(seed_datab
     url = seed_database.config.url.render_as_string(hide_password=False)
     monkeypatch.setenv("DATABASE_URL", url)  # never printed
     app = create_app(ApiSettings(environment="development", attachment_dir=Path("/nonexistent")))
-    app.dependency_overrides[get_principal] = lambda: Principal("CUST-ANY")
+    app.dependency_overrides[get_principal] = lambda: Principal(
+        "CUST-ANY", UPLOADS | {VIEW_CUSTOMER}
+    )
     response = await call(
         app, "POST", "/api/v1/rfqs/RFQ-NONE/attachments",
         files={"file": ("spec.pdf", pdf("x"), "application/pdf")},

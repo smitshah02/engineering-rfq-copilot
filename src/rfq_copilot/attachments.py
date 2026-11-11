@@ -15,9 +15,12 @@ a user-supplied path, and no error message carries file content.
 import csv
 import hashlib
 import io
+import json
 import os
 import secrets
 import stat
+import subprocess
+import sys
 import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -25,6 +28,7 @@ from pathlib import Path
 from typing import Literal
 
 from rfq_copilot.api.schemas.common import _PLAIN_DECIMAL, INT32_MAX
+from rfq_copilot.paths import UntrustedPathError, open_trusted_parent
 
 DocumentType = Literal["pdf", "csv"]
 
@@ -81,6 +85,9 @@ RejectReason = Literal[
     "pdf_malformed",
     "pdf_encrypted",
     "pdf_too_many_pages",
+    "pdf_too_complex",
+    "idempotency_key_invalid",
+    "idempotency_key_conflict",
     "bom_encoding",
     "bom_malformed",
     "bom_columns",
@@ -186,7 +193,7 @@ def check_file(
     declared = (client_type or "application/octet-stream").split(";")[0].strip().lower()
     if declared not in _CLIENT_TYPES[document_type]:
         raise AttachmentRejected("content_type_mismatch")
-    extraction = extract_pdf(data) if document_type == "pdf" else extract_bom(data)
+    extraction = extract_pdf_isolated(data) if document_type == "pdf" else extract_bom(data)
     return CheckedFile(
         filename=filename,  # type: ignore[arg-type]  # checked by check_filename
         document_type=document_type,
@@ -225,6 +232,52 @@ def extract_pdf(data: bytes) -> PdfExtraction:
         raise AttachmentRejected("pdf_malformed") from None
     has_text = any(page.text.strip() for page in pages)
     return PdfExtraction("text" if has_text else "no_text", page_count, tuple(pages), truncated)
+
+
+PDF_TIMEOUT_SECONDS = 15  # wall clock; the child also has a 10 s CPU limit
+_PDF_WORKER = (sys.executable, "-I", "-m", "rfq_copilot.pdf_worker")
+
+
+def extract_pdf_isolated(data: bytes) -> PdfExtraction:
+    """``extract_pdf`` in a child process that is killed at the deadline.
+
+    A thread cannot be stopped, so pypdf runs in its own process: ``-I`` (no user site,
+    no PYTHON* variables), an empty environment (no database settings reach the parser),
+    CPU and memory limits (``pdf_worker``). A timeout, a signal or a crash becomes a fixed
+    rejection; the child's output is validated strictly before use.
+    """
+    try:
+        done = subprocess.run(
+            _PDF_WORKER, input=data, capture_output=True, timeout=PDF_TIMEOUT_SECONDS,
+            env={}, check=False,
+        )  # fmt: skip
+    except subprocess.TimeoutExpired:  # run() has already killed and reaped the child
+        raise AttachmentRejected("pdf_too_complex") from None
+    except OSError:
+        raise AttachmentRejected("pdf_too_complex") from None
+    if done.returncode < 0:  # killed by a signal: CPU or memory limit
+        raise AttachmentRejected("pdf_too_complex")
+    try:
+        out = json.loads(done.stdout) if done.returncode == 0 else None
+        if not isinstance(out, dict):
+            raise ValueError
+        if "rejected" in out:
+            reason = out["rejected"]
+            if reason not in ("pdf_malformed", "pdf_encrypted", "pdf_too_many_pages"):
+                raise ValueError
+            raise AttachmentRejected(reason)
+        pages = tuple(PdfPage(int(n), t) for n, t in out["pages"] if isinstance(t, str))
+        if len(pages) != len(out["pages"]) or out["status"] not in ("text", "no_text"):
+            raise ValueError
+        if type(out["page_count"]) is not int or type(out["truncated"]) is not bool:
+            raise ValueError
+        if sum(len(page.text) for page in pages) > MAX_PDF_TEXT_CHARS:
+            raise ValueError
+        return PdfExtraction(out["status"], out["page_count"], pages, out["truncated"])
+    except AttachmentRejected:
+        raise
+    except (ValueError, TypeError, KeyError):
+        raise AttachmentRejected("pdf_malformed") from None
 
 
 def extract_bom(data: bytes) -> BomExtraction:
@@ -303,8 +356,10 @@ class UnsafeStorageError(OSError):
 def _open_directory(directory: Path, *, create: bool) -> int:
     """Open the storage directory itself and verify it; return a directory descriptor.
 
-    ``O_NOFOLLOW`` refuses a symlink as the last component, and the checks run on the
-    opened descriptor, so a directory swapped in after the check is never written to.
+    Every directory above it is opened from ``/`` and checked (``rfq_copilot.paths``:
+    root or this user, not writable by others unless sticky). ``O_NOFOLLOW`` then refuses
+    a symlink as the last component, and the checks run on the opened descriptor, so a
+    directory swapped in after the check is never written to.
     The directory's mode is never changed: an unsafe one is rejected, as seeding does.
     POSIX only (``dir_fd``), like the rest of the deployment.
     """
@@ -314,11 +369,17 @@ def _open_directory(directory: Path, *, create: bool) -> int:
         except FileExistsError:
             pass
     try:
-        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        parent, name = open_trusted_parent(directory)
+    except UntrustedPathError:
+        raise UnsafeStorageError("storage directory has an untrusted parent") from None
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
     except OSError:
-        if os.path.islink(directory):
+        if stat.S_ISLNK(os.lstat(name, dir_fd=parent).st_mode):
             raise UnsafeStorageError("storage directory must not be a symlink") from None
         raise
+    finally:
+        os.close(parent)
     info = os.fstat(descriptor)
     if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
         os.close(descriptor)

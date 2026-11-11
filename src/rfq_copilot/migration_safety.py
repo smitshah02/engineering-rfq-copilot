@@ -68,9 +68,10 @@ def include_name(name, kind, parent_names):
     if kind == "schema":
         return name in MANAGED_SCHEMAS
     if kind == "table":
-        from rfq_copilot.models import Base
+        # The active contract's tables (the ORM metadata).
+        from rfq_copilot.schema_contract import active
 
-        return f"{parent_names.get('schema_name')}.{name}" in Base.metadata.tables
+        return f"{parent_names.get('schema_name')}.{name}" in active().metadata().tables
     return True
 
 

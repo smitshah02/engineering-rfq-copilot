@@ -10,6 +10,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import event, func, insert, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from test_database_integrity import expected_records
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
@@ -28,7 +29,30 @@ from rfq_copilot.repositories import (
 )
 from rfq_copilot.seeding.loader import execute_seed
 from rfq_copilot.seeding.mapping import TABLES
-from rfq_copilot.seeding.rules import REGISTERED
+from rfq_copilot.seeding.rules import REGISTERED  # noqa: F401 - kept for other tests
+
+
+async def stored_overlay_state(session):
+    """overlay_state of the stored rows that belong to an accepted overlay."""
+    from rfq_copilot.models import Permission, Role, RolePermission
+    from rfq_copilot.seeding.policy import is_policy_extra, overlay_state
+
+    rows = {
+        "roles": [{"role": r} for r in (await session.scalars(select(Role.role))).all()],
+        "permissions": [
+            {"permission": p} for p in (await session.scalars(select(Permission.permission))).all()
+        ],  # fmt: skip
+        "role_permissions": [
+            {"role": r, "permission": p, "allowed": a}
+            for r, p, a in (
+                await session.execute(
+                    select(RolePermission.role, RolePermission.permission, RolePermission.allowed)
+                )
+            ).all()  # fmt: skip
+        ],
+    }
+    return overlay_state({t: [r for r in v if is_policy_extra(t, r)] for t, v in rows.items()})
+
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
@@ -460,7 +484,9 @@ async def test_all_development_reads_preserve_records_and_close_sessions(
                         await call(operation, session, seed_plan)
                 assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
                 assert await fingerprint(session) == before
-                # Baseline plus each approved post-baseline rule (approval-v1.2).
-                assert sum(t["rows"] for t in before["tables"].values()) == 1089 + len(REGISTERED)
+                # Baseline, each approved post-baseline rule and the stored overlay, whose
+                # state comes from the contract's all-or-nothing check (partial fails).
+                state = await stored_overlay_state(session)
+                assert sum(t["rows"] for t in before["tables"].values()) == expected_records(state)
                 assert await session.scalar(text("SHOW transaction_read_only")) == "on"
         assert database.engine.pool.checkedout() == 0

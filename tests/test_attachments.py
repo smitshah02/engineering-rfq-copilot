@@ -20,11 +20,12 @@ import httpx2
 import pytest
 from pypdf import PdfWriter
 from sqlalchemy.exc import OperationalError
+from test_auth import trust as trust
 
 import rfq_copilot.repositories as repositories
 from rfq_copilot import attachments
 from rfq_copilot.api.app import create_app
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import CREATE_RFQ, VIEW_ASSIGNED_RFQS, Principal, get_principal
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_read_session, get_write_database
 from rfq_copilot.api.routers import attachments as router_module
@@ -49,6 +50,11 @@ LIMIT = 64 * 1024
 
 
 # --- Document builders -------------------------------------------------------------------
+
+
+# Day 21: an injected principal is permission-checked like a real one; upload needs
+# create_rfq and the metadata list view_assigned_rfqs.
+UPLOADS = frozenset({CREATE_RFQ, VIEW_ASSIGNED_RFQS})
 
 
 def pdf(*texts, catalog_extra=b"", raw_streams=None):
@@ -475,9 +481,14 @@ async def test_attachment_settings_are_validated():
 
 
 class FakeSession:
-    def __init__(self, fail_commit=False):
-        self.added, self.commits, self.rollbacks = [], 0, 0
-        self.fail_commit = fail_commit
+    def __init__(self, fail_commit=False, fail_flush=False):
+        self.added, self.commits, self.rollbacks, self.flushes = [], 0, 0, 0
+        self.fail_commit, self.fail_flush = fail_commit, fail_flush
+
+    async def flush(self):
+        if self.fail_flush:  # the INSERT failed: certainly nothing committed
+            raise OperationalError("INSERT", {}, Exception("server closed the connection"))
+        self.flushes += 1
 
     async def commit(self):
         if self.fail_commit:
@@ -504,13 +515,13 @@ class FakeDatabase:
 
 @pytest.fixture
 def fakes(monkeypatch):
-    async def belongs(session, rfq_id, *, customer_id):
+    async def belongs(session, rfq_id, *, customer_id, assigned_user=None):
         return OWNERS.get(rfq_id) == customer_id
 
     def add(session, **row):
         session.added.append(row)
 
-    async def listing(session, rfq_id, *, customer_id):
+    async def listing(session, rfq_id, *, customer_id, assigned_user=None):
         return ()
 
     monkeypatch.setattr(repositories, "rfq_belongs_to", belongs)
@@ -526,7 +537,7 @@ def make_app(tmp_path, principal=MINE, session=None, max_bytes=LIMIT, storage=Tr
     )
     app = create_app(settings)
     if principal is not None:
-        app.dependency_overrides[get_principal] = lambda: Principal(principal)
+        app.dependency_overrides[get_principal] = lambda: Principal(principal, UPLOADS)
     app.state.write_database = FakeDatabase(session or FakeSession())
     app.state.fake_session = app.state.write_database.fake
 
@@ -660,10 +671,13 @@ async def test_missing_identity_reads_no_body_and_writes_nothing(tmp_path, fakes
         {"data": {"customer_id": MINE}},
     ],
 )
-async def test_request_supplied_identity_is_never_trusted(tmp_path, fakes, spoof):
-    response = await upload(make_app(tmp_path, principal=None), files=pdf_file(), **spoof)
+async def test_request_supplied_identity_is_never_trusted(tmp_path, fakes, spoof, trust):
+    app = make_app(tmp_path, principal=None)
+    # Day 20: verify the forged bearer token against a real configured trust boundary.
+    app.state.token_verifier = trust.verifier()
+    response = await upload(app, files=pdf_file(), **spoof)
     assert response.status_code == 401
-    assert stored(tmp_path) == []
+    assert stored(tmp_path) == [] and app.state.fake_session.added == []
 
 
 async def test_customer_id_form_field_cannot_redirect_an_upload(tmp_path, fakes):
@@ -799,7 +813,8 @@ async def test_rejections_are_fixed_vocabulary_and_never_echo_input(
 
 
 async def test_database_failure_removes_the_file_and_answers_503(tmp_path, fakes):
-    app = make_app(tmp_path, session=FakeSession(fail_commit=True))
+    # Phase 3: a failure before COMMIT is certain, so the file goes (the Day 19 invariant).
+    app = make_app(tmp_path, session=FakeSession(fail_flush=True))
     response = await upload(app, files=pdf_file())
     assert response.status_code == 503 and response.json() == {"detail": "Service unavailable."}
     assert "connection" not in response.text
@@ -820,10 +835,10 @@ async def test_failure_after_storing_removes_the_file(tmp_path, fakes, monkeypat
 
 
 async def test_cancellation_after_storing_removes_the_file(tmp_path, fakes, monkeypatch):
-    async def cancelled_commit(self):
+    async def cancelled_flush(self):  # before COMMIT: nothing can have committed
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(FakeSession, "commit", cancelled_commit)
+    monkeypatch.setattr(FakeSession, "flush", cancelled_flush)
     app = make_app(tmp_path)
     with pytest.raises(asyncio.CancelledError):
         await upload(app, files=pdf_file())

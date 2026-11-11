@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import Principal, require_route_permission
 from rfq_copilot.api.db import get_read_session
 from rfq_copilot.api.errors import VALIDATION_ERROR_RESPONSES
 from rfq_copilot.api.schemas.reads import MaterialListQuery, MaterialPage, MaterialSummary
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/materials", tags=["materials"], responses=VALIDATION
 
 @router.get("", summary="Catalog materials matching every given filter, by material_id")
 async def list_catalog_materials(
-    principal: Annotated[Principal, Depends(get_principal)],
+    principal: Annotated[Principal, Depends(require_route_permission("catalog_read"))],
     query: Annotated[MaterialListQuery, Query()],
     session: Annotated[Any, Depends(get_read_session)],
 ) -> MaterialPage:
@@ -26,8 +26,10 @@ async def list_catalog_materials(
         category=query.category,
         thickness_mm=query.thickness_mm,
         finish_id=query.finish_id,
+        limit=query.limit + 1,  # one extra row tells whether another page exists
+        offset=query.offset,
     )
-    window = identifiers[query.offset : query.offset + query.limit + 1]
+    window = identifiers
     rows = await list_materials(session, window[: query.limit])
     return MaterialPage(
         items=[

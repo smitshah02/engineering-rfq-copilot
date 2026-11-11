@@ -3,7 +3,15 @@
 from rfq_copilot.models.approvals import ApprovalHistory, ApprovalRequest
 from rfq_copilot.models.base import Base
 from rfq_copilot.models.customers import Contact, Customer
-from rfq_copilot.models.identity import Permission, Role, RolePermission, User
+from rfq_copilot.models.identity import (
+    Permission,
+    RfqAssignment,
+    Role,
+    RolePermission,
+    TokenRevocation,
+    User,
+    UserCustomerBinding,
+)
 from rfq_copilot.models.manufacturing import (
     Finish,
     FinishMaterialCategory,
@@ -29,6 +37,9 @@ MODEL_CLASSES = (
     Permission,
     RolePermission,
     User,
+    UserCustomerBinding,
+    RfqAssignment,
+    TokenRevocation,
     Customer,
     Contact,
     Material,
@@ -67,6 +78,9 @@ __all__ = [
     "Permission",
     "RolePermission",
     "User",
+    "UserCustomerBinding",
+    "RfqAssignment",
+    "TokenRevocation",
     "Customer",
     "Contact",
     "Material",

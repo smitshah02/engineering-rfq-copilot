@@ -189,7 +189,7 @@ def main(argv=None):
         print(
             json.dumps(
                 asyncio.run(
-                    run_examples(DatabaseConfig.from_env(args.target, env_file=args.env_file))
+                    run_examples(DatabaseConfig.from_env(args.target, env_file=Path(args.env_file)))
                 ),
                 sort_keys=True,
             )

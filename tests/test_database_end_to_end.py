@@ -29,8 +29,8 @@ async def test_complete_day5_database_lifecycle(
     assert await session.scalar(text("SELECT current_database()")) == "rfq_copilot_test"
     connection = await session.connection()
     physical = await connection.run_sync(verify_physical, approved)
-    assert physical["revision"] == ["20261109_01"]
-    assert len(physical["columns"]) == 33 and physical["counts"]["f"] == 64
+    assert physical["revision"] == ["20261111_06"]  # includes TD-012 and Phase 3.5
+    assert len(physical["columns"]) == 36 and physical["counts"]["f"] == 71
 
     bundle = load_sources(SOURCE, ARCHIVE)
     plan = build_plan(bundle, tmp_path / "snapshots")
@@ -121,7 +121,7 @@ async def test_complete_day5_database_lifecycle(
     evidence = {
         "target": "rfq_copilot_test",
         "revision": physical["revision"],
-        "physical_tables": 33,
+        "physical_tables": 36,
         "source_integrity": bundle.integrity,
         "first_inserted": first["inserted"],
         "second_inserted": second["inserted"],

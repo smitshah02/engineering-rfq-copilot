@@ -181,7 +181,7 @@ def main() -> None:
     args = parser.parse_args()
 
     async def check() -> None:
-        config = DatabaseConfig.from_env(args.target, env_file=args.env_file)
+        config = DatabaseConfig.from_env(args.target, env_file=Path(args.env_file))
         async with Database(config, read_only=True) as database:
             print(json.dumps(asdict(await database.verify_connection()), sort_keys=True))
 

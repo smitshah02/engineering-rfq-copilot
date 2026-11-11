@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from rfq_copilot.database import Database
 from rfq_copilot.seeding.mapping import TABLES, SeedPlan, key_for, validate_plan
+from rfq_copilot.seeding.policy import is_policy_extra, overlay_state
 from rfq_copilot.seeding.rules import is_registered_extra
 from rfq_copilot.seeding.safety import validate_target, verify_live_identity, verify_schema
 from rfq_copilot.seeding.sources import sha256_file
@@ -49,10 +50,22 @@ async def database_state(session, plan: SeedPlan):
     digest = hashlib.sha256(json_text(json_ready(stored)).encode("utf-8")).hexdigest()
     if not any(counts.values()):
         return "empty", counts, digest
+    policy_extras = {}
     for name in plan.order:
-        # Approved post-baseline rule versions (seeding/rules.py) are the only extra rows.
+        # Approved post-baseline rule versions (seeding/rules.py) and the rows of an overlay
+        # the active contract accepts (seeding/policy.py) are the only extra rows.
         baseline = {r.get("rule_version") for r in plan.rows[name]}
-        stored[name] = [r for r in stored[name] if not is_registered_extra(name, r, baseline)]
+        keys = {key_for(r, TABLES[name].primary_key) for r in plan.rows[name]}
+        policy_extras[name] = [
+            r
+            for r in stored[name]
+            if key_for(r, TABLES[name].primary_key) not in keys and is_policy_extra(name, r)
+        ]
+        stored[name] = [
+            r
+            for r in stored[name]
+            if not is_registered_extra(name, r, baseline) and r not in policy_extras[name]
+        ]
         require(
             len(stored[name]) == len(plan.rows[name]),
             TABLES[name].fullname,
@@ -79,6 +92,11 @@ async def database_state(session, plan: SeedPlan):
                     name,
                     "invalid registration timestamp",
                 )
+    require(
+        overlay_state(policy_extras) is not None,
+        "permission policy overlay",
+        "partial or modified overlay; import refused",
+    )
     return "identical", counts, digest
 
 

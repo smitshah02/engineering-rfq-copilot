@@ -11,7 +11,15 @@ here may still be unsupported, need clarification or be declined.
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    WrapSerializer,
+    field_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from rfq_copilot.api.schemas.common import (
@@ -37,6 +45,10 @@ MAX_PARTS = 50
 MAX_RAW_REQUEST_CHARS = 20_000
 
 _STRICT = ConfigDict(extra="forbid", frozen=True)
+# Validated as lists (the 422 codes stay ``list_type``/``too_short``), stored as tuples so a
+# validated request cannot be changed afterwards (TD-026), serialized back as lists with
+# the same schema.
+_AS_LIST = WrapSerializer(lambda value, handler: handler(list(value)))
 
 
 class PartSpecification(BaseModel):
@@ -70,7 +82,12 @@ class RfqSubmissionRequest(BaseModel):
 
     # list, not tuple: Pydantic's tuple length check adds a spurious too_short error
     # whenever an item fails, which would mislead clients.
-    parts: Annotated[list[PartSpecification], Field(min_length=1, max_length=MAX_PARTS)]
+    parts: Annotated[
+        list[PartSpecification],
+        Field(min_length=1, max_length=MAX_PARTS),
+        AfterValidator(tuple),
+        _AS_LIST,
+    ]
     requested_delivery_date: IsoDate | None = None
     raw_request: (
         Annotated[
@@ -83,7 +100,7 @@ class RfqSubmissionRequest(BaseModel):
 
     @field_validator("parts")
     @classmethod
-    def _unique_part_ids(cls, parts: list[PartSpecification]):
+    def _unique_part_ids(cls, parts: tuple[PartSpecification, ...]):
         # Mirrors UniqueConstraint(rfq_id, part_id) on rfq_line_items. The message names
         # the position, never the submitted identifier.
         seen: set[str] = set()
@@ -127,4 +144,9 @@ class QuoteCalculationSummary(BaseModel):
     pricing_rule_version: Identifier
     currency: Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")]
     quote_total_usd: Money
-    lines: Annotated[list[QuoteLineAmount], Field(min_length=1)]
+    lines: Annotated[
+        list[QuoteLineAmount],
+        Field(min_length=1),
+        AfterValidator(tuple),
+        _AS_LIST,
+    ]

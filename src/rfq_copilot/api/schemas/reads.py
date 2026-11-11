@@ -62,7 +62,7 @@ class CustomerProfile(BaseModel):
     country: str
     payment_terms: str
     preferred_shipping: str
-    contacts: list[CustomerContact]
+    contacts: tuple[CustomerContact, ...]
 
 
 class RfqSummary(BaseModel):
@@ -76,7 +76,7 @@ class RfqSummary(BaseModel):
 class RfqPage(BaseModel):
     model_config = _STRICT
 
-    items: list[RfqSummary]
+    items: tuple[RfqSummary, ...]
     limit: int
     offset: int
     has_more: bool
@@ -97,7 +97,7 @@ class RfqDetail(BaseModel):
     rfq_id: Identifier
     status: str
     submitted_at: AwareDatetime
-    lines: list[RfqLine]
+    lines: tuple[RfqLine, ...]
 
 
 class MaterialSummary(BaseModel):
@@ -111,7 +111,7 @@ class MaterialSummary(BaseModel):
 class MaterialPage(BaseModel):
     model_config = _STRICT
 
-    items: list[MaterialSummary]
+    items: tuple[MaterialSummary, ...]
     limit: int
     offset: int
     has_more: bool
@@ -144,4 +144,4 @@ class ReleasedQuote(BaseModel):
     total_usd: Money
     expiry_date: date | None
     estimated_lead_business_days: Annotated[int, Field(ge=0)] | None
-    lines: list[ReleasedQuoteLine]
+    lines: tuple[ReleasedQuoteLine, ...]

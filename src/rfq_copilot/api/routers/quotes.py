@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import Principal, require_route_permission
 from rfq_copilot.api.db import get_read_session
 from rfq_copilot.api.errors import VALIDATION_ERROR_RESPONSES
 from rfq_copilot.api.schemas.common import Identifier
@@ -15,16 +15,16 @@ router = APIRouter(prefix="/quotes", tags=["quotes"], responses=VALIDATION_ERROR
 
 @router.get("/{quote_id}", summary="A released quote of the verified customer")
 async def get_released_quote(
-    principal: Annotated[Principal, Depends(get_principal)],
+    principal: Annotated[Principal, Depends(require_route_permission("quote_read"))],
     quote_id: Annotated[Identifier, Path()],
     session: Annotated[Any, Depends(get_read_session)],
 ) -> ReleasedQuote:
-    from rfq_copilot.repositories import list_quotation_history
+    from rfq_copilot.repositories import get_released_quotation
 
-    # ponytail: reuses the customer-scoped history read and picks one quote; add a keyed
-    # repository read if a customer's quote count grows large.
-    history = await list_quotation_history(session, principal.customer_id)
-    match = next((q for q in history if q.quote.quote_id == quote_id), None)
+    # Ownership and release are filtered in SQL; the check below is defence in depth.
+    match = await get_released_quotation(
+        session, quote_id, customer_id=principal.customer_id, assigned_user=principal.assigned_user
+    )
     # Only a human release makes a quote customer-facing; approved is not released.
     if match is None or match.quote.status != "released" or match.quote.released_at is None:
         raise HTTPException(status_code=404, detail="Not found.")

@@ -100,7 +100,27 @@ async def get_customer(session: AsyncSession, customer_id: str) -> CustomerDetai
     )
 
 
-async def get_rfq(session: AsyncSession, rfq_id: str, *, customer_id: str) -> RFQDetails | None:
+def assigned_to(user_id: str):
+    """SQL condition: the RFQ in scope has an active assignment for ``user_id``.
+
+    Used only when assignments are enforced (revision 20261111_02). It narrows the
+    customer-scoped query; it never replaces the customer condition.
+    """
+    from rfq_copilot.models import RfqAssignment
+
+    assignment = RfqAssignment.__table__
+
+    _identifier(user_id)
+    return exists().where(
+        assignment.c.rfq_id == RFQ.rfq_id,
+        assignment.c.user_id == user_id,
+        assignment.c.revoked_at.is_(None),
+    )
+
+
+async def get_rfq(
+    session: AsyncSession, rfq_id: str, *, customer_id: str, assigned_user: str | None = None
+) -> RFQDetails | None:
     """Historical part_ids are opaque references, separate from runtime RFQ lines."""
     _identifier(rfq_id)
     _identifier(customer_id)
@@ -113,6 +133,8 @@ async def get_rfq(session: AsyncSession, rfq_id: str, *, customer_id: str) -> RF
             raiseload("*"),
         )
     )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
     with session.no_autoflush:
         rfq = await session.scalar(statement)
     if rfq is None:
@@ -127,7 +149,12 @@ async def get_rfq(session: AsyncSession, rfq_id: str, *, customer_id: str) -> RF
 
 
 async def list_rfqs(
-    session: AsyncSession, customer_id: str, *, limit: int, offset: int = 0
+    session: AsyncSession,
+    customer_id: str,
+    *,
+    limit: int,
+    offset: int = 0,
+    assigned_user: str | None = None,
 ) -> tuple[RFQ, ...]:
     """One customer's RFQ headers, newest first (ties by rfq_id); no lines or relations."""
     _identifier(customer_id)
@@ -143,6 +170,8 @@ async def list_rfqs(
         .offset(offset)
         .options(raiseload("*"))
     )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
     with session.no_autoflush:
         return tuple((await session.scalars(statement)).all())
 
@@ -324,12 +353,22 @@ async def find_materials(
     category: str | None = None,
     thickness_mm: Decimal | None = None,
     finish_id: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> tuple[str, ...]:
-    """Material IDs matching every given catalog filter; grade matches case-insensitively."""
+    """Material IDs matching every given catalog filter; grade matches case-insensitively.
+
+    Ordered by ``material_id``. ``limit``/``offset`` page in SQL (TD-011); without
+    ``limit`` every match is returned, as before.
+    """
     for value in (grade, category, finish_id):
         if value is not None:
             _identifier(value)
     _thickness(thickness_mm)
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError("limit must be a positive integer.")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("offset must be a non-negative integer.")
     statement = select(Material.material_id)
     if grade is not None:
         statement = statement.where(func.lower(Material.grade) == grade.strip().lower())
@@ -349,8 +388,11 @@ async def find_materials(
                 MaterialFinishCompatibility.finish_id == finish_id,
             )
         )
+    statement = statement.order_by(Material.material_id).offset(offset)
+    if limit is not None:
+        statement = statement.limit(limit)
     with session.no_autoflush:
-        return tuple((await session.scalars(statement.order_by(Material.material_id))).all())
+        return tuple((await session.scalars(statement)).all())
 
 
 async def list_materials(
@@ -559,6 +601,42 @@ async def list_quotation_history(
         quotes = (
             await session.scalars(statement.order_by(Quote.created_at.desc(), Quote.quote_id))
         ).all()
+    return _quotation_details(quotes)
+
+
+async def get_released_quotation(
+    session: AsyncSession, quote_id: str, *, customer_id: str, assigned_user: str | None = None
+) -> QuotationDetails | None:
+    """One quote by id, only if it belongs to ``customer_id`` and a human released it.
+
+    Ownership and release are filtered in SQL (TD-010): one quote row plus its versions
+    and lines (two SELECT IN loads), independent of the customer's history size.
+    """
+    _identifier(customer_id)
+    _identifier(quote_id)
+    statement = (
+        select(Quote)
+        .join(Quote.rfq)
+        .where(
+            Quote.quote_id == quote_id,
+            RFQ.customer_id == customer_id,
+            Quote.status == "released",
+            Quote.released_at.is_not(None),
+        )
+        .options(
+            joinedload(Quote.rfq),
+            selectinload(Quote.versions).selectinload(QuoteVersion.line_items),
+            raiseload("*"),
+        )
+    )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
+    with session.no_autoflush:
+        quote = await session.scalar(statement)
+    return None if quote is None else _quotation_details((quote,))[0]
+
+
+def _quotation_details(quotes) -> tuple[QuotationDetails, ...]:
     return tuple(
         QuotationDetails(
             quote,

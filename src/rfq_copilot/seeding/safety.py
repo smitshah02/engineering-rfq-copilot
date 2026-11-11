@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
@@ -18,15 +17,18 @@ from rfq_copilot.migration_safety import (
     verify_identity,
     verify_version_table,
 )
-from rfq_copilot.models import Base
+from rfq_copilot.schema_contract import active
 from rfq_copilot.seeding import SeedError
 from rfq_copilot.seeding.transform import require
 
 ROOT = Path(__file__).resolve().parents[3]
-REVISION = "20261109_01"
-# Managed-object shape at REVISION: the approved initial revision (20261108_01, digest
-# 8ef8e5a9...) plus the approved TD-005 capacity key. Measured on the guarded test database.
-SHAPE_DIGEST = "6cc43f0ecb39614e6ee69d50e94c8916e77dc639ad6b1ae1a59c1315944d590d"
+# The active contract (schema_contract.active()) is what verify_schema enforces; these two
+# names mirror it for callers and tests that pin them.
+REVISION = "20261111_06"
+# Managed-object shape at REVISION: 20261108_01 (8ef8e5a9...), TD-005 20261109_01
+# (6cc43f0e...), TD-012 20261110_01 (3c9f9e44...) and Phase 3.5 02/03/04/06. Measured on
+# the guarded test database.
+SHAPE_DIGEST = "513626616a200ac09f87b0543d35da048431586058055b7d07013ffe8aa6319f"
 
 
 def validate_target(config):
@@ -61,6 +63,8 @@ def verify_live_identity(connection, config):
 
 
 def verify_schema(connection, config):
+    contract = active()
+    metadata = contract.metadata()
     try:
         identity = verify_live_identity(connection, config)
         verify_version_table(connection)
@@ -72,18 +76,18 @@ def verify_schema(connection, config):
         )
         require(
             list(connection.scalars(text("SELECT version_num FROM public.alembic_version")))
-            == [REVISION],
+            == [contract.revision],
             "schema",
             "Alembic revision is not current",
         )
         require(
-            ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_heads()
-            == [REVISION],
+            ScriptDirectory.from_config(contract.alembic_config()).get_heads()
+            == [contract.revision],
             "schema",
             "unsupported Alembic head",
         )
         require(
-            shape_digest(owned_shape(connection)) == SHAPE_DIGEST,
+            shape_digest(owned_shape(connection)) == contract.shape_digest,
             "schema",
             "managed object shape differs",
         )
@@ -96,10 +100,8 @@ def verify_schema(connection, config):
                 "compare_server_default": True,
             },
         )
-        require(
-            not compare_metadata(context, Base.metadata), "schema", "Alembic schema drift detected"
-        )
-        for table in Base.metadata.tables.values():
+        require(not compare_metadata(context, metadata), "schema", "Alembic schema drift detected")
+        for table in metadata.tables.values():
             actual_checks = {
                 c["name"]: c["sqltext"]
                 for c in inspector.get_check_constraints(table.name, schema=table.schema)
@@ -176,7 +178,7 @@ def verify_schema(connection, config):
             "database": identity["database"],
             "role": identity["username"],
             "postgresql_version_num": identity["version"],
-            "alembic_revision": REVISION,
+            "alembic_revision": contract.revision,
             "schema_tables": 33,
         }
     except CommandError:

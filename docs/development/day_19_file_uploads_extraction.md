@@ -149,3 +149,10 @@ OBS-1 (injected `Database` not verified read-only), OBS-2 (quote lookup in Pytho
 2. **Existing storage directory.** Previously, `mkdir(mode=0o700, exist_ok=True)` accepted any existing directory. Now a symlink, a directory owned by someone else, or one with any group or other permission is rejected (`UnsafeStorageError`, which the API answers with 503). The write and the removal go through a verified directory descriptor.
 
 Tests: 124 public tests in `test_attachments.py` (+11) and 1,475 in the full regression. A mutation check confirmed that the old lifecycle fails the cancellation test and that removing the directory checks fails 8 tests.
+
+## Correction — Phase 3.5 (2026-11-10)
+
+- **Parent-directory trust:** every ancestor of the storage directory is now verified through descriptors (TD-020).
+- **Ambiguous COMMIT:** a COMMIT that fails or is cancelled no longer deletes the file. The INSERT is flushed first, so only certain failures remove the file (TD-019).
+- **Orphan files:** found and, with `--delete`, removed by `python -m rfq_copilot.reconcile_attachments` (TD-018).
+- **PDF parsing:** runs in a killable child process with a 15 s deadline. New rejection reason `pdf_too_complex` (422) (TD-021).

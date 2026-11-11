@@ -30,7 +30,7 @@ def main(argv=None):
     action.add_argument("--verify", dest="mode", action="store_const", const="verify")
     args = parser.parse_args(argv)
     try:
-        config = DatabaseConfig.from_env(args.target, env_file=args.env_file)
+        config = DatabaseConfig.from_env(args.target, env_file=Path(args.env_file))
         if args.snapshot_dir.resolve().is_relative_to(args.source.resolve()):
             raise SeedError("Snapshot directory must be outside the frozen source tree.")
         bundle = load_sources(args.source, args.archive)

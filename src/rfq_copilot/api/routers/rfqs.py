@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import Principal, require_route_permission
 from rfq_copilot.api.db import get_read_session
 from rfq_copilot.api.errors import VALIDATION_ERROR_RESPONSES
 from rfq_copilot.api.schemas.common import Identifier
@@ -18,14 +18,18 @@ _PART_FIELDS = tuple(PartSpecification.model_fields)
 
 @router.get("", summary="The verified customer's RFQs, newest first")
 async def list_customer_rfqs(
-    principal: Annotated[Principal, Depends(get_principal)],
+    principal: Annotated[Principal, Depends(require_route_permission("rfq_read"))],
     query: Annotated[RfqListQuery, Query()],
     session: Annotated[Any, Depends(get_read_session)],
 ) -> RfqPage:
     from rfq_copilot.repositories import list_rfqs
 
     rows = await list_rfqs(
-        session, principal.customer_id, limit=query.limit + 1, offset=query.offset
+        session,
+        principal.customer_id,
+        limit=query.limit + 1,
+        offset=query.offset,
+        assigned_user=principal.assigned_user,
     )
     return RfqPage(
         items=[
@@ -40,13 +44,15 @@ async def list_customer_rfqs(
 
 @router.get("/{rfq_id}", summary="One of the verified customer's RFQs")
 async def get_customer_rfq(
-    principal: Annotated[Principal, Depends(get_principal)],
+    principal: Annotated[Principal, Depends(require_route_permission("rfq_read"))],
     rfq_id: Annotated[Identifier, Path()],
     session: Annotated[Any, Depends(get_read_session)],
 ) -> RfqDetail:
     from rfq_copilot.repositories import get_rfq
 
-    details = await get_rfq(session, rfq_id, customer_id=principal.customer_id)
+    details = await get_rfq(
+        session, rfq_id, customer_id=principal.customer_id, assigned_user=principal.assigned_user
+    )
     if details is None:
         raise HTTPException(status_code=404, detail="Not found.")
     rfq = details.rfq

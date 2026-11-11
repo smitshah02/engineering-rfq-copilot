@@ -25,9 +25,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from rfq_copilot.config import DatabaseConfig, DatabaseConfigurationError
 from rfq_copilot.database import Database, DatabaseError
 from rfq_copilot.models import Base
+from rfq_copilot.schema_contract import active
 from rfq_copilot.seeding import SeedError
 from rfq_copilot.seeding.loader import snapshot_artifacts
 from rfq_copilot.seeding.mapping import EMPTY_TABLES, TABLES, SeedPlan, build_plan
+from rfq_copilot.seeding.policy import is_policy_extra, overlay_state
 from rfq_copilot.seeding.rules import is_registered_extra
 from rfq_copilot.seeding.safety import validate_target, verify_schema
 from rfq_copilot.seeding.sources import load_sources
@@ -93,8 +95,10 @@ def verify_definitions(connection):
         .all()
     )
     counts = {kind: sum(d["kind"] == kind for d in definitions) for kind in ["p", "f", "u", "c"]}
-    check(counts == {"p": 33, "f": 64, "u": 14, "c": 207}, "catalog", "constraint counts differ")
-    for table in Base.metadata.tables.values():
+    # Pinned per contract (schema_contract.py): CURRENT is p36 f71 u14 c218 at 20261111_06.
+    contract = active()
+    check(counts == dict(contract.catalog_counts), "catalog", "constraint counts differ")
+    for table in contract.metadata().tables.values():
         found = [d for d in definitions if d["tab"] == table.fullname]
         check(
             all(d["convalidated"] and d["conenforced"] for d in found),
@@ -175,6 +179,7 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
     before = await fingerprint(session)
     results = {}
     compared = numeric_values = fk_checks = check_checks = unique_checks = 0
+    policy_extras = {}
     for name, table in sorted(TABLES.items()):
         count = before["tables"][table.fullname]["rows"]
         distinct = await session.scalar(
@@ -214,10 +219,11 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
         unique_sets = [
             (list(k.columns), None) for k in table.constraints if isinstance(k, UniqueConstraint)
         ]
+        contract_indexes = {i.name for i in active().metadata().tables[table.fullname].indexes}
         unique_sets += [
             (list(i.columns), i.dialect_options["postgresql"].get("where"))
             for i in table.indexes
-            if i.unique
+            if i.unique and i.name in contract_indexes
         ]
         for columns, predicate in unique_sets:
             query = select(*columns).where(and_(*(c.is_not(None) for c in columns)))
@@ -241,9 +247,17 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
                     record[col.name] = json_value(record[col.name], "stored JSON")
         key_columns = [c.name for c in table.primary_key]
         lookup = {tuple(r[c] for c in key_columns): r for r in stored}
-        # Approved post-baseline rule versions (seeding/rules.py) are the only extra rows.
+        # Approved post-baseline rule versions (seeding/rules.py) and the rows of an overlay
+        # the active contract accepts (seeding/policy.py) are the only extra rows.
         baseline = {r.get("rule_version") for r in plan.rows[name]}
-        extras = [r for r in stored if is_registered_extra(name, r, baseline)]
+        source_keys = {tuple(r[c] for c in key_columns) for r in plan.rows[name]}
+        overlay = [
+            r
+            for r in stored
+            if tuple(r[c] for c in key_columns) not in source_keys and is_policy_extra(name, r)
+        ]
+        policy_extras[name] = overlay
+        extras = [r for r in stored if is_registered_extra(name, r, baseline)] + overlay
         check(count - len(extras) == len(plan.rows[name]), table.fullname, "source count differs")
         for expected in plan.rows[name]:
             key = tuple(expected[c] for c in key_columns)
@@ -279,6 +293,8 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
             "null_violations": nulls,
             "status": "PASS",
         }
+    overlay = overlay_state(policy_extras)
+    check(overlay is not None, "permission policy overlay", "partial or modified overlay")
     snapshot_artifacts(plan)
     after = await fingerprint(session)
     check(before == after, "database", "verification changed the snapshot")
@@ -295,6 +311,8 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
         "check_data_checks": check_checks,
         "unique_data_checks": unique_checks,
         "violations": 0,
+        "schema_contract": active().name,
+        "policy_overlay": overlay,
         "tables": results,
         "fingerprint": before,
         "preserved": before == after,
@@ -327,7 +345,7 @@ def main(argv=None):
     parser.add_argument("--env-file", type=Path)
     args = parser.parse_args(argv)
     try:
-        config = DatabaseConfig.from_env(args.target, env_file=args.env_file)
+        config = DatabaseConfig.from_env(args.target, env_file=Path(args.env_file))
         plan = build_plan(load_sources(args.source, args.archive), args.snapshot_dir)
         print(json.dumps(asyncio.run(run_integrity(config, plan)), sort_keys=True))
         return 0

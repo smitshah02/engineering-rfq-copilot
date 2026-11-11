@@ -12,15 +12,21 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import make_url
+from test_auth import trust as trust
 
 import rfq_copilot.repositories as repositories
 from rfq_copilot.api.app import create_app
-from rfq_copilot.api.auth import Principal, get_principal
+from rfq_copilot.api.auth import VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER, Principal, get_principal
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_database, get_read_session
 from rfq_copilot.api.errors import REDACTED
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database
+
+# Day 21: an injected principal is permission-checked like a real one; these reads need
+# exactly these grants (business.role_permissions names).
+READS = frozenset({VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS})
+
 
 DEV = ApiSettings(environment="development")
 PROD = ApiSettings(environment="production")
@@ -48,7 +54,7 @@ class Tripwire:
 
 def authorized_app(customer_id="CUST-A", **kwargs):
     app = create_app(DEV, **kwargs)
-    app.dependency_overrides[get_principal] = lambda: Principal(customer_id)
+    app.dependency_overrides[get_principal] = lambda: Principal(customer_id, READS)
     return app
 
 
@@ -90,15 +96,17 @@ def test_protected_routes_deny_without_verified_identity(settings, path):
         {"params": {"customer_id": "CUST-A"}},
     ],
 )
-def test_client_supplied_identity_is_never_accepted(spoof):
-    app = create_app(DEV)
+def test_client_supplied_identity_is_never_accepted(spoof, trust):
+    # Day 20: a real trust boundary is configured, so the forged bearer token is checked
+    # cryptographically (and rejected) instead of meeting an unconfigured verifier.
+    app = create_app(trust.settings())
     tripwire = Tripwire()
     app.dependency_overrides[get_database] = tripwire
     with TestClient(app, cookies=spoof.get("cookies")) as client:
         for path in PROTECTED:
             response = client.get(path, headers=spoof.get("headers"), params=spoof.get("params"))
             assert response.status_code == 401, path
-    assert tripwire.calls == 0
+    assert tripwire.calls == 0 and app.state.database is None
 
 
 def test_principal_requires_a_real_identifier():
@@ -295,9 +303,10 @@ def test_materials_expose_identity_only_and_page_deterministically(monkeypatch):
     ids = tuple(f"MAT-{i:03d}" for i in range(5))
     calls = []
 
-    async def find(session, **filters):
-        calls.append(filters)
-        return ids
+    async def find(session, *, limit=None, offset=0, **filters):
+        # Pages like the SQL (TD-011): the route asks for one extra row, never the catalog.
+        calls.append({**filters, "limit": limit, "offset": offset})
+        return ids[offset : offset + limit]
 
     async def rows(session, material_ids):
         return tuple(
@@ -375,10 +384,11 @@ def quote_history(status, released_at=WHEN, approved_version=2):
     ],
 )
 def test_unreleased_quotes_are_never_returned(monkeypatch, status):
-    async def history(session, customer_id):
-        return quote_history(status, released_at=None)
+    # Even if the keyed lookup (TD-010) returned an unreleased quote, the route refuses it.
+    async def lookup(session, quote_id, *, customer_id, assigned_user=None):
+        return quote_history(status, released_at=None)[0]
 
-    monkeypatch.setattr(repositories, "list_quotation_history", history)
+    monkeypatch.setattr(repositories, "get_released_quotation", lookup)
     app = authorized_app()
     fake_session(app)
     with TestClient(app) as client:
@@ -389,11 +399,11 @@ def test_unreleased_quotes_are_never_returned(monkeypatch, status):
 def test_released_quote_returns_the_approved_version_only(monkeypatch):
     seen = []
 
-    async def history(session, customer_id):
+    async def lookup(session, quote_id, *, customer_id, assigned_user=None):
         seen.append(customer_id)
-        return quote_history("released")
+        return quote_history("released")[0] if quote_id == "Q-1" else None
 
-    monkeypatch.setattr(repositories, "list_quotation_history", history)
+    monkeypatch.setattr(repositories, "get_released_quotation", lookup)
     app = authorized_app("CUST-A")
     fake_session(app)
     with TestClient(app) as client:
