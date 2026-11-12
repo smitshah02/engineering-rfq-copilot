@@ -48,6 +48,9 @@ class Principal:
     # Set when RFQ assignments are enforced: RFQ-scoped queries then also require an
     # active business.rfq_assignments row for user_id.
     assignment_required: bool = False
+    # The verified token subject (users.authentication_subject). A delegated MCP credential
+    # must name exactly this subject (api.mcp_integration); None only in injected tests.
+    subject: str | None = None
 
     @property
     def assigned_user(self) -> str | None:
@@ -94,11 +97,8 @@ async def get_principal(
     except InvalidToken:
         raise unauthenticated() from None
 
-    import hashlib
-
     from sqlalchemy.exc import SQLAlchemyError
 
-    from rfq_copilot import repositories
     from rfq_copilot.api.db import get_database
     from rfq_copilot.database import DatabaseError
 
@@ -107,17 +107,14 @@ async def get_principal(
     database = await get_database(request)
     try:
         async with database.session() as session:
-            user = await repositories.find_active_user(session, token.subject)
-            if user is not None and settings.token_revocation == "enforced":
-                digest = hashlib.sha256(credentials.credentials.encode()).hexdigest()
-                if await repositories.token_revoked(session, user, digest, token.issued_at):
-                    user = None  # a revoked token is no longer a credential: 401
-            customer_id = None
-            if user is not None:
-                customer_id = await _customer_for(session, user, settings, requested)
-            granted = None
-            if customer_id is not None:
-                granted = await repositories.granted_permissions(session, user)
+            user, customer_id, granted = await resolve_identity(
+                session,
+                credentials.credentials,
+                token,
+                token_revocation=settings.token_revocation,
+                customer_context=settings.customer_context,
+                requested=requested,
+            )
     except (DatabaseError, SQLAlchemyError):
         raise _unavailable() from None  # e.g. revocation status unknown: never "not revoked"
     if user is None:
@@ -129,6 +126,7 @@ async def get_principal(
         granted,
         user_id=user.user_id,
         assignment_required=settings.rfq_assignments == "required",
+        subject=token.subject,
     )
 
 
@@ -146,10 +144,37 @@ def _requested_customer(request: Request) -> str | None:
     return value if 0 < len(value) <= 64 and value == value.strip() else ""
 
 
-async def _customer_for(session, user, settings, requested: str | None) -> str | None:
+async def resolve_identity(
+    session, credential: str, token, *, token_revocation, customer_context, requested=None
+):
+    """(user, customer_id, permissions) for a verified token, each None when it fails.
+
+    Transport-neutral: shared by REST ``get_principal`` and the MCP token verifier, so the
+    user, revocation, binding and grant rules have one implementation. Database errors
+    propagate; callers fail closed (unknown revocation status is never "not revoked").
+    """
+    import hashlib
+
     from rfq_copilot import repositories
 
-    if settings.customer_context != "selectable":
+    user = await repositories.find_active_user(session, token.subject)
+    if user is not None and token_revocation == "enforced":
+        digest = hashlib.sha256(credential.encode()).hexdigest()
+        if await repositories.token_revoked(session, user, digest, token.issued_at):
+            user = None  # a revoked token is no longer a credential: 401
+    customer_id = None
+    if user is not None:
+        customer_id = await _customer_for(session, user, customer_context, requested)
+    granted = None
+    if customer_id is not None:
+        granted = await repositories.granted_permissions(session, user)
+    return user, customer_id, granted
+
+
+async def _customer_for(session, user, customer_context, requested: str | None) -> str | None:
+    from rfq_copilot import repositories
+
+    if customer_context != "selectable":
         return await repositories.customer_binding(session, user)  # exactly one, or none
     customers = await repositories.eligible_customers(session, user)
     if requested is None:

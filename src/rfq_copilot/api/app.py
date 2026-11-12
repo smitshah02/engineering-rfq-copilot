@@ -28,6 +28,7 @@ from rfq_copilot.api.routers import (
 from rfq_copilot.api.tokens import TokenVerifier
 
 if TYPE_CHECKING:
+    from rfq_copilot.api.mcp_integration import McpIntegration
     from rfq_copilot.database import Database
 
 TITLE = "Engineering RFQ Copilot API"
@@ -75,7 +76,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(
-    settings: ApiSettings | None = None, *, database: "Database | None" = None
+    settings: ApiSettings | None = None,
+    *,
+    database: "Database | None" = None,
+    mcp: "McpIntegration | None" = None,
 ) -> FastAPI:
     """Build an independent application; ``None`` reads ``RFQ_API_*`` process variables.
 
@@ -112,4 +116,9 @@ def create_app(
     prefix = f"/api/{system.API_VERSION}"
     for module in (system, customers, rfqs, materials, quotes, attachments):
         app.include_router(module.router, prefix=prefix)
+    # Day 29: the MCP-backed route exists only with an explicit integration (a trusted
+    # credential provider). Without one it is not mounted at all: fail closed.
+    app.state.mcp = mcp
+    if mcp is not None:
+        app.include_router(materials.mcp_router, prefix=prefix)
     return app

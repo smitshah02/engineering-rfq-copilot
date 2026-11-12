@@ -137,3 +137,12 @@ database use the guarded `*_test` database. Public tests need no credentials.
   tests fail otherwise.
 - Do not add an API path to approve or release quotes. These actions stay human-only.
 - Frozen evaluation data stays untouched until the final evaluation phase.
+
+## Erratum (2026-11-11, Day 23)
+
+The "Not done" list above says TD-007 (quote persistence) is "(Phase 4 scope)". That is
+wrong. The approved roadmap is: Phase 4 MCP infrastructure, Phase 5 agent and LangGraph
+fundamentals, Phase 6 the five specialist agents, Phase 7 supervisor orchestration,
+**Phase 8 quotation persistence and human approval**. TD-007 belongs to Phase 8. Phase 4
+exposes read and evaluation tools only. The original text is kept as historical evidence.
+Tracked as F5 in `phase_04_findings_tracker.md`.

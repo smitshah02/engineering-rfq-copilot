@@ -68,6 +68,9 @@ class ApiSettings(BaseModel):
     # enabled: uploads accept an Idempotency-Key header recorded in
     # business.idempotency_records (revision 20261111_04).
     upload_idempotency: Literal["off", "enabled"] = "off"
+    # Day 28 (F1/F2): "hardened" is the deployment profile. It refuses to start unless the
+    # secure Phase 3.5 controls are selected; "standard" keeps the approved defaults.
+    deployment_profile: Literal["standard", "hardened"] = "standard"
 
     @field_validator("attachment_dir", "jwt_public_key_file")
     @classmethod
@@ -111,6 +114,20 @@ class ApiSettings(BaseModel):
         values = (self.jwt_issuer, self.jwt_audience, self.jwt_algorithm, key)
         if any(v is not None for v in values) and any(v is None for v in values):
             raise ValueError("JWT settings must be given together or not at all.")
+        if self.deployment_profile == "hardened":
+            required = {
+                "environment": "production",
+                "permission_policy": "v2",
+                "token_revocation": "enforced",
+                "upload_idempotency": "enabled",
+            }
+            wrong = sorted(k for k, v in required.items() if getattr(self, k) != v)
+            if wrong or self.jwt_issuer is None:
+                raise ValueError(
+                    "The hardened profile requires JWT settings and "
+                    + ", ".join(f"{k}={required[k]}" for k in required)
+                    + "."
+                )
         return self
 
     @property

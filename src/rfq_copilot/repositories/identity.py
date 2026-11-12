@@ -21,7 +21,13 @@ ELIGIBLE_ACCOUNT_STATUSES = frozenset(
 
 
 async def find_active_user(session: AsyncSession, subject: str) -> User | None:
-    """The active user whose ``authentication_subject`` equals ``subject`` exactly."""
+    """The active user whose ``authentication_subject`` equals ``subject`` exactly.
+
+    Returned detached (Day 30): callers (REST ``get_principal``, the MCP verifier) read it
+    after their session block, and ``Database.session()`` ends with a rollback, which
+    expires attached instances whatever ``expire_on_commit`` says; a later ``user.user_id``
+    then refreshed a detached object and raised. Loaded columns stay readable.
+    """
     if not isinstance(subject, str) or not subject.strip() or len(subject) > 255:
         raise ValueError("subject must be nonblank text of at most 255 characters.")
     statement = (
@@ -30,7 +36,10 @@ async def find_active_user(session: AsyncSession, subject: str) -> User | None:
         .options(raiseload("*"))
     )
     with session.no_autoflush:
-        return await session.scalar(statement)
+        user = await session.scalar(statement)
+    if user is not None:
+        session.expunge(user)
+    return user
 
 
 async def customer_binding(session: AsyncSession, user: User) -> str | None:

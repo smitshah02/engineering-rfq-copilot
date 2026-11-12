@@ -449,3 +449,9 @@ Rollback: every setting reverts by configuration alone. Every proposed downgrade
   (deferred). TD-022 is blocked on provisioning operators. TD-023 is still
   BLOCKED_EXTERNAL.
 - No new debt from the Day 22 audit. See `phase_3_final_backend_report.md`.
+
+## Day 23 note (2026-11-11)
+
+- TD-007's "quote-persistence phase" is **Phase 8** (quotation persistence and human
+  approval). Phase 4 (MCP) adds no persistence. See F5 in `phase_04_findings_tracker.md`.
+- Phase 4 security findings F1–F4 are tracked in `phase_04_findings_tracker.md`, not here.
