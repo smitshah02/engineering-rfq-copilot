@@ -292,7 +292,7 @@ regression run recorded in `docs/dev_log/day_30.md`.
 |---|---|---|---|
 | D30-1 | Authenticated requests through a real `Database` failed: `resolve_identity` callers read `user.user_id` after `Database.session()` ended with a rollback, which expires instances (`DetachedInstanceError`). REST answered 500; the MCP host failed every authenticated call (`unavailable`). Present since Phase 3; hidden because every DB test used a savepoint-joined session. | High | FIXED |
 | D30-2 | `McpTokenVerifier` copied each endpoint URL into `AccessToken.resource`, so `validate_token_resource=True` could never fail and only looked like per-endpoint binding. | Low | FIXED |
-| D30-3 | `mcp/client.py` imports `httpx2` at runtime, but `pyproject.toml` declares it only in the dev group (it arrives transitively via `mcp>=2.3`, which requires `httpx2>=2.10`). | Low | OPEN (dependency change needs approval) |
+| D30-3 | `mcp/client.py` imports `httpx2` at runtime, but `pyproject.toml` declares it only in the dev group (it arrives transitively via `mcp>=2.3`, which requires `httpx2>=2.10`). | Low | RESOLVED Day 31: moved to `[project].dependencies` (`httpx2>=2.16,<3`), lock re-resolved with no version changes |
 | D30-4 | The `20261111_02`–`_06` migration docstrings say "not applied to development"; a read-only inspection shows development at `20261111_06`. Migrations are frozen, so this is recorded, not edited. | Info | DEFERRED WITH JUSTIFICATION (frozen files) |
 
 - **D30-1 fix:** `src/rfq_copilot/repositories/identity.py` `find_active_user`, the only loader
