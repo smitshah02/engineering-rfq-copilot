@@ -50,6 +50,10 @@ _FINISH = re.compile(r"(?i)\bfinish(?:_id)?\b(?:\s*[:=]\s*|\s+)([a-z_]+)\b(?!\s*
 _ITEM = re.compile(r"(?i)\b(?:item|line|position|pos\.?)\s*#?\s*(\d+)\b")
 # Part kinds (contract PartType values and their plain words): two kinds named = two parts.
 _PART_KIND = re.compile(r"(?i)\b(?:flat[\s_]panel|panel|mounting[\s_]plate|plate|l[\s_]bracket|u[\s_]bracket|bracket|enclosure|fabricated[\s_]assembly|assembly)s?\b")  # fmt: skip
+# Stable public names for reuse outside this module (the Intake Agent). Same objects:
+# grounding behaviour is unchanged.
+ITEM_NUMBER = _ITEM
+PART_KIND = _PART_KIND
 
 
 def labelled_dates(question: str, label: re.Pattern) -> set[date]:

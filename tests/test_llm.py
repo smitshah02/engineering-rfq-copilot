@@ -304,3 +304,83 @@ def test_malformed_tool_call_shapes_rejected(tool_calls):
 def test_well_formed_raw_tool_calls_still_accepted():
     (proposal,) = llm.inspect_tool_calls(raw([call()]), ["get_material"])
     assert proposal.arguments == GetMaterialInput(material_id="MAT-1")
+
+
+# --- D36-08: raw response checks in invoke_structured ------------------------------------
+
+
+class RawModel(GenericFakeChatModel):
+    """Returns a scripted ``include_raw`` dict, as a provider integration could."""
+
+    out: Any = None
+
+    def with_structured_output(self, schema, **kwargs):
+        from langchain_core.runnables import RunnableLambda
+
+        return RunnableLambda(lambda _: self.out)
+
+
+OK_ARGS = {"missing_fields": ["thickness"], "questions": ["What thickness?"]}
+
+
+def raw_out(raw) -> dict:
+    return {"raw": raw, "parsed": ClarificationDraft(**OK_ARGS), "parsing_error": None}
+
+
+def schema_call(id="s1") -> dict:
+    return {"name": "ClarificationDraft", "args": OK_ARGS, "id": id, "type": "tool_call"}
+
+
+async def structured_with(out):
+    return await llm.invoke_structured(
+        RawModel(messages=iter([]), out=out), [HumanMessage("t")], ClarificationDraft
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        AIMessage('{"missing_fields": ["thickness"], "questions": ["What thickness?"]}'),
+        AIMessage("", tool_calls=[schema_call()]),
+    ],
+    ids=["json_mode_no_tool_calls", "one_schema_call"],
+)
+async def test_structured_raw_permitted_modes(raw):
+    assert await structured_with(raw_out(raw)) == ClarificationDraft(**OK_ARGS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("out", "code"),
+    [
+        ({"parsed": ClarificationDraft(**OK_ARGS), "parsing_error": None}, "malformed_output"),
+        (raw_out(None), "malformed_output"),
+        (raw_out('{"missing_fields": []}'), "malformed_output"),
+        (raw_out({"tool_calls": []}), "malformed_output"),
+        (raw_out(HumanMessage("x")), "malformed_output"),
+        (raw_out(AIMessage("", tool_calls=[schema_call("a"), schema_call("b")])), "invalid_tool_call"),  # fmt: skip
+        (raw_out(AIMessage("", tool_calls=[call()])), "invalid_tool_call"),
+        (
+            raw_out(AIMessage("", tool_calls=[schema_call(), call("get_material", id="c2")])),
+            "invalid_tool_call",
+        ),
+        (
+            raw_out(AIMessage("", invalid_tool_calls=[{"name": "ClarificationDraft", "args": "{", "id": "x", "error": "bad"}])),  # fmt: skip
+            "invalid_tool_call",
+        ),
+        (raw_out(AIMessage.model_construct(content="", tool_calls=None, invalid_tool_calls=[])), "invalid_tool_call"),  # fmt: skip
+        (raw_out(AIMessage.model_construct(content="", tool_calls=["x"], invalid_tool_calls=[])), "invalid_tool_call"),  # fmt: skip
+        (raw_out(AIMessage.model_construct(content="", tool_calls=[], invalid_tool_calls=None)), "invalid_tool_call"),  # fmt: skip
+        ("not a dict", "malformed_output"),
+    ],
+    ids=[
+        "raw_missing", "raw_none", "raw_str", "raw_dict", "raw_human_message",
+        "two_schema_calls", "other_tool_only", "schema_plus_other_tool", "invalid_tool_calls",
+        "tool_calls_not_list", "tool_call_not_dict", "invalid_calls_not_list", "out_not_dict",
+    ],
+)  # fmt: skip
+async def test_structured_raw_rejected(out, code):
+    with pytest.raises(llm.LlmError) as err:
+        await structured_with(out)
+    assert err.value.code == code

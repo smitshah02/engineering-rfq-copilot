@@ -279,6 +279,18 @@ async def invoke_structured(
         raise LlmError("model_error") from None
     if not isinstance(out, dict) or out.get("parsing_error") is not None:
         raise LlmError("malformed_output")
+    # include_raw=True always yields the provider's AIMessage: zero tool calls for JSON or
+    # json_schema modes (e.g. ChatOllama), exactly one schema call for tool-calling modes.
+    # Anything else (missing, another type, extra or invalid calls) is refused.
+    raw = out.get("raw")
+    if not isinstance(raw, AIMessage):
+        raise LlmError("malformed_output")
+    calls, invalid = raw.tool_calls, raw.invalid_tool_calls
+    if not isinstance(calls, list) or not isinstance(invalid, list) or invalid:
+        raise LlmError("invalid_tool_call")
+    name = schema.model_config.get("title") or schema.__name__  # as PydanticToolsParser
+    if len(calls) > 1 or any(not isinstance(c, dict) or c.get("name") != name for c in calls):
+        raise LlmError("invalid_tool_call")
     try:
         return schema.model_validate(out.get("parsed"))
     except ValidationError:

@@ -131,6 +131,8 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Must not:** Invent machine capability or CAD geometry conclusions; auto-approve an alternative grade; change customer drawings/specifications; set prices; assign production slots; release quotes.
 
+**Implementation (Day 38):** `rfq_copilot.manufacturing_agent`, see [manufacturing_agent.md](manufacturing_agent.md). It maps `supported` / `unsupported` / clarification / review to `feasible` / `infeasible` / `needs_clarification` / `requires_review`. The decisions come only from the `check_manufacturing_feasibility` MCP tool.
+
 **Escalation/failure:** Unsupported work may produce `unsupported_declined` at workflow level; uncertain/exceptional technical issues may require `engineering_review_required`. Supply availability does not override an unsupported-material finding.
 
 ## 7. A3 — Supply & Scheduling Agent
@@ -153,6 +155,8 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 **Outputs:** Stock sufficiency, sourcing constraints, capacity assessment, estimated planning week/lead-time basis, risks, and unmet delivery target warning.
 
 **Must not:** Reserve inventory or capacity (not part of dataset baseline); promise a ship date; unilaterally substitute materials; override engineering findings; directly alter production records; approve release.
+
+**Implementation (Day 39):** `rfq_copilot.supply_agent`, see [supply_scheduling_agent.md](supply_scheduling_agent.md). The read-only MCP tools `check_inventory`, `check_capacity` and `estimate_lead_time` make the decisions. The statuses are `available`, `constrained`, `needs_clarification`, `requires_review`, `not_evaluated` and `error`. A3 never reserves stock or commits a date.
 
 **Escalation/failure:** Shortage or overloaded workcentre results in an evidence-based blocker or revised planning estimate; unresolved replacement materials must return to engineering and obtain customer authorization before substitution can be accepted.
 

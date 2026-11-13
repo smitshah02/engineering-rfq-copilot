@@ -364,5 +364,14 @@ failure code (`forbidden`, `not_found`, `unauthenticated`, `timeout`, ...).
 
 ## Next
 
+- Day 36: the RFQ Intake Agent is a separate, tool-free graph (`rfq_copilot.intake`); this
+  graph is unchanged. See [intake_agent.md](intake_agent.md).
 - Day 35+: per the phase plan. Any state-changing tool needs an approved idempotency and
   recovery design before it can join `READ_ONLY_TOOLS` or any execution list.
+- Day 38: the Manufacturing Feasibility Agent (A2, `rfq_copilot.manufacturing_agent`) reuses
+  `graph.ToolExecutor`, `graph.mcp_executor` and `READ_ONLY_TOOLS`. It runs one read-only tool
+  (`check_manufacturing_feasibility`) and no model. This graph is unchanged. See
+  [manufacturing_agent.md](manufacturing_agent.md).
+- Day 39: the Supply and Scheduling Agent (A3, `rfq_copilot.supply_agent`) follows the A2
+  pattern. It uses an injected executor, three read-only supply tools and no model, and does
+  not import this module. See [supply_scheduling_agent.md](supply_scheduling_agent.md).
