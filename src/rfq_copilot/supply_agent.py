@@ -55,6 +55,7 @@ from rfq_copilot.services.lead_time import (
     FRIDAY_OFFSET,
     add_business_days,
     business_days_between,
+    plan_start,
 )
 
 TOOLS = ("check_inventory", "check_capacity", "estimate_lead_time")  # call order
@@ -197,6 +198,13 @@ def _inconsistent(
     # horizon, and no planned capacity week lies before the horizon's start week.
     if lead.earliest_start_date != add_business_days(horizon, lead.procurement_business_days):
         return True
+    # D42-A3-01: the delay and start week are the lead-time service's plan_start of these stock
+    # lines. Its default delay is a reference constant of the pinned pricing rule only; under
+    # rule drift the evidence is kept for review (_status) without this check.
+    if inv.pricing_rule_version == PRICING_RULE_VERSION:
+        start = plan_start(inv, horizon)
+        if (lead.procurement_business_days, cap.start_week) != (start.procurement_business_days, start.start_week):  # fmt: skip
+            return True
     first_week = horizon + timedelta(weeks=cap.start_week)
     if cap.start_week < 0 or any(w.week_start < first_week for w in cap.weeks):
         return True
@@ -207,8 +215,8 @@ def _inconsistent(
     ready, final = lead.estimated_ready_date, cap.final_week_start
     if ready is None or final is None or not cap.weeks:
         return True
-    if final != max(w.week_start for w in cap.weeks) or ready < final + FRIDAY_OFFSET:
-        return True  # ready before the Friday of the last planned week
+    if final != max(w.week_start for w in cap.weeks) or ready != max(final + FRIDAY_OFFSET, lead.earliest_start_date):  # fmt: skip
+        return True  # not the last planned Friday, or the start if later (D42-A3-01)
     if lead.lead_business_days != business_days_between(horizon, ready):
         return True
     if delivery is not None and ready is not None and lead.delivery_feasible != (ready <= delivery):

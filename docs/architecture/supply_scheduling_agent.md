@@ -124,6 +124,11 @@ would describe a different order.
      - `final_week_start` is the last planned week
      - the ready date is not before the Friday of that week (`FRIDAY_OFFSET`) or the
        earliest start
+     - the ready date is exactly `max(final week Friday, earliest start)`, and, under the
+       pinned pricing rule, the procurement delay and start week equal
+       `services.lead_time.plan_start` of the reported stock lines (D42-A3-01). Under
+       pricing-rule drift the default delay is undefined, so that one comparison is skipped
+       and the result is `requires_review`
      - the lead business days equal `business_days_between(horizon, ready)`
    - an `estimated` lead time is missing a ready date or business days
    - a delivery verdict is given with no requested date, or is missing when one was requested

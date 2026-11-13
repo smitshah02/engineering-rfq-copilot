@@ -66,6 +66,9 @@ No MCP contract was changed.
    - `needs_clarification` has a route
    - `valid` lacks a route or catalog entry, or the catalog entry does not list the part's
      thickness, finish and every routed operation (D38-01)
+   - `valid` has a `bend` route without `min_bend_radius_mm`, or a minimum below
+     `thickness x` the catalog's `min_bend_radius_factor` (the service's floor), or above the
+     part's stated bend radius. A5's borderline-bend review reads this value (D42-A2-01)
 
    The services' own exception is accepted: when a non-material field is missing, they report
    only what to ask for.

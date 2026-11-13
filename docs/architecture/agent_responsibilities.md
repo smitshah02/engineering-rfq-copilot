@@ -184,6 +184,8 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Escalation/failure:** If pricing inputs are insufficient or a rule cannot be applied, stop that pricing path and request correction, clarification, or commercial review rather than presenting a fabricated figure.
 
+**Implementation (Day 40):** `rfq_copilot.pricing_agent`, see [pricing_agent.md](pricing_agent.md). The read-only MCP tools `estimate_costs` and `calculate_price` (`view_quote`) are the only source of amounts. A4 checks them against the trusted `price-v1.0` rule and A2/A3 evidence. The statuses are `priced`, `requires_review`, `not_evaluated` and `error`. A constrained supply is priced and flagged for review. A4 never quotes, approves or releases.
+
 **Important baseline limit:** Synthetic prices are internally consistent and deterministic, not industrially calibrated. The dataset model excludes **tax, shipping and freight**.
 
 ## 9. A5 — Quotation & Review Agent
@@ -209,6 +211,8 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 **Must not:** Forge or record a human approval as the agent; approve its own draft; release a quote; reuse approval from an earlier quote version; ignore customer holds or blocked releases; fabricate missing evidence.
 
 **Escalation/failure:** If a human rejects or requests revisions, preserve the outcome and return the affected issue to the appropriate owner. On uncertain draft-write status, reconcile by idempotency key before any retry.
+
+**Implementation (Day 41):** `rfq_copilot.quotation_agent`, see [quotation_review_agent.md](quotation_review_agent.md). A5 re-verifies A4 by replaying it over A4's own evidence. It reads the quotation service once through the read-only `evaluate_quotation` tool (`view_quote`) and applies the `services.evaluation` policy helpers under the trusted `approval-v1.2`. It returns a **non-persisted** draft: `draft_ready_for_review`, `requires_review`, `clarification_required`, `not_evaluated` or `error`. Responsibilities 3, 6 and 7 (versioned draft write, review tracking, re-approval) are not implemented, because no authorized write or review-status tool exists. A5 never approves, releases or persists anything.
 
 ## 10. Required workflow order and dependencies
 

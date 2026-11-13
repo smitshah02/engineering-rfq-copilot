@@ -397,6 +397,32 @@ async def test_d38_01_real_service_outcomes_pass_the_strict_checks(over, status)
     assert a.parts[0].evidence is not None
 
 
+# D42-A2-01: min_bend_radius_mm is the input of A5's borderline-bend engineering review. A
+# valid result must carry a minimum for a bent route, never below thickness x the catalog
+# factor (the service's floor), and never above the stated radius it accepted.
+BENT = {"part_type": "l_bracket", "height_mm": Decimal("50"), "finish_id": "none", "bend_radius_mm": Decimal("2.5")}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    "rewrite",
+    [
+        forge(min_bend_radius_mm=None),  # bent route without a minimum: no borderline check
+        forge(min_bend_radius_mm=Decimal("1.0")),  # below 2 mm x factor 1.0
+        forge(min_bend_radius_mm=Decimal("3.0")),  # valid, yet the stated 2.5 mm is below it
+    ],
+)
+async def test_d42_a2_01_forged_bend_minimum_is_refused(rewrite):
+    a, _ = await run(spec(**BENT), tool=Tool(rewrite=rewrite))
+    assert (a.status, a.error, a.parts[0].evidence) == ("error", "invalid_evidence", None)
+
+
+@pytest.mark.parametrize("radius", [None, Decimal("2.0"), Decimal("2.5")])
+async def test_d42_a2_01_real_bend_minimum_passes(radius):
+    a, _ = await run(spec(**(BENT | {"bend_radius_mm": radius})))
+    assert (a.status, a.error) == ("feasible", None)
+    assert a.parts[0].evidence.output.min_bend_radius_mm == Decimal("2.0")
+
+
 async def test_rule_drift_since_intake_requires_review():
     a, _ = await run(fingerprint="other-fingerprint")
     assert a.status == a.parts[0].status == "requires_review"

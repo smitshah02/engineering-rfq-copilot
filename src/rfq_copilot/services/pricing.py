@@ -97,6 +97,22 @@ def _flag(pricing: RuleVersionDetails, key: str) -> bool:
     return value
 
 
+def price_line(
+    total_cost: Decimal,
+    quantity: int,
+    margin: Decimal,
+    line_scale: Decimal,
+    unit_scale: Decimal,
+    mode: str,
+) -> tuple[Decimal, Decimal]:
+    """(line total, advisory unit price) of one costed line, as the module docstring states.
+    The one implementation: evaluate_pricing and the Pricing Agent's evidence check use it."""
+    with localcontext(PLANNING):
+        total = (total_cost / (1 - margin)).quantize(line_scale, rounding=mode)
+        unit_price = (total / quantity).quantize(unit_scale, rounding=mode)
+    return total, unit_price
+
+
 def evaluate_pricing(
     parts: Sequence[Part],
     costs: CostEstimate,
@@ -147,11 +163,9 @@ def evaluate_pricing(
         unquoted = [op for op in line.operations if quoted_operations.get(op) is not True]
         if unquoted:
             raise ValueError(f"Operations {unquoted} are not quoted and cannot be priced.")
-        with localcontext(PLANNING):
-            total = (line.total_manufacturing_cost / (1 - margin)).quantize(
-                line_scale, rounding=mode
-            )
-            unit_price = (total / line.quantity).quantize(unit, rounding=mode)
+        total, unit_price = price_line(
+            line.total_manufacturing_cost, line.quantity, margin, line_scale, unit, mode
+        )
         priced.append(PricedLine(line, total, unit_price))
     with localcontext(PLANNING):
         quote_total = sum((p.line_total_usd for p in priced), Decimal(0))

@@ -171,12 +171,21 @@ def _forged(out: ManufacturingFeasibilityOutput, spec: PartSpecification) -> boo
     if out.result == "needs_clarification":
         return bool(out.operations)
     if out.result == "valid":  # a positive conclusion needs complete, matching evidence
+        minimum = out.min_bend_radius_mm  # A5's borderline-bend input (D42-A2-01)
         return (
             catalog is None
             or not out.operations
             or spec.thickness_mm not in catalog.supported_thickness_mm
             or spec.finish_id not in catalog.compatible_finishes
             or not set(out.operations) <= set(catalog.supported_operations)
+            or ("bend" in out.operations and minimum is None)
+            or (
+                minimum is not None
+                and (
+                    minimum < spec.thickness_mm * catalog.min_bend_radius_factor  # service floor
+                    or (spec.bend_radius_mm is not None and spec.bend_radius_mm < minimum)
+                )
+            )
         )
     return False
 

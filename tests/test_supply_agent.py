@@ -532,6 +532,9 @@ INVALID = "manufacturing_evidence_invalid"
         (lambda p: with_catalog(p, material_id="MAT-001"), INVALID),
         (lambda p: with_catalog(p, supported_thickness_mm=(D("6.0"),)), INVALID),
         (contradicting_material, INVALID),
+        # D42-A2-01: a bent part's minimum radius dropped or lowered (A5's borderline input)
+        (lambda p: with_output(p, min_bend_radius_mm=None), INVALID),
+        (lambda p: with_output(p, min_bend_radius_mm=D("0.5")), INVALID),
         (stale_rules, "manufacturing_rule_mismatch"),
         (lambda p: p.model_copy(update={"error": "timeout"}), "manufacturing_evidence_missing"),
     ],
@@ -657,6 +660,38 @@ async def test_d39_03_impossible_achievable_delivery_is_refused():
     early = tweak(estimated_ready_date=date(2026, 11, 12), lead_business_days=3, delivery_feasible=True, findings=())  # fmt: skip
     a, _ = await run(extraction=intake(delivery(date(2026, 11, 12))), tool=Supply(rewrite={"estimate_lead_time": early}))  # fmt: skip
     assert (a.status, a.error) == ("error", "invalid_evidence")
+
+
+# D42-A3-01: schedules that pass every D39-03 check yet are not the lead-time service's plan
+# for these stock lines (100 kg: supplier lead 7 business days, start week 2, ready Nov 27).
+NOV_12, NOV_16, NOV_20 = date(2026, 11, 12), date(2026, 11, 16), date(2026, 11, 20)
+SHORT_DELAY = {"procurement_business_days": 3, "earliest_start_date": NOV_12}
+WEEK_1 = {"start_week": 1, "estimated_ready_date": NOV_20, "lead_business_days": 9}
+
+
+def week_1(out):  # capacity planned from week 1
+    return moved_weeks(NOV_16)(out).model_copy(update={"start_week": 1})
+
+
+@pytest.mark.parametrize(
+    "available,rewrite",
+    [
+        # the delay contradicts the short line's supplier lead (7); start and ready unchanged
+        ("100", {"estimate_lead_time": tweak(**SHORT_DELAY)}),
+        # ... and capacity planned from week 1: a ready date one week early
+        (
+            "100",
+            {"check_capacity": week_1, "estimate_lead_time": tweak(**SHORT_DELAY, **WEEK_1)},
+        ),
+        # material ready at the horizon, yet capacity planned from week 1
+        ("1000", {"check_capacity": week_1, "estimate_lead_time": tweak(**WEEK_1)}),
+        # a ready date a week after the last planned week's Friday (real ready: Nov 13)
+        ("1000", {"estimate_lead_time": tweak(estimated_ready_date=NOV_20, lead_business_days=9)}),
+    ],
+)
+async def test_d42_a3_01_schedule_not_from_the_stock_lines_is_refused(available, rewrite):
+    a, _ = await run(tool=Supply(available=available, rewrite=rewrite))
+    assert (a.status, a.error, a.evidence) == ("error", "invalid_evidence", None)
 
 
 LASER_WEEK_3 = plenty(**{"WC-LAS": reading("WC-LAS", {3: "500"})})  # multi-week capacity

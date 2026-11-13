@@ -375,3 +375,10 @@ failure code (`forbidden`, `not_found`, `unauthenticated`, `timeout`, ...).
 - Day 39: the Supply and Scheduling Agent (A3, `rfq_copilot.supply_agent`) follows the A2
   pattern. It uses an injected executor, three read-only supply tools and no model, and does
   not import this module. See [supply_scheduling_agent.md](supply_scheduling_agent.md).
+- Day 40: the Pricing Agent (A4, `rfq_copilot.pricing_agent`) follows the same pattern. It
+  uses two read-only pricing tools (`estimate_costs`, `calculate_price`) and no model, and it
+  does not import this module. See [pricing_agent.md](pricing_agent.md).
+- Day 41: the Quotation and Review Agent (A5, `rfq_copilot.quotation_agent`) follows the same
+  pattern. It uses one read-only tool (`evaluate_quotation`), the pure approval-policy helpers
+  and no model, and it does not import this module. It adds no LangGraph workflow. See
+  [quotation_review_agent.md](quotation_review_agent.md).
