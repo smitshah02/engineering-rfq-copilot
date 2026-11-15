@@ -46,7 +46,6 @@ with optional checkpointed conversation memory and read-only MCP tool execution.
 """
 
 import asyncio
-import hashlib
 import hmac
 import json
 import re
@@ -74,6 +73,8 @@ from rfq_copilot.api.mcp_integration import McpIntegration
 from rfq_copilot.grounding import GUIDANCE, Grounding, MoneyDisplay
 from rfq_copilot.mcp.client import CONTRACTS, McpCallError
 from rfq_copilot.mcp.client import FailureCode as ToolFailure
+from rfq_copilot.ownership import ThreadAccessError  # re-exported: one implementation
+from rfq_copilot.ownership import principal_owner as _owner
 
 RECURSION_LIMIT = 8  # longest path is 5 node steps
 DEFAULT_HISTORY_TURNS = 10
@@ -503,25 +504,10 @@ async def run_graph(
 _THREAD_ID = re.compile(r"[A-Za-z0-9_-]{32}")  # secrets.token_urlsafe(24)
 
 
-class ThreadAccessError(Exception):
-    """One opaque answer for: missing trusted context, malformed, unknown or foreign thread."""
-
-    def __init__(self) -> None:
-        super().__init__("thread_unavailable")
-
-
 @dataclass(frozen=True)
 class Turn:
     thread_id: str
     result: GraphResult
-
-
-def _owner(principal: Principal) -> str:
-    # Fail closed: only a verified principal with both a customer and a user owns threads.
-    if not isinstance(principal, Principal) or not principal.customer_id or not principal.user_id:
-        raise ThreadAccessError()
-    key = f"{principal.customer_id}\x00{principal.user_id}".encode()
-    return hashlib.sha256(key).hexdigest()  # pseudonymous binding, never model-visible
 
 
 class Conversations:

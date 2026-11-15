@@ -290,8 +290,10 @@ def test_none_is_a_master_data_finish():
     import csv
     from pathlib import Path
 
-    rows = csv.DictReader((Path(__file__).resolve().parents[1] / "data/rfq_synthetic_data/master_data/finishes.csv").open())  # fmt: skip
-    assert "none" in {row["finish_id"] for row in rows}
+    path = Path(__file__).resolve().parents[1] / "data/rfq_synthetic_data/master_data/finishes.csv"
+    with path.open() as handle:
+        finishes = {row["finish_id"] for row in csv.DictReader(handle)}
+    assert "none" in finishes
 
 
 # === Phase 5 final remediation =============================================================

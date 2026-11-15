@@ -34,8 +34,10 @@ from rfq_copilot.services.materials import (
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
-MATERIALS = list(csv.DictReader((SOURCE / "master_data/materials.csv").open()))
-FINISHES = list(csv.DictReader((SOURCE / "master_data/finishes.csv").open()))
+with (SOURCE / "master_data/materials.csv").open() as _materials:
+    MATERIALS = list(csv.DictReader(_materials))
+with (SOURCE / "master_data/finishes.csv").open() as _finishes:
+    FINISHES = list(csv.DictReader(_finishes))
 RULE_SHA = hashlib.sha256((SOURCE / "config/manufacturing_rules.json").read_bytes()).hexdigest()
 MATERIAL_CODES = {
     "UNSUPPORTED_MATERIAL",

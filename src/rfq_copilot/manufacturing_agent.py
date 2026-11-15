@@ -11,7 +11,8 @@ manufacturing feasibility. Not inventory, capacity, price or approval.
   and finish check inside ``services.manufacturing.check_manufacturing_capability`` under the
   server-pinned ``mfg-v1.0``). It is called once per part through the caller's trusted executor
   (``graph.mcp_executor``: delegated credential, authenticated gateway, RBAC v2
-  ``view_catalog``), sequentially, with no retries, inside one timeout.
+  ``view_catalog``), once each, with no retries, inside one timeout. Sequential by default;
+  a trusted caller may allow up to ``MAX_CONCURRENCY`` simultaneous part checks (Day 47).
 - No model is involved. Feasibility, findings and routing are the tool's; the explanation is
   rendered from finding codes by fixed templates. A part is ``feasible`` only with a validated,
   internally consistent tool result; anything else is an explicit error or blocker.
@@ -19,6 +20,16 @@ manufacturing feasibility. Not inventory, capacity, price or approval.
   version throughout, be self-consistent (``valid`` has a route and no findings, and so on) and
   carry only known finding codes, else ``invalid_evidence``. A rule version or fingerprint
   differing from the one Intake validated against -> ``requires_review``.
+- Parallel part checks (Day 47, L01): each part's check is one read-only call on that part
+  alone (own token, HTTP client, MCP session and READ ONLY snapshot; nothing shared, nothing
+  written), and its result depends on no other part, so parts are independent work items.
+  ``max_concurrency`` > 1 runs them under a semaphore in one task group. Fan-in (``_join``)
+  keys each result by its position in ``intake.parts``, refuses a missing, duplicate, unknown
+  or mismatched result, and rebuilds Intake part order; completion order is ignored. The
+  aggregate (``_PRECEDENCE``) is unchanged. A per-part tool failure stays that part's ``error``
+  exactly as sequentially (siblings still run); an unexpected fault cancels and awaits every
+  sibling. Timeout or cancellation cancels and awaits every worker (no orphan task); a result
+  that arrives after its worker was cancelled is never kept.
 - Isolation: each call carries only its own part; no input carries identity, customer scope,
   role or rule version (the contract forbids them); the customer comes only from the
   executor's verified principal. Customer text (``part_id``) never enters the explanation.
@@ -40,6 +51,7 @@ from rfq_copilot.services.materials import MATERIAL_FIELDS
 TOOL = "check_manufacturing_feasibility"
 ALLOWED_TOOLS = frozenset({TOOL})  # a subset of graph.READ_ONLY_TOOLS (tested)
 DEFAULT_TIMEOUT = 60.0
+MAX_CONCURRENCY = 4  # hard cap on simultaneous part checks in one evaluation (16 GB host)
 READY = "ready_for_manufacturing_evaluation"
 
 Status = Literal[
@@ -231,11 +243,16 @@ def _assess(
     return _part(i, spec, status=status, explanation=text, evidence=evidence)
 
 
+def _digest(spec: PartSpecification) -> str:
+    """sha256 of the exact PartCheckInput JSON sent for this part."""
+    return hashlib.sha256(PartCheckInput(part=spec).model_dump_json().encode()).hexdigest()
+
+
 async def _check(
     i: int, spec: PartSpecification, execute: ToolExecutor, intake: IntakeValidation
 ) -> PartFeasibility:
     request = PartCheckInput(part=spec)
-    digest = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
+    digest = _digest(spec)
     try:
         raw = await execute(TOOL, request)
         data = raw.model_dump(mode="json") if isinstance(raw, BaseModel) else raw
@@ -249,17 +266,93 @@ async def _check(
     return _assess(i, spec, out, digest, intake)
 
 
+class _JoinError(Exception):
+    """Fan-in refused the collected part results (an internal defect, never customer data)."""
+
+
+def _join(
+    intake: IntakeValidation, collected: list[tuple[int, object]]
+) -> tuple[PartFeasibility, ...]:
+    """Fan-in: exactly one result per expected part (keyed by its position in
+    ``intake.parts``), each the right type and status for that part's index, id and unchanged
+    specification, returned in Intake part order whatever order the workers finished in.
+
+    Evidence: an ``error`` part carries none (``_failed``); any other part must be exactly what
+    ``_assess`` derives from its own evidence and this part's arguments digest under this
+    ``intake``, so a status, explanation or evidence that does not follow is refused. These
+    are consistency checks, not cryptographic provenance (L04/L21)."""
+    expected = intake.parts
+    slots: dict[int, object] = {}
+    for position, result in collected:
+        if position in slots:
+            raise _JoinError("duplicate")
+        slots[position] = result
+    if set(slots) != set(range(len(expected))):
+        raise _JoinError("missing or unknown")
+    joined = tuple(slots[i] for i in range(len(expected)))
+    for p, r in zip(expected, joined, strict=True):
+        if not isinstance(r, PartFeasibility):
+            raise _JoinError("type")
+        owner = (p.index, p.specification.part_id, p.specification)
+        if (r.index, r.part_id, r.specification) != owner:
+            raise _JoinError("another part")
+        if r.status not in _PRECEDENCE or (r.status == "error") != (r.error is not None):
+            raise _JoinError("status")
+        if r.status == "error":
+            if r.evidence is not None:
+                raise _JoinError("error with evidence")
+            continue
+        if not isinstance(r.evidence, ToolEvidence):
+            raise _JoinError("conclusion without evidence")
+        spec = p.specification
+        if r != _assess(p.index, spec, r.evidence.output, _digest(spec), intake):
+            raise _JoinError("evidence does not support the result")
+    return joined
+
+
+async def _parallel(
+    intake: IntakeValidation, execute: ToolExecutor, timeout_seconds: float, limit: int
+) -> tuple[PartFeasibility, ...]:
+    """Bounded fan-out of the per-part checks, then the validated fan-in."""
+    gate = asyncio.Semaphore(limit)
+    collected: list[tuple[int, PartFeasibility]] = []
+
+    async def work(position: int, p) -> None:
+        async with gate:
+            result = await _check(p.index, p.specification, execute, intake)
+        if not asyncio.current_task().cancelling():  # a late result after cancel is not kept
+            collected.append((position, result))
+
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            async with asyncio.TaskGroup() as group:
+                for position, p in enumerate(intake.parts):
+                    group.create_task(work(position, p))
+    except TimeoutError:  # every worker is cancelled and awaited before this is raised
+        done = {position for position, _ in collected}
+        collected += [
+            (i, _failed(p.index, p.specification, "timeout"))
+            for i, p in enumerate(intake.parts)
+            if i not in done
+        ]
+    return _join(intake, collected)
+
+
 async def evaluate_manufacturing_feasibility(
     intake: IntakeValidation,
     execute: ToolExecutor | None,
     *,
     timeout_seconds: float = DEFAULT_TIMEOUT,
+    max_concurrency: int = 1,
 ) -> ManufacturingAssessment:
     """Evaluate every Intake-ready part with the read-only feasibility tool.
 
-    ``execute`` must be a trusted, principal-bound executor (``graph.mcp_executor``)."""
+    ``execute`` must be a trusted, principal-bound executor (``graph.mcp_executor``);
+    ``max_concurrency`` (1..MAX_CONCURRENCY) is trusted configuration, 1 = sequential."""
     if not isinstance(intake, IntakeValidation):
         raise ValueError("evaluate_manufacturing_feasibility needs an IntakeValidation")
+    if type(max_concurrency) is not int or not 1 <= max_concurrency <= MAX_CONCURRENCY:
+        raise ValueError(f"max_concurrency must be an int in 1..{MAX_CONCURRENCY}")
     base = {
         "source_id": intake.source_id,
         "rfq_id": intake.rfq_id,
@@ -279,12 +372,18 @@ async def evaluate_manufacturing_feasibility(
     if execute is None:
         return ManufacturingAssessment(**base, status="error", error="unauthenticated")
     parts: list[PartFeasibility] = []
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            for p in intake.parts:  # sequential, once each, no retries
-                parts.append(await _check(p.index, p.specification, execute, intake))
-    except TimeoutError:
-        parts += [_failed(p.index, p.specification, "timeout") for p in intake.parts[len(parts) :]]
+    if max_concurrency > 1 and len(intake.parts) > 1:  # independent parts, bounded overlap
+        try:
+            parts = list(await _parallel(intake, execute, timeout_seconds, max_concurrency))
+        except _JoinError:
+            return ManufacturingAssessment(**base, status="error", error="invalid_evidence")
+    else:
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                for p in intake.parts:  # sequential, once each, no retries
+                    parts.append(await _check(p.index, p.specification, execute, intake))
+        except TimeoutError:
+            parts += [_failed(p.index, p.specification, "timeout") for p in intake.parts[len(parts) :]]  # fmt: skip
     status = next(s for s in _PRECEDENCE if any(p.status == s for p in parts))
     error = next((p.error for p in parts if p.error), None)
     return ManufacturingAssessment(**base, status=status, parts=tuple(parts), error=error)

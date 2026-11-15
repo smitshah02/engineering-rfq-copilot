@@ -29,7 +29,8 @@ from rfq_copilot.services.materials import evaluate_material, get_material_spec
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
-ROUTING = list(csv.DictReader((SOURCE / "operations_data/operation_routing.csv").open()))
+with (SOURCE / "operations_data/operation_routing.csv").open() as _routing:
+    ROUTING = list(csv.DictReader(_routing))
 
 
 def labelled_cases():

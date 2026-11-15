@@ -43,7 +43,8 @@ from rfq_copilot.services.manufacturing import evaluate_manufacturing
 from rfq_copilot.services.materials import MaterialSpec, evaluate_material
 
 pytestmark = pytest.mark.asyncio
-FINISHES = {r["finish_id"] for r in csv.DictReader((DATA / "master_data" / "finishes.csv").open())}
+with (DATA / "master_data" / "finishes.csv").open() as _finishes:
+    FINISHES = {r["finish_id"] for r in csv.DictReader(_finishes)}
 SPECS = {
     m["material_id"]: MaterialSpec(
         material_id=m["material_id"],

@@ -181,6 +181,18 @@ def _reviews(stage: Stage, result) -> tuple[str, ...]:
     return (f"{stage}_requires_review",)  # A2 / A3: A5's vocabulary
 
 
+def _handoff_error(stage: Stage, result, identity: tuple, intake) -> str | None:
+    """The stage handoff checks (also used by the Supervisor router): the requested source and
+    RFQ identity, and for A2 exactly the specifications A1 validated."""
+    if (result.source_id, result.rfq_id) != identity:
+        return "identity_mismatch"
+    # A2 with parts must carry exactly A1's specifications (none: A2's own blocked result).
+    specs = [p.specification for p in result.parts] if stage == "manufacturing" else None
+    if specs and specs != [p.specification for p in intake.parts]:
+        return "specification_mismatch"
+    return None
+
+
 def _reason(stage: Stage, result) -> str | None:
     if stage == "intake_extraction":
         return result.error
@@ -260,12 +272,9 @@ async def evaluate_rfq_workflow(
         status = result.readiness if stage == "intake_validation" else result.status
         trace.append(StageRecord(stage=stage, agent=_AGENT[stage], status=status, reason=_reason(stage, result)))  # fmt: skip
         # A result that fails a handoff check is not kept: nothing downstream may read it.
-        if (result.source_id, result.rfq_id) != identity:
-            return finish("error", stage, "identity_mismatch", rules=used)
-        # A2 with parts must carry exactly A1's specifications (none: A2's own blocked result).
-        specs = [p.specification for p in result.parts] if stage == "manufacturing" else None
-        if specs and specs != [p.specification for p in done["intake"].parts]:
-            return finish("error", stage, "specification_mismatch", rules=used)
+        problem = _handoff_error(stage, result, identity, done.get("intake"))
+        if problem:
+            return finish("error", stage, problem, rules=used)
         done[key] = result
         nxt = _NEXT[stage].get(status, "error")
         if nxt == _GO:

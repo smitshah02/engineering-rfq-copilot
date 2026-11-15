@@ -30,7 +30,8 @@ from rfq_copilot.services.inventory import check_inventory
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 PRICING_SHA = hashlib.sha256((SOURCE / "config/pricing_rules.json").read_bytes()).hexdigest()
-INVENTORY = list(csv.DictReader((SOURCE / "operations_data/material_inventory.csv").open()))
+with (SOURCE / "operations_data/material_inventory.csv").open() as _inventory:
+    INVENTORY = list(csv.DictReader(_inventory))
 REF_MATERIALS = {row["material_id"]: row for row in MATERIALS}
 D = Decimal
 

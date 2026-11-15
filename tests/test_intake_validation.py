@@ -32,7 +32,8 @@ RULES = RuleVersionDetails(
         (DATA / "config" / "manufacturing_rules.json").read_text(), parse_float=Decimal
     ),  # fmt: skip
 )
-MATERIALS = list(csv.DictReader((DATA / "master_data" / "materials.csv").open()))
+with (DATA / "master_data" / "materials.csv").open() as _materials:
+    MATERIALS = list(csv.DictReader(_materials))
 
 
 class Catalog:

@@ -31,7 +31,8 @@ from rfq_copilot.services.inventory import check_inventory
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 MONDAY = date(2026, 11, 9)
-CAPACITY = list(csv.DictReader((SOURCE / "operations_data/production_capacity.csv").open()))
+with (SOURCE / "operations_data/production_capacity.csv").open() as _capacity:
+    CAPACITY = list(csv.DictReader(_capacity))
 D = Decimal
 
 
