@@ -1,4 +1,4 @@
-# Manufacturing Feasibility Agent (A2, Day 38)
+# Manufacturing Feasibility Agent (A2)
 
 Module: `src/rfq_copilot/manufacturing_agent.py`. Tests: `tests/test_manufacturing_agent.py`
 (offline) and `tests/test_manufacturing_agent_live_mcp.py` (opt-in live MCP).
@@ -7,11 +7,11 @@ A2 answers one question per part: can the fictional manufacturer make this part 
 pinned manufacturing rules (`mfg-v1.0`), and through which operations? It does not cover
 inventory, capacity, lead time, cost, price, approval or orchestration.
 
-## Interface (for the future Supervisor)
+## Interface (Supervisor integration)
 
 ```python
 await evaluate_manufacturing_feasibility(
-    intake: IntakeValidation,          # Day 37 output
+    intake: IntakeValidation,          # intake validation output
     execute: ToolExecutor | None,      # trusted, principal-bound: graph.mcp_executor(...)
     *, timeout_seconds: float = 60.0,
 ) -> ManufacturingAssessment
@@ -21,7 +21,7 @@ await evaluate_manufacturing_feasibility(
   `ready_for_manufacturing_evaluation` and every part has a built `PartSpecification`.
   Otherwise the result is `not_evaluated`, with `not_evaluated_reason` set to the blocking
   Intake readiness, `specification_missing` or `no_parts`.
-- **Executor.** The executor is the existing Day 34 `ToolExecutor`. `graph.mcp_executor` binds
+- **Executor.** The executor is the shared `ToolExecutor`. `graph.mcp_executor` binds
   it to a verified `Principal`. Each call goes through `McpIntegration`, which uses the
   delegated MCP credential and the authenticated gateway, and re-checks the user, the customer
   and the RBAC v2 `view_catalog` permission. If `execute` is `None`, the result is
@@ -122,7 +122,7 @@ A part is `feasible` only when `evidence` holds a validated, consistent tool res
 ## Authority and security
 
 - There is no LLM. The deterministic services decide feasibility, findings and routing.
-  Phase 5 already decided that model prose is never shown, so a model would only have chosen
+  The grounding policy forbids displaying model prose, so a model would only have chosen
   the one fixed tool. A2 therefore cannot calculate, override or invent feasibility, and
   prompt injection has nothing to steer. The tests make every model `ainvoke` fail.
 - MFG-001 is preserved through the service: 300 holes pass and 301 give
@@ -168,5 +168,5 @@ A part is `feasible` only when `evidence` holds a validated, consistent tool res
 - A2 does not evaluate substitute materials. That would be a separate candidate evaluation and
   is not implemented.
 - A2 is a plain async function rather than a LangGraph `StateGraph`. One deterministic tool
-  call per part has no branching for a graph to add. The future Supervisor can wrap it as a
+  call per part has no branching for a graph to add. The Supervisor can wrap it as a
   node.

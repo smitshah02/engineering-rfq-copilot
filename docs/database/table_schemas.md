@@ -1,4 +1,4 @@
-# Day 4 — Proposed PostgreSQL table specifications
+# Proposed PostgreSQL table specifications
 
 Design baseline: synthetic dataset v1.1.0, verified 2026-11-07. **Documentation only: no database, DDL, models, migrations, imports, or seeding executed.** These 33 logical tables supersede the provisional Component 2 registry. Source facts and application proposals are identified per table and column. Read [architecture](database_architecture.md), [relationships and indexes](relationships_and_constraints.md), and [field mapping](dataset_to_database_mapping.md) together.
 
@@ -585,7 +585,7 @@ The source entity contract suggests `numeric(18,4)` generically for money; the d
 
 **Additional CHECKs:** `line_number > 0 AND requirement_revision > 0`; `length_mm > 0 AND width_mm > 0 AND height_mm > 0 AND thickness_mm > 0 AND bend_radius_mm > 0`; `tolerance_mm >= 0 AND weld_length_mm >= 0 AND quantity > 0 AND hole_count >= 0`; `part_type IN ('flat_panel','mounting_plate','l_bracket','u_bracket','enclosure','fabricated_assembly')`.
 
-**Design notes:** Nullable fields permit missing requirements. PostgreSQL CHECK accepts NULL; manufacturing/pricing services require all applicable fields before validation. Known values must reference valid catalogs; unknown tokens remain raw evidence, not invalid FKs. Geometry maxima and required height/weld rules come from immutable manufacturing config. No Day 4 import populates this table from hidden labels.
+**Design notes:** Nullable fields permit missing requirements. PostgreSQL CHECK accepts NULL; manufacturing/pricing services require all applicable fields before validation. Known values must reference valid catalogs; unknown tokens remain raw evidence, not invalid FKs. Geometry maxima and required height/weld rules come from immutable manufacturing config. No database design import populates this table from hidden labels.
 
 ## 25. `rfq_attachments`
 
@@ -922,6 +922,11 @@ The source entity contract suggests `numeric(18,4)` generically for money; the d
 
 ## 35. Physical implementation handoff
 
-Day 5 should expand these common conventions into named constraints, create nonpartial unique keys before referencing FKs, and add the two deferred quote pointers only after both tables exist. Generated columns are a logical proposal; exercise their expressions against the selected PostgreSQL version in Day 5. Provision separate owner/migration, backend runtime, human-review, audit-writer and orchestration credentials in the later security implementation. Restrict mutable quote-version updates to current/approval flags; enforce immutable evidence through privileges and backend APIs, with triggers only if later threat modeling requires them.
+Migrations expand these conventions into named constraints, create nonpartial unique keys
+before referencing FKs, and add deferred quote pointers after both tables exist. Generated
+expressions must match the active PostgreSQL schema contract. Preserve separate owner,
+restricted runtime and human-decision authority, documented in the K2/K5 provisioning
+artifacts. The active integrity triggers and privilege allowlists protect immutable evidence
+and constrain quotation transitions; later extensions require reviewed migrations.
 
-Saver-owned LangGraph checkpoint tables are **outside this 33-table logical application catalog**. Their actual physical schema must come from the selected saver package and migration lifecycle, not invented Day 4 columns. Their payload can contain untrusted input and must be independently isolated and protected. The workflow metadata table only stores an opaque external checkpoint_ref. No business record depends on a successful checkpoint write.
+Saver-owned LangGraph checkpoint tables are **outside this 33-table logical application catalog**. Their actual physical schema must come from the selected saver package and migration lifecycle, not invented database design columns. Their payload can contain untrusted input and must be independently isolated and protected. The workflow metadata table only stores an opaque external checkpoint_ref. No business record depends on a successful checkpoint write.

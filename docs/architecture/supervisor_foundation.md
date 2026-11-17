@@ -1,14 +1,15 @@
-# Supervisor Foundation (Day 44)
+# Supervisor Foundation
 
-**Status:** implemented, **not verified** (no tests run). The foundation only. It routes
-nothing, delegates nothing and evaluates no RFQ.
+This document describes the initialization-only foundation runner. The complete Supervisor
+adds [routing](supervisor_routing.md), [delegation](supervisor_delegation.md),
+[escalation](supervisor_escalation.md), and [recovery](supervisor_recovery.md).
 **Code:** `src/rfq_copilot/supervisor.py`. **Tests:** `tests/test_supervisor.py`.
-**Related:** `supervisor_langgraph_architecture.md` (the Day 1 conceptual design),
-`langgraph_foundation.md` (Phase 5), `specialized_agent_integration.md` (Phase 6 baseline).
+**Related:** `supervisor_langgraph_architecture.md` (conceptual design),
+`langgraph_foundation.md`, `specialized_agent_integration.md` (specialist workflow).
 
 ## 1. Responsibility
 
-The Supervisor (A0) will coordinate A1–A5 through explicit LangGraph nodes. On Day 44 it:
+The Supervisor (A0) coordinates A1–A5 through explicit LangGraph nodes. Its foundation runner:
 
 - admits one workflow attempt from a trusted run context;
 - fixes its identity, source provenance, rule provenance and budget;
@@ -17,7 +18,7 @@ The Supervisor (A0) will coordinate A1–A5 through explicit LangGraph nodes. On
 
 It owns the workflow lifecycle, attempt identity, stage transitions, state consistency,
 failure containment and budgets. It never owns business results: those stay with the
-deterministic services behind A1–A5 and are produced only when an agent actually runs (Day 46).
+deterministic services behind A1–A5 and are produced only when an agent actually runs.
 
 ## 2. Topology
 
@@ -52,7 +53,7 @@ directly:
 - A dict `context` is coerced into `SupervisorContext` (LangGraph `_coerce_context`); the
   runner refuses dicts.
 
-## 3. State (`SupervisorState`, a TypedDict like Phase 5's `GraphState`)
+## 3. State (`SupervisorState`, a TypedDict like conversational agent's `GraphState`)
 
 | Key | Class | Writer |
 |---|---|---|
@@ -62,7 +63,7 @@ directly:
 | `budget: Budget` (timeout ≤ 390 s, recursion limit 4) | trusted execution metadata | `trusted_entry`, once |
 | `phase: "initialized"` | mutable workflow state | `initialize_supervisor` |
 | `stages: (StageState, ...)` (stage, agent, status, reason) | mutable workflow state | `initialize_supervisor` |
-| `clarifications`, `review_reasons` (must be empty on Day 44) | mutable indicators | `initialize_supervisor` |
+| `clarifications`, `review_reasons` (empty in the foundation runner) | mutable indicators | `initialize_supervisor` |
 
 The table classifies everything else too:
 
@@ -83,24 +84,24 @@ keys (§2).
 ### Ownership (`owned_update`, `validate_state`)
 
 - Each node may write only the keys listed in `_WRITES`. Trusted keys can be written once
-  only. Any other write raises `ownership_violation`. No specialist has write rights yet.
+  only. Any other write raises `ownership_violation`. Specialists never write foundation state directly.
 - `validate_state(state, context)` re-derives identity, rules and budget from the context
   and compares them. It requires the stage plan in order. It enforces the **foundation
   state**: every stage `pending` with `reason=None`, and empty `clarifications` and
   `review_reasons`. No validated evidence exists, so a status, reason or indicator would be
-  a forgery. Later days relax this only for stages that actually ran and produced validated
+  a forgery. The execution layer records only stages that ran and produced validated
   results, each with its own evidence check.
 
 ## 4. Trusted runtime context (`SupervisorContext`)
 
-This uses the Phase 5 `TurnContext` pattern: `StateGraph(..., context_schema=...)` with
+This uses the conversational agent `TurnContext` pattern: `StateGraph(..., context_schema=...)` with
 `Runtime[...]` in nodes (LangGraph 1.2.20, locked). The context is a frozen dataclass. Its
 dependency fields are `repr=False`.
 
 | Field | Use |
 |---|---|
 | `principal: Principal` | Verified caller. `identity.customer_id` comes from here only. |
-| `execute: ToolExecutor` | The principal-bound `graph.mcp_executor`. It must be present but is never called on Day 44. |
+| `execute: ToolExecutor` | The principal-bound `graph.mcp_executor`. It is present but is not called by the foundation runner. |
 | `rfq_id`, `source_id` | Trusted application ids (`Identifier`) |
 | `source_text` | Untrusted customer text. It is hashed (A1's `sha256(text.encode())`) and never stored. |
 | `manufacturing_rules`, `pricing_rules`, `approval_rules` | `pinned_rules` results, checked with A4's `_trusted` (mfg-v1.0, price-v1.0) and A5's `_approval_trusted` (approval-v1.2) |
@@ -112,7 +113,7 @@ fingerprints.
 
 ## 5. Stage plan (`STAGE_PLAN`)
 
-This is a code-controlled, immutable tuple. It is the allow-list that Day 45/46 routing may
+This is a code-controlled, immutable tuple. It is the allow-list that routing and delegation may
 choose from, and no model can extend it.
 
 | Stage | Agent | Entry (existing) | Produces | Consumes |
@@ -124,7 +125,7 @@ choose from, and no model can extend it.
 | pricing | A4 | `evaluate_pricing` | `PricingAssessment` | manufacturing, supply |
 | quotation | A5 | `evaluate_quotation_review` | `QuotationReviewAssessment` | manufacturing, supply, pricing |
 
-Tests pin the plan to the Phase 6 baseline. They check the same stage names and agents
+Tests pin the plan to the specialist workflow baseline. They check the same stage names and agents
 (`agent_integration._AGENT`) and the same functions the baseline calls. Each `produces` type
 must be exactly the `RFQWorkflowAssessment` field (`key`) it fills. The plan references
 functions; it does not copy or call them.
@@ -135,7 +136,7 @@ functions; it does not copy or call them.
 |---|---|
 | `SupervisorFoundationResult` | scope `supervisor_foundation`, status `initialized`/`error`, fixed error code, identity, attempt id, rule fingerprints, pending stages. `evaluated`, `draft_available`, `approved` and `released` are `Literal[False]`; `human_approval_required` is `Literal[True]`. |
 | `summary()` | the same as JSON. No amount, evidence, text or credential exists to leak. |
-| `RFQWorkflowAssessment`, `summary()`, `customer_view()` | unchanged; still the only evaluation path |
+| `RFQWorkflowAssessment`, `summary()`, `customer_view()` | specialist evaluation contracts, reused by execution |
 
 A model validator keeps status and contents consistent. `initialized` requires no error and
 the full identity, attempt id, rules and stages. `error` requires a code and carries no
@@ -157,51 +158,50 @@ identity, attempt id, rules or stages. The public fields are unchanged.
 
 ## 7a. Import boundary
 
-`supervisor.py` takes `ToolExecutor` from `intake_validation`, the same neutral alias Phase 6
-uses (equal to `graph.ToolExecutor`). It does not import the Phase 5 graph module, so
+`supervisor.py` takes `ToolExecutor` from `intake_validation`, the same neutral alias specialist workflow
+uses (equal to `graph.ToolExecutor`). It does not import the conversational agent graph module, so
 `test_conversations.py::test_no_application_entry_point_imports_the_graph` holds unchanged.
 
 ## 8. Checkpoint compatibility
 
 There is no checkpointer, and none may be attached through `run_supervisor_foundation`. The
 state holds Pydantic objects, which are outside `graph.SAFE_SERDE`'s msgpack allow-list, so
-**Supervisor state is not checkpoint-safe as written**. Phase 5 `Conversations` is untouched.
-Day 49 decides what may be persisted, for example a JSON-only projection of the identity and
-stage statuses. Evidence and costs are never persisted.
+**Foundation state is not checkpoint-safe as written**. The conversational agent’s `Conversations` is untouched.
+The [recovery layer](supervisor_recovery.md) persists a validated JSON-only metadata
+projection. Evidence and costs are never persisted.
 
 ## 9. Design decisions
 
-- **TypedDict + frozen Pydantic values.** LangGraph channels stay plain, as in Phase 5. The
+- **TypedDict + frozen Pydantic values.** LangGraph channels stay plain, as in conversational agent. The
   values are immutable and strictly validated, following the agents' `_STRICT` convention.
   A Pydantic state *schema* was rejected: LangGraph would rebuild it between nodes and coerce
   inputs, which blurs the "no input state" rule.
-- **Context, not state, for authority.** This repeats Phase 5/6: nothing that grants access
+- **Context, not state, for authority.** This repeats shared workflow: nothing that grants access
   is ever serialisable state.
 - **Supervisor-minted attempt id, and refusal of seeded state.** An attempt cannot be reused
-  or forged. Resume semantics belong to Day 49.
+  or forged. Resume semantics belong to the recovery layer.
 - **Plan over registry objects.** One tuple of `StageSpec` rows describes the specialists.
   There are no adapter classes, no second agent framework and no wrapper around
   `evaluate_rfq_workflow`.
-- **Manufacturing rules are manifest-checked at entry.** This is stricter than the Phase 6
-  preflight, which leaves it to the agents. Day 46 must pass real `pinned_rules` results.
+- **Manufacturing rules are manifest-checked at entry.** This is stricter than the specialist workflow
+  preflight, which leaves it to the agents. Delegation must pass real `pinned_rules` results.
 
-## 10. Known gaps (Day 44)
+## 10. Foundation boundaries
 
 - The executor is a closure, so its binding to `principal` is the caller's responsibility
-  (the same as Phase 6). MCP still re-authenticates every call.
+  (the same as specialist workflow). MCP still re-authenticates every call.
 - RFQ-to-customer ownership is not checked here (there is no database access). Each
   customer-scoped MCP tool enforces it when the specialists run.
 - Direct graph invocation filters unknown input keys rather than rejecting them, and coerces
   a dict context (§2). It is internal only. The runner refuses dicts, and the principal must
   always be a real `Principal` instance.
-- The Phase 5 boundary test matches source text. A comment or docstring naming the graph
+- The conversational agent boundary test matches source text. A comment or docstring naming the graph
   module's dotted path would trip it, which is why the module docstring refers to
   `graph.mcp_executor` and not the full path.
-- `horizon_start` and the intake graph are not in the context yet; Day 46 adds them.
 
-## 11. Day 45 routing
+## 11. Supervisor routing
 
 Routing builds on this foundation without changing it. See `supervisor_routing.md`. The
 foundation graph, `validate_state`, `run_supervisor_foundation` and their contracts are
-unchanged. Both graphs now share `_foundation(recursion_limit, schema)`, and both runners
+unchanged. Both graphs share `_foundation(recursion_limit, schema)`, and both runners
 share `_settle`.

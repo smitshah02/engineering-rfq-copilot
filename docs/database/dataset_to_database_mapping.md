@@ -1,4 +1,6 @@
-# Day 4 — Dataset-to-database mapping
+# Dataset-to-database mapping
+
+Source paths below identify files inside the privately supplied v1.1.0 package; they are not public GitHub links. Rendering those paths as code preserves the mapping without publishing dataset contents. See [private dataset setup](../../README.md#local-setup).
 
 **Design only. No imports, seeding code, source modifications or database execution.** Every path below is relative to `data/rfq_synthetic_data/` unless otherwise stated; filename links resolve to the frozen source. Future seeding should run only in an explicitly selected synthetic development/test environment. Hidden expected outcomes never populate production-facing PostgreSQL tables.
 
@@ -18,23 +20,23 @@
 
 | Exact CSV path | Rows | Columns | Primary target | Import stage |
 | --- | --- | --- | --- | --- |
-| [master_data/contacts.csv](../../data/rfq_synthetic_data/master_data/contacts.csv) | 40 | 6 | contacts | 2–3 |
-| [master_data/customers.csv](../../data/rfq_synthetic_data/master_data/customers.csv) | 40 | 15 | customers | 2–3 |
-| [master_data/finishes.csv](../../data/rfq_synthetic_data/master_data/finishes.csv) | 7 | 4 | finishes | 2–3 |
-| [master_data/materials.csv](../../data/rfq_synthetic_data/master_data/materials.csv) | 15 | 11 | materials | 2–3 |
-| [master_data/operations.csv](../../data/rfq_synthetic_data/master_data/operations.csv) | 8 | 4 | operations | 2–3 |
-| [master_data/roles_permissions.csv](../../data/rfq_synthetic_data/master_data/roles_permissions.csv) | 27 | 3 | role_permissions | 2–3 |
-| [master_data/suppliers.csv](../../data/rfq_synthetic_data/master_data/suppliers.csv) | 6 | 4 | suppliers | 2–3 |
-| [master_data/users.csv](../../data/rfq_synthetic_data/master_data/users.csv) | 24 | 7 | users | 2–3 |
-| [master_data/workcentres.csv](../../data/rfq_synthetic_data/master_data/workcentres.csv) | 8 | 6 | workcentres | 2–3 |
-| [operations_data/material_inventory.csv](../../data/rfq_synthetic_data/operations_data/material_inventory.csv) | 90 | 14 | material_inventory | 4 |
-| [operations_data/operation_routing.csv](../../data/rfq_synthetic_data/operations_data/operation_routing.csv) | 28 | 6 | operation_routing | 4 |
-| [operations_data/procurement_records.csv](../../data/rfq_synthetic_data/operations_data/procurement_records.csv) | 12 | 7 | procurement_records | 4 |
-| [operations_data/production_capacity.csv](../../data/rfq_synthetic_data/operations_data/production_capacity.csv) | 80 | 9 | production_capacity | 4 |
-| [transactional_data/approval_history.csv](../../data/rfq_synthetic_data/transactional_data/approval_history.csv) | 70 | 7 | approval_history | 6 |
-| [transactional_data/historical_quotes.csv](../../data/rfq_synthetic_data/transactional_data/historical_quotes.csv) | 80 | 17 | quotes | 6 |
-| [transactional_data/quote_line_items.csv](../../data/rfq_synthetic_data/transactional_data/quote_line_items.csv) | 100 | 9 | quote_line_items | 6 |
-| [transactional_data/quote_versions.csv](../../data/rfq_synthetic_data/transactional_data/quote_versions.csv) | 96 | 7 | quote_versions | 6 |
+| `master_data/contacts.csv` | 40 | 6 | contacts | 2–3 |
+| `master_data/customers.csv` | 40 | 15 | customers | 2–3 |
+| `master_data/finishes.csv` | 7 | 4 | finishes | 2–3 |
+| `master_data/materials.csv` | 15 | 11 | materials | 2–3 |
+| `master_data/operations.csv` | 8 | 4 | operations | 2–3 |
+| `master_data/roles_permissions.csv` | 27 | 3 | role_permissions | 2–3 |
+| `master_data/suppliers.csv` | 6 | 4 | suppliers | 2–3 |
+| `master_data/users.csv` | 24 | 7 | users | 2–3 |
+| `master_data/workcentres.csv` | 8 | 6 | workcentres | 2–3 |
+| `operations_data/material_inventory.csv` | 90 | 14 | material_inventory | 4 |
+| `operations_data/operation_routing.csv` | 28 | 6 | operation_routing | 4 |
+| `operations_data/procurement_records.csv` | 12 | 7 | procurement_records | 4 |
+| `operations_data/production_capacity.csv` | 80 | 9 | production_capacity | 4 |
+| `transactional_data/approval_history.csv` | 70 | 7 | approval_history | 6 |
+| `transactional_data/historical_quotes.csv` | 80 | 17 | quotes | 6 |
+| `transactional_data/quote_line_items.csv` | 100 | 9 | quote_line_items | 6 |
+| `transactional_data/quote_versions.csv` | 96 | 7 | quote_versions | 6 |
 
 All **17 designated business CSV files / 731 rows** are mapped below, including roles_permissions. The 16 formally contracted CSVs contribute 704 rows. Attachment BOM CSVs are document evidence and are **not** part of this 731-row business-table inventory. Additional normalized rows are projections, not extra source files: 6 roles, 12 permissions, 90 thickness options, 50 material-finish pairs, 90 material-operation pairs, and 19 finish-category memberships.
 
@@ -46,7 +48,7 @@ For each row, resolve the full FK/composite as specified in the target schema an
 
 ### `master_data/contacts.csv` — 40 rows
 
-Source: [master_data/contacts.csv](../../data/rfq_synthetic_data/master_data/contacts.csv). Primary target: `contacts`.
+Source: `master_data/contacts.csv`. Primary target: `contacts`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -59,7 +61,7 @@ Source: [master_data/contacts.csv](../../data/rfq_synthetic_data/master_data/con
 
 ### `master_data/customers.csv` — 40 rows
 
-Source: [master_data/customers.csv](../../data/rfq_synthetic_data/master_data/customers.csv). Primary target: `customers`.
+Source: `master_data/customers.csv`. Primary target: `customers`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -81,7 +83,7 @@ Source: [master_data/customers.csv](../../data/rfq_synthetic_data/master_data/cu
 
 ### `master_data/finishes.csv` — 7 rows
 
-Source: [master_data/finishes.csv](../../data/rfq_synthetic_data/master_data/finishes.csv). Primary target: `finishes`.
+Source: `master_data/finishes.csv`. Primary target: `finishes`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -92,7 +94,7 @@ Source: [master_data/finishes.csv](../../data/rfq_synthetic_data/master_data/fin
 
 ### `master_data/materials.csv` — 15 rows
 
-Source: [master_data/materials.csv](../../data/rfq_synthetic_data/master_data/materials.csv). Primary target: `materials`. Import scalar catalog first, then explode three arrays after finish/operation parents exist.
+Source: `master_data/materials.csv`. Primary target: `materials`. Import scalar catalog first, then explode three arrays after finish/operation parents exist.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -110,7 +112,7 @@ Source: [master_data/materials.csv](../../data/rfq_synthetic_data/master_data/ma
 
 ### `master_data/operations.csv` — 8 rows
 
-Source: [master_data/operations.csv](../../data/rfq_synthetic_data/master_data/operations.csv). Primary target: `operations`.
+Source: `master_data/operations.csv`. Primary target: `operations`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -121,7 +123,7 @@ Source: [master_data/operations.csv](../../data/rfq_synthetic_data/master_data/o
 
 ### `master_data/roles_permissions.csv` — 27 rows
 
-Source: [master_data/roles_permissions.csv](../../data/rfq_synthetic_data/master_data/roles_permissions.csv). Primary target: `role_permissions`. Derive roles and permissions from distinct values before grant insertion.
+Source: `master_data/roles_permissions.csv`. Primary target: `role_permissions`. Derive roles and permissions from distinct values before grant insertion.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -131,7 +133,7 @@ Source: [master_data/roles_permissions.csv](../../data/rfq_synthetic_data/master
 
 ### `master_data/suppliers.csv` — 6 rows
 
-Source: [master_data/suppliers.csv](../../data/rfq_synthetic_data/master_data/suppliers.csv). Primary target: `suppliers`.
+Source: `master_data/suppliers.csv`. Primary target: `suppliers`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -142,7 +144,7 @@ Source: [master_data/suppliers.csv](../../data/rfq_synthetic_data/master_data/su
 
 ### `master_data/users.csv` — 24 rows
 
-Source: [master_data/users.csv](../../data/rfq_synthetic_data/master_data/users.csv). Primary target: `users`.
+Source: `master_data/users.csv`. Primary target: `users`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -156,7 +158,7 @@ Source: [master_data/users.csv](../../data/rfq_synthetic_data/master_data/users.
 
 ### `master_data/workcentres.csv` — 8 rows
 
-Source: [master_data/workcentres.csv](../../data/rfq_synthetic_data/master_data/workcentres.csv). Primary target: `workcentres`.
+Source: `master_data/workcentres.csv`. Primary target: `workcentres`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -169,7 +171,7 @@ Source: [master_data/workcentres.csv](../../data/rfq_synthetic_data/master_data/
 
 ### `operations_data/material_inventory.csv` — 90 rows
 
-Source: [operations_data/material_inventory.csv](../../data/rfq_synthetic_data/operations_data/material_inventory.csv). Primary target: `material_inventory`.
+Source: `operations_data/material_inventory.csv`. Primary target: `material_inventory`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -190,7 +192,7 @@ Source: [operations_data/material_inventory.csv](../../data/rfq_synthetic_data/o
 
 ### `operations_data/operation_routing.csv` — 28 rows
 
-Source: [operations_data/operation_routing.csv](../../data/rfq_synthetic_data/operations_data/operation_routing.csv). Primary target: `operation_routing`.
+Source: `operations_data/operation_routing.csv`. Primary target: `operation_routing`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -203,7 +205,7 @@ Source: [operations_data/operation_routing.csv](../../data/rfq_synthetic_data/op
 
 ### `operations_data/procurement_records.csv` — 12 rows
 
-Source: [operations_data/procurement_records.csv](../../data/rfq_synthetic_data/operations_data/procurement_records.csv). Primary target: `procurement_records`.
+Source: `operations_data/procurement_records.csv`. Primary target: `procurement_records`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -217,7 +219,7 @@ Source: [operations_data/procurement_records.csv](../../data/rfq_synthetic_data/
 
 ### `operations_data/production_capacity.csv` — 80 rows
 
-Source: [operations_data/production_capacity.csv](../../data/rfq_synthetic_data/operations_data/production_capacity.csv). Primary target: `production_capacity`.
+Source: `operations_data/production_capacity.csv`. Primary target: `production_capacity`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -233,7 +235,7 @@ Source: [operations_data/production_capacity.csv](../../data/rfq_synthetic_data/
 
 ### `transactional_data/approval_history.csv` — 70 rows
 
-Source: [transactional_data/approval_history.csv](../../data/rfq_synthetic_data/transactional_data/approval_history.csv). Primary target: `approval_history`.
+Source: `transactional_data/approval_history.csv`. Primary target: `approval_history`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -247,7 +249,7 @@ Source: [transactional_data/approval_history.csv](../../data/rfq_synthetic_data/
 
 ### `transactional_data/historical_quotes.csv` — 80 rows
 
-Source: [transactional_data/historical_quotes.csv](../../data/rfq_synthetic_data/transactional_data/historical_quotes.csv). Primary target: `quotes`. Join only the header current version to version financial columns; circular header pointers are deferred within one atomic transaction.
+Source: `transactional_data/historical_quotes.csv`. Primary target: `quotes`. Join only the header current version to version financial columns; circular header pointers are deferred within one atomic transaction.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -271,7 +273,7 @@ Source: [transactional_data/historical_quotes.csv](../../data/rfq_synthetic_data
 
 ### `transactional_data/quote_line_items.csv` — 100 rows
 
-Source: [transactional_data/quote_line_items.csv](../../data/rfq_synthetic_data/transactional_data/quote_line_items.csv). Primary target: `quote_line_items`.
+Source: `transactional_data/quote_line_items.csv`. Primary target: `quote_line_items`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -287,7 +289,7 @@ Source: [transactional_data/quote_line_items.csv](../../data/rfq_synthetic_data/
 
 ### `transactional_data/quote_versions.csv` — 96 rows
 
-Source: [transactional_data/quote_versions.csv](../../data/rfq_synthetic_data/transactional_data/quote_versions.csv). Primary target: `quote_versions`.
+Source: `transactional_data/quote_versions.csv`. Primary target: `quote_versions`.
 
 | Exact source field | Exact target column | Transformation / validation | Null handling | FK resolution / dependency |
 | --- | --- | --- | --- | --- |
@@ -299,7 +301,6 @@ Source: [transactional_data/quote_versions.csv](../../data/rfq_synthetic_data/tr
 | `is_current` | `quote_versions.is_current` | BOOLEAN via shared strict parser.  | Required value; zero empty | No FK; validate local key/value rules |
 | `approval_valid` | `quote_versions.approval_valid` | BOOLEAN via shared strict parser.  | Required value; zero empty | No FK; validate local key/value rules |
 
-
 ### Required-field/empty-string findings
 
 Inventory.expected_replenishment_date has **75** blanks. Historical quotes have **40** blank submitted_by, **60** approved_version, **50** approver_id, **60** approval_timestamp and **70** rejection_reason. Those cells become NULL, not empty FK strings. All ten rejected headers have an approver_id but no approved_version/timestamp; preserve the reviewer identity without inventing approval. All 20 approved/expired headers carrying an approved_version refer to their current version and independent creator/approver IDs.
@@ -310,7 +311,7 @@ No blanket transformation fills all blank source cells or all NULL target column
 
 ### Historical RFQs — 80 records
 
-Source: [transactional_data/historical_rfqs.json](../../data/rfq_synthetic_data/transactional_data/historical_rfqs.json). Load at stage 5 after customers. This source is business history, not a scenario fixture.
+Source: `transactional_data/historical_rfqs.json`. Load at stage 5 after customers. This source is business history, not a scenario fixture.
 
 | Source field | Target | Transformation / validation |
 | --- | --- | --- |
@@ -341,7 +342,7 @@ The **offline harness** controls validation and frozen input assignment; their v
 
 ### Attachment objects and manifest — 124 referenced files
 
-Source [attachments/attachment_manifest.json](../../data/rfq_synthetic_data/attachments/attachment_manifest.json) is a harness list with **rfq_id, path, split, type**; it has no attachment_id, revision, trust flag or filename field. Those fields come from the actual scenario attachment object, not a fabricated manifest column. Manifest rfq_id joins the harness fixture only; split controls exposure, type cross-checks document_type and path must exist/hash-match. No HRFQ attachment relationship is assumed.
+Source `attachments/attachment_manifest.json` is a harness list with **rfq_id, path, split, type**; it has no attachment_id, revision, trust flag or filename field. Those fields come from the actual scenario attachment object, not a fabricated manifest column. Manifest rfq_id joins the harness fixture only; split controls exposure, type cross-checks document_type and path must exist/hash-match. No HRFQ attachment relationship is assumed.
 
 | Exact scenario attachment field | Operational target if deliberately ingested | Transformation / validation |
 | --- | --- | --- |
@@ -377,10 +378,10 @@ Each complete object is stored in business_rule_versions.document with exact sou
 
 | Source | Declared version | Registry kind | Exact root keys | Target / transformation |
 | --- | --- | --- | --- | --- |
-| [config/manufacturing_rules.json](../../data/rfq_synthetic_data/config/manufacturing_rules.json) | mfg-v1.0 | manufacturing | `version`, `units`, `allowed_part_types`, `mandatory_fields`, `height_required`, `weld_length_required`, `limits`, `defaults`, `bend_counts`, `unsupported_operations`, `interpretation` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
-| [config/pricing_rules.json](../../data/rfq_synthetic_data/config/pricing_rules.json) | price-v1.0 | pricing | `version`, `currency`, `rounding`, `calculation_precision`, `line_total_scale`, `unit_display_scale`, `gross_margin`, `scrap_fraction`, `inspection_minutes_per_unit`, `packaging_usd_per_unit`, `hole_cut_extra_mm`, `workcentre_hourly_rates_usd`, `cutting_mm_per_min`, `bend_minutes_per_bend`, `weld_mm_per_min`, `finishing_usd_per_m2`, `setup_minutes`, `tax_included`, `freight_included`, `shipping_included`, `policy` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
-| [config/approval_policies.json](../../data/rfq_synthetic_data/config/approval_policies.json) | approval-v1.1 | approval | `admin_does_not_bypass_approval`, `agent_forbidden_actions`, `all_writes_require_authenticated_actor`, `blocked_customer_statuses`, `commercial_review_customer_statuses`, `currency`, `draft_creation_policy`, `engineering_review_conditions`, `human_release_approval_required`, `manager_review_policy`, `manager_review_threshold_usd`, `quote_release_requires`, `release_policy`, `version` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
-| [config/workflow_state_rules.json](../../data/rfq_synthetic_data/config/workflow_state_rules.json) | workflow-v1.0 | workflow | `version`, `transitions`, `version_bump_requires_approval_reset`, `idempotent_writes`, `immutable_approval_version` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
+| `config/manufacturing_rules.json` | mfg-v1.0 | manufacturing | `version`, `units`, `allowed_part_types`, `mandatory_fields`, `height_required`, `weld_length_required`, `limits`, `defaults`, `bend_counts`, `unsupported_operations`, `interpretation` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
+| `config/pricing_rules.json` | price-v1.0 | pricing | `version`, `currency`, `rounding`, `calculation_precision`, `line_total_scale`, `unit_display_scale`, `gross_margin`, `scrap_fraction`, `inspection_minutes_per_unit`, `packaging_usd_per_unit`, `hole_cut_extra_mm`, `workcentre_hourly_rates_usd`, `cutting_mm_per_min`, `bend_minutes_per_bend`, `weld_mm_per_min`, `finishing_usd_per_m2`, `setup_minutes`, `tax_included`, `freight_included`, `shipping_included`, `policy` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
+| `config/approval_policies.json` | approval-v1.1 | approval | `admin_does_not_bypass_approval`, `agent_forbidden_actions`, `all_writes_require_authenticated_actor`, `blocked_customer_statuses`, `commercial_review_customer_statuses`, `currency`, `draft_creation_policy`, `engineering_review_conditions`, `human_release_approval_required`, `manager_review_policy`, `manager_review_threshold_usd`, `quote_release_requires`, `release_policy`, `version` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
+| `config/workflow_state_rules.json` | workflow-v1.0 | workflow | `version`, `transitions`, `version_bump_requires_approval_reset`, `idempotent_writes`, `immutable_approval_version` | Full object → document; version → rule_version; kind assigned; byte hash → sha256; immutable FK target |
 
 `config/generation_config.yaml` remains an offline source provenance document: version=1.1.0 and reference_date=2026-11-02 populate data_snapshots.dataset_version/as_of_date; inventory's measured snapshot_date must agree. Capacity has **no source snapshot_date or snapshot_version column**: its registry as_of_date is explicitly derived from generation metadata, with week_start left unchanged. schedule_start=2026-11-09 and planning_weeks=10 validate the baseline. Suggested stable tokens are inventory-v1.1.0-2026-11-02 and capacity-v1.1.0-2026-11-02; the service maps these to exact approved CSV byte hashes and immutable archive references. Do not archive the evaluation ZIP for business runtime access.
 
@@ -390,11 +391,11 @@ Each complete object is stored in business_rule_versions.document with exact sou
 
 | Source | Registry kind | Source version field/value | Exact root keys | Mapping |
 | --- | --- | --- | --- | --- |
-| [contracts/entity_schemas.json](../../data/rfq_synthetic_data/contracts/entity_schemas.json) | entity_contract | 1.0 | `entity_json_schemas`, `entity_relationships`, `money_type`, `primary_key_format`, `schema_version`, `timestamp_type`, `value_types` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
-| [contracts/tool_schemas.json](../../data/rfq_synthetic_data/contracts/tool_schemas.json) | tool_contract | 1.1 | `approval_tool_exposed_to_agent`, `contract_version`, `notes`, `tools` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
-| [contracts/business_constraints.json](../../data/rfq_synthetic_data/contracts/business_constraints.json) | business_constraints | properties.schema_version.const=1.1; content addressed | `agent_can_finalize_approval`, `currency`, `customer_scope_checked_server_side`, `document_conflict_policy`, `estimate_is_nonbinding`, `max_autonomous_write_retry_count`, `price_and_approval_version_pinning`, `state_transition_configuration` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
-| [contracts/agent_coordination_policy.json](../../data/rfq_synthetic_data/contracts/agent_coordination_policy.json) | coordination | 1.1 | `agents`, `all_business_tools_via_secure_mcp_gateway`, `allowed_parallel_group`, `architecture`, `dependencies_are_partial_order_not_exact_trace`, `handoff_schema`, `human_approval_for_release`, `llm_cannot_override_business_tool_results`, `must_have_engineering_validation_before_pricing`, `no_approve_or_release_tool_for_ai_agents`, `no_duplicate_write_on_redelegation`, `required_handoff_fields`, `supervisor_escalation_on`, `version` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
-| [contracts/agent_handoff_schema.json](../../data/rfq_synthetic_data/contracts/agent_handoff_schema.json) | handoff | properties.schema_version.const=1.1; content addressed | `$id`, `$schema`, `additionalProperties`, `properties`, `required`, `title`, `type` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
+| `contracts/entity_schemas.json` | entity_contract | 1.0 | `entity_json_schemas`, `entity_relationships`, `money_type`, `primary_key_format`, `schema_version`, `timestamp_type`, `value_types` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
+| `contracts/tool_schemas.json` | tool_contract | 1.1 | `approval_tool_exposed_to_agent`, `contract_version`, `notes`, `tools` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
+| `contracts/business_constraints.json` | business_constraints | properties.schema_version.const=1.1; content addressed | `agent_can_finalize_approval`, `currency`, `customer_scope_checked_server_side`, `document_conflict_policy`, `estimate_is_nonbinding`, `max_autonomous_write_retry_count`, `price_and_approval_version_pinning`, `state_transition_configuration` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
+| `contracts/agent_coordination_policy.json` | coordination | 1.1 | `agents`, `all_business_tools_via_secure_mcp_gateway`, `allowed_parallel_group`, `architecture`, `dependencies_are_partial_order_not_exact_trace`, `handoff_schema`, `human_approval_for_release`, `llm_cannot_override_business_tool_results`, `must_have_engineering_validation_before_pricing`, `no_approve_or_release_tool_for_ai_agents`, `no_duplicate_write_on_redelegation`, `required_handoff_fields`, `supervisor_escalation_on`, `version` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
+| `contracts/agent_handoff_schema.json` | handoff | properties.schema_version.const=1.1; content addressed | `$id`, `$schema`, `additionalProperties`, `properties`, `required`, `title`, `type` | Full object → document; namespaced/content-addressed rule_version; source_path + exact-byte sha256; no fixture rows |
 
 The handoff schema's properties.schema_version.const=1.1 and $id describe its contract version (no root version field); preserve the complete schema and identify it by namespaced/content hash. A version string repeated between entity/tool/coordination/handoff contracts is **not** a globally unique registry key: namespace it by document kind or use content addressing. Tool/state contract metadata lives in immutable document JSONB, not fabricated tool/agent SQL master tables.
 
@@ -404,16 +405,16 @@ Entity source mapping: the contract's 16 formal CSV paths resolve to the fields 
 
 | Exact source | Measured shape/count | Source field names (metadata only) | Target / access |
 | --- | --- | --- | --- |
-| [evaluation/agent_coordination_cases.json](../../data/rfq_synthetic_data/evaluation/agent_coordination_cases.json) | 240 list records | `acceptable_supervisor_disposition`, `allowed_parallel_groups`, `clarification_propagation_required`, `conditional_short_circuit_allowed`, `fault_instance_id`, `forbidden_agent_actions`, `required_agents`, `required_dependency_edges`, `required_handoffs`, `required_specialist_disagreement_handling`, `rfq_id`, `schema_version`, `split`, `tool_call_order_is_not_fixed`, `unnecessary_specialist_invocation_penalty` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/agent_exception_cases.json](../../data/rfq_synthetic_data/evaluation/agent_exception_cases.json) | 12 list records | `agent_visible_input_must_exclude_expected_result`, `coordination_case_id`, `expected_agent_release_write_count`, `expected_handoff_status`, `expected_supervisor_action`, `injected_event`, `source_rfq_id` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/checksums.sha256.json](../../data/rfq_synthetic_data/evaluation/checksums.sha256.json) | 637 root keys (not necessarily records) | relative asset path → SHA-256 (dynamic map) | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/evaluation_schema.json](../../data/rfq_synthetic_data/evaluation/evaluation_schema.json) | 5 root keys (not necessarily records) | `evaluation_protocol`, `label_storage`, `metrics`, `score_requires_independent_executor`, `version` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/expected_tool_behavior.json](../../data/rfq_synthetic_data/evaluation/expected_tool_behavior.json) | 2 root keys (not necessarily records) | `policy`, `version` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/failure_scenarios.json](../../data/rfq_synthetic_data/evaluation/failure_scenarios.json) | 36 list records | `attempt_sequence`, `checkpoint_available`, `expected_audit_events`, `expected_final_workflow_state`, `expected_outcome`, `expected_recovery`, `expected_write_count_after_recovery`, `expected_write_count_first_attempt`, `failure_case_id`, `failure_type`, `fallback_available`, `fault_injection`, `fault_instance_id`, `fault_template_id`, `idempotency_key`, `must_not_assume_rollback`, `observed_backoff_seconds`, `operation_class`, `operation_id`, `outcome_uncertain`, `prior_result_available`, `receipt_status`, `reconciliation_status`, `recovered`, `required_backoff_seconds`, `retry_after_window_elapsed`, `retry_attempt_idempotency_keys`, `retry_limit`, `rfq_id`, `safe_to_retry`, `snapshot_revalidated`, `tenant_id`, `trigger_after_operation` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/fault_templates.json](../../data/rfq_synthetic_data/evaluation/fault_templates.json) | 19 list records | `direct_retry_safe`, `failure_type`, `fault_template_id`, `operation_class`, `recovery_policy` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/scenario_families.json](../../data/rfq_synthetic_data/evaluation/scenario_families.json) | 26 list records | `count`, `family`, `primary_category`, `split` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/scenario_manifest.json](../../data/rfq_synthetic_data/evaluation/scenario_manifest.json) | 240 list records | `attachment_count`, `family_id`, `label_file`, `primary_category`, `rfq_id`, `scenario_file`, `split` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
-| [evaluation/security_scenarios.json](../../data/rfq_synthetic_data/evaluation/security_scenarios.json) | 60 list records | `actor_id`, `actor_kind`, `attack_type`, `authenticated_role`, `block_downstream`, `claimed_role`, `customer_scope`, `expected_audit_event`, `expected_decision`, `expected_downstream_write_count`, `expected_error_class`, `input_condition`, `reason`, `requested_action`, `security_case_id`, `target_customer_id` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/agent_coordination_cases.json` | 240 list records | `acceptable_supervisor_disposition`, `allowed_parallel_groups`, `clarification_propagation_required`, `conditional_short_circuit_allowed`, `fault_instance_id`, `forbidden_agent_actions`, `required_agents`, `required_dependency_edges`, `required_handoffs`, `required_specialist_disagreement_handling`, `rfq_id`, `schema_version`, `split`, `tool_call_order_is_not_fixed`, `unnecessary_specialist_invocation_penalty` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/agent_exception_cases.json` | 12 list records | `agent_visible_input_must_exclude_expected_result`, `coordination_case_id`, `expected_agent_release_write_count`, `expected_handoff_status`, `expected_supervisor_action`, `injected_event`, `source_rfq_id` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/checksums.sha256.json` | 637 root keys (not necessarily records) | relative asset path → SHA-256 (dynamic map) | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/evaluation_schema.json` | 5 root keys (not necessarily records) | `evaluation_protocol`, `label_storage`, `metrics`, `score_requires_independent_executor`, `version` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/expected_tool_behavior.json` | 2 root keys (not necessarily records) | `policy`, `version` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/failure_scenarios.json` | 36 list records | `attempt_sequence`, `checkpoint_available`, `expected_audit_events`, `expected_final_workflow_state`, `expected_outcome`, `expected_recovery`, `expected_write_count_after_recovery`, `expected_write_count_first_attempt`, `failure_case_id`, `failure_type`, `fallback_available`, `fault_injection`, `fault_instance_id`, `fault_template_id`, `idempotency_key`, `must_not_assume_rollback`, `observed_backoff_seconds`, `operation_class`, `operation_id`, `outcome_uncertain`, `prior_result_available`, `receipt_status`, `reconciliation_status`, `recovered`, `required_backoff_seconds`, `retry_after_window_elapsed`, `retry_attempt_idempotency_keys`, `retry_limit`, `rfq_id`, `safe_to_retry`, `snapshot_revalidated`, `tenant_id`, `trigger_after_operation` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/fault_templates.json` | 19 list records | `direct_retry_safe`, `failure_type`, `fault_template_id`, `operation_class`, `recovery_policy` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/scenario_families.json` | 26 list records | `count`, `family`, `primary_category`, `split` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/scenario_manifest.json` | 240 list records | `attachment_count`, `family_id`, `label_file`, `primary_category`, `rfq_id`, `scenario_file`, `split` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
+| `evaluation/security_scenarios.json` | 60 list records | `actor_id`, `actor_kind`, `attack_type`, `authenticated_role`, `block_downstream`, `claimed_role`, `customer_scope`, `expected_audit_event`, `expected_decision`, `expected_downstream_write_count`, `expected_error_class`, `input_condition`, `reason`, `requested_action`, `security_case_id`, `target_customer_id` | Harness-only schema/manifest/scoring/fault/security/coordination provenance; no business-table field mapping |
 
 `evaluation/ground_truth/development/*.json` (120), `validation/*.json` (40), `frozen_evaluation/*.json` (80) remain separate scorer-only labels. Their expected_extraction/expected_pricing/expected_schedule/expected_outcome, required_tools, tool_dependencies, human-approval labels, fault answers and coordination decisions never map to production business columns, prompts, vector indexes, checkpoint metadata or business-service logs. Scenario_manifest's exact fields rfq_id, scenario_file, label_file, split, primary_category, family_id, attachment_count remain harness metadata; primary_category and label_file must not become agent-visible intake context. checksums.sha256.json validates 637 immutable asset paths, not business rows. A hash manifest also contains hidden paths and is not mounted into agent retrieval.
 

@@ -1,7 +1,6 @@
 # Engineering RFQ Multi-Agent Copilot — Business Workflow
 
 **Document:** `docs/architecture/business_workflow.md`  
-**Project stage:** Day 1 of 73 — business-workflow design  
 **Document status:** Reference design for review; not a claim of implemented functionality  
 **Dataset baseline:** Approved synthetic RFQ dataset `v1.1.0`  
 **Simulated manufacturer:** Meridian Fabrication Lab (fictional)  
@@ -151,7 +150,7 @@ Three separate policy concepts exist in approved dataset v1.1.0:
 
 Only a fully validated, appropriately reviewed, currently approved quote version may become eligible for customer-facing release. The release operation itself must perform server-side authorization, current-version approval and hold checks.
 
-**For Day 1:** This is a **business control and target behavior**. We are documenting it, not claiming we have implemented sending quotations or a production release endpoint.
+Quotation approval and release are separate human-controlled service operations. Document delivery and external dispatch require their own reviewed integration.
 
 ## 6. Important exception paths
 
@@ -229,16 +228,16 @@ A customer requests **100 enclosures** in **Aluminum 5052** with delivery in **1
 
 ## 11. Business-level acceptance checklist
 
-- [ ] An RFQ is distinguishable from a quotation and a later purchase order.
-- [ ] Each actor and agent has a clearly bounded responsibility.
-- [ ] Intake identifies missing and conflicting requirements without making up facts.
-- [ ] Feasibility checks precede unqualified manufacturing commitments.
-- [ ] Supply uses inventory kg and separate capacity hours; timing estimates are not promises.
-- [ ] Pricing is reproducible using the dataset's pinned calculator and rules.
-- [ ] Draft creation, extra managerial review and human release approval are treated as separate gates.
-- [ ] Approval is human, authorized and tied to the current quote version.
-- [ ] Exception/failure paths can stop, clarify, decline, review or safely recover.
-- [ ] Audit, least privilege, duplicate-write prevention and hidden-label isolation are required.
+- An RFQ is distinguishable from a quotation and a later purchase order.
+- Each actor and agent has a clearly bounded responsibility.
+- Intake identifies missing and conflicting requirements without making up facts.
+- Feasibility checks precede unqualified manufacturing commitments.
+- Supply uses inventory kg and separate capacity hours; timing estimates are not promises.
+- Pricing is reproducible using the dataset's pinned calculator and rules.
+- Draft creation, extra managerial review and human release approval are treated as separate gates.
+- Approval is human, authorized and tied to the current quote version.
+- Exception/failure paths can stop, clarify, decline, review or safely recover.
+- Audit, least privilege, duplicate-write prevention and hidden-label isolation are required.
 
 ## 12. Authoritative references and implementation boundary
 
@@ -252,8 +251,7 @@ This design uses the **approved v1.1.0 dataset**, not the discarded preliminary 
 - `docs/mcp_mapping.md` — tool permissions and read/write boundaries.
 - `config/` — versioned reference policies, including pricing version `price-v1.0`.
 
-The **dataset is independently verified as a synthetic reference foundation**, but the LangGraph runtime, FastAPI application, secure MCP gateway, PostgreSQL backend and real human approval mechanism are **not yet implemented or end-to-end validated**. Their detailed technical designs belong in separate Day 1 architecture deliverables and later implementation work.
-
----
-
-**Day 1 review criterion:** This document defines the intended business workflow and its safety boundaries. Component 1 is complete only after its contents have been understood and reviewed; no coding is required to pass this component.
+The backend includes PostgreSQL persistence, FastAPI, secure MCP, the LangGraph Supervisor,
+five specialized agents, and a separate human-decision application. Browser integration
+and production deployment remain separate acceptance requirements. See the
+[project overview](../../README.md) for current capabilities and limitations.

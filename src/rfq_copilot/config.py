@@ -1,6 +1,6 @@
 """Explicit, credential-safe configuration for the asynchronous database layer.
 
-Two credentials per database (K2, Day 54A):
+Administrative and restricted serving credentials:
 
 - ``DATABASE_URL`` / ``TEST_DATABASE_URL``: the database and table owner. Migrations,
   seeding, integrity audits, operator CLIs and test fixtures use it (``migration_safety``
@@ -14,6 +14,10 @@ Two credentials per database (K2, Day 54A):
   (``docs/database/k5_decision_roles.sql``). Read only by the human decision process
   (``api/decision_app.py``); it must differ from both the owner and the runtime role.
   ``database.require_decision_runtime`` re-checks it live.
+
+``from_env`` remains the administrative/test provisioning path, including its owner-to-role
+comparisons. Serving factories use ``from_serving_env`` instead: it reads only the selected
+restricted URL and non-secret target metadata, never an owner or another role's credential.
 """
 
 import os
@@ -85,6 +89,8 @@ class DatabaseConfig:
 
     def __post_init__(self) -> None:
         _validate_url(self.url)
+        if self.runtime and self.decision:
+            raise DatabaseConfigurationError("Choose the runtime or the decision credential.")
         if self.target not in ("development", "test"):
             raise DatabaseConfigurationError("Database target must be development or test.")
         if self.target == "test":
@@ -94,6 +100,48 @@ class DatabaseConfig:
                 raise DatabaseConfigurationError("Test URL does not match TEST_DATABASE_NAME.")
             if not self.development_database or self.url.database == self.development_database:
                 raise DatabaseConfigurationError("Test and development databases must be distinct.")
+
+    @classmethod
+    def from_serving_env(
+        cls,
+        target: DatabaseTarget = "development",
+        *,
+        environ: Mapping[str, str] | None = None,
+        decision: bool = False,
+    ) -> "DatabaseConfig":
+        """Select one restricted credential without dotenv discovery or owner access.
+
+        Non-secret DATABASE_HOST/PORT default to loopback:5432; DEVELOPMENT_DATABASE_NAME
+        defaults to rfq_copilot_dev. Test serving additionally requires TEST_DATABASE_NAME.
+        URL role names do not prove privilege isolation: Database.session checks the live
+        catalogs before yielding a restricted session, including decision-group membership.
+        """
+        if target not in ("development", "test"):
+            raise DatabaseConfigurationError("Database target must be development or test.")
+        source = os.environ if environ is None else environ
+        variable = (DECISION_VARIABLES if decision else RUNTIME_VARIABLES)[target]
+        url = _parse_url(source.get(variable), variable)
+        development = source.get("DEVELOPMENT_DATABASE_NAME", "rfq_copilot_dev")
+        expected = development if target == "development" else source.get("TEST_DATABASE_NAME")
+        host = source.get("DATABASE_HOST", "127.0.0.1")
+        try:
+            port = int(source.get("DATABASE_PORT", "5432"))
+        except (TypeError, ValueError):
+            raise DatabaseConfigurationError("DATABASE_PORT must be a valid port.") from None
+        if not 1 <= port <= 65535 or not development or not host:
+            raise DatabaseConfigurationError("Restricted database target metadata is invalid.")
+        if (url.host, url.port or 5432, url.database) != (host, port, expected):
+            raise DatabaseConfigurationError(
+                f"{variable} does not match the configured restricted database target."
+            )
+        return cls(
+            url=url,
+            target=target,
+            expected_test_database=expected if target == "test" else None,
+            development_database=development,
+            runtime=not decision,
+            decision=decision,
+        )
 
     @classmethod
     def from_env(

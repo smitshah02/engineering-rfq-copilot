@@ -1,6 +1,6 @@
 # Quotation and Review Agent (A5)
 
-`rfq_copilot.quotation_agent` (Day 41). A5 turns the verified results of A2 (manufacturing),
+`rfq_copilot.quotation_agent`. A5 turns the verified results of A2 (manufacturing),
 A3 (supply) and A4 (pricing) into a **non-persisted quotation draft**. It also states the
 review that draft needs under the pinned approval policy.
 
@@ -232,7 +232,7 @@ amounts. The A3 or A4 assessment of another specification is also caught this wa
 
 - **No persistence**: no draft id, version, idempotency key or approval request. These need
   an authorized, idempotent draft-write service and a human-only approval API. Both are out
-  of the Phase scope.
+  of this component’s scope.
 - **No quote validity/expiry**: no business rule defines a validity period. The
   `quote_versions.expires_at` column exists but has no rule. A validity rule must be
   approved and registered before A5 can report one, together with a trusted clock input.

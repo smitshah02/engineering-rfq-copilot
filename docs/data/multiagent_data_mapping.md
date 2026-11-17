@@ -1,9 +1,9 @@
 # Multi-Agent Data, Tool, and Authorization Mapping
 
 **Project:** Engineering RFQ Multi-Agent Copilot  
-**Roadmap:** Day 3 of 73  
 **Dataset baseline:** Synthetic RFQ v1.1.0  
-**Status:** Verified **contracts** and proposed future application mapping. MCP endpoints and LangGraph agents have **not** been implemented.
+**Scope:** Dataset contracts and their mapping to the implemented agents and MCP services.
+Dataset fixture coverage does not establish live deployment readiness.
 
 ## Contract sources and semantics
 
@@ -106,7 +106,7 @@ Required dependency-edge counts: Intake -> Engineering 240; Engineering -> Prici
 
 Twelve exception fixtures cover: missing-field propagation; specialist disagreement; valid parallel merge; premature pricing; duplicate delegation; specialist timeout; malformed handoff; stale quote version; cross-customer handoff; unnecessary calls; inventory/pricing disagreement; attempted agent approval.
 
-## Security and isolation requirements for future implementation
+## Security and isolation requirements
 
 1. All tools invoked through secure MCP gateway, with authenticated actor context from the backend, not customer-supplied text or LLM instructions.
 2. Verify customer ownership/assigned-region scope and least-privilege role access server-side.
@@ -115,8 +115,9 @@ Twelve exception fixtures cover: missing-field propagation; specialist disagreem
 5. Preserve snapshot and pricing rule versions across handoffs, caching, review and approval.
 6. Expose **no** `approve_quote` or `release_quote` MCP tools to AI agents; human manager release is a separate authenticated interface with active customer, commercial clearance, current approval version and independent approver.
 7. Never mount `evaluation/ground_truth/`, hidden expected results, security outcomes, or evaluation coordination labels into agent-visible retrieval contexts.
-8. Treat `MFG-001` as a required engineering-validation guardrail for future untrusted inputs; the frozen reference engine currently does not enforce the scalar hole maximum.
+8. Keep the application manufacturing guard for `MFG-001`: the frozen reference engine does not enforce the scalar hole maximum and must remain unchanged.
 
 ## Verification limits
 
-All 240 scenario-manifest pairs had matching scenario and label IDs and valid distinct file paths. No top-level `expected_*` keys appeared in the agent-visible RFQ objects, based on the targeted inspection. **This does not prove future runtime access isolation.** The dataset contains contracts and reference code, not deployed MCP endpoints, an RBAC gateway, or running agents.
+All 240 scenario-manifest pairs had matching scenario and label IDs and valid distinct file paths. No top-level `expected_*` keys appeared in the agent-visible RFQ objects, based on the targeted inspection. **Dataset fixtures do not establish runtime access isolation.** Runtime authorization is
+enforced by the application and secured MCP infrastructure, independently of these contracts.

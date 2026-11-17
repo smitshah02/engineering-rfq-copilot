@@ -158,11 +158,9 @@ async def test_an_extra_insert_grant_is_a_runtime_violation(runtime, seed_databa
         await guarded(s)
         await s.execute(text(f"GRANT INSERT ON business.rfqs TO {role}"))
     try:
-        async with runtime.session() as s:
-            await guarded(s)
-            assert "insert_privileges" in await runtime_role_violations(s)
-            with pytest.raises(PrivilegedRuntimeRole):
-                await require_restricted_runtime(s)
+        with pytest.raises(PrivilegedRuntimeRole, match="insert_privileges"):
+            async with runtime.session():
+                pytest.fail("An overprivileged runtime session reached the caller")
     finally:
         async with seed_database.session() as s, s.begin():
             await guarded(s)

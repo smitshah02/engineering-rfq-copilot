@@ -1,11 +1,11 @@
-# Supervisor checkpointing and recovery (Day 49, L05)
+# Supervisor checkpointing and recovery (L05)
 
 Module: `src/rfq_copilot/recovery.py`. Supervisor hooks: `_Custody` (pause, carried
 results, unused budget), `_delegation_node` → `_re_record`, and `_foundation(attempt=...)`.
 
-## 1. Phase 5 checkpoint audit (`graph.py`, `Conversations`)
+## 1. conversational agent checkpoint audit (`graph.py`, `Conversations`)
 
-| Property | Phase 5 behaviour | Reusable for the Supervisor? |
+| Property | conversational agent behaviour | Reusable for the Supervisor? |
 |---|---|---|
 | Saver | `InMemorySaver(serde=SAFE_SERDE)`, process-local; a durable saver can be injected | Design reused (owner binding, server ids); saver not attached |
 | Serializer | `JsonPlusSerializer(pickle_fallback=False, allowed_msgpack_modules=None)`: primitives and LangChain messages only | **No.** `RoutingState` holds Pydantic models (identity, outcomes, route, budget), outside the allow-list (D44-d) |
@@ -101,7 +101,7 @@ that no longer validates. An ID is only a lookup key, never authorization.
 - **Cancellation:**
   - `cancel` on a paused attempt clears its custody;
   - on a running attempt it cancels the task, the attempt is recorded `cancelled`, and A2
-    workers settle (Day 47);
+    workers settle;
   - a cancelled, failed, expired or superseded attempt is never `completed`.
 - **Process termination:** an adopted `running` record becomes `failed`/`interrupted`.
 

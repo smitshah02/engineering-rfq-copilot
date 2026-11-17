@@ -1,15 +1,15 @@
-# MCP tool contracts (Day 24)
+# MCP tool contracts
 
 Source of truth: `src/rfq_copilot/mcp/contracts.py` (`TOOLS`). Tests:
 `tests/test_mcp_contracts.py`. SDK: `mcp` 2.3.0. Contracts only: no server, endpoint or
-adapter exists yet (Days 25–26). Architecture: [mcp_architecture.md](mcp_architecture.md).
+adapter exists yet. Architecture: [mcp_architecture.md](mcp_architecture.md).
 
 All tools are read-only (`ToolAnnotations(read_only_hint=True, destructive_hint=False,
 idempotent_hint=True, open_world_hint=False)`). Permissions are rbac-policy-v2 names. MCP
 runs under v2 only (F1). JSON schemas come from the Pydantic models through the SDK.
 Nothing is maintained by hand.
 
-| Tool | Server | Input | Output | Permission | Service (Day 25/26) |
+| Tool | Server | Input | Output | Permission | Service |
 |---|---|---|---|---|---|
 | `search_materials` | manufacturing | `MaterialListQuery` (category, grade, thickness_mm, finish_id, limit ≤100, offset) | `MaterialPage` | `view_catalog` | `repositories.queries.find_materials` |
 | `get_material` | manufacturing | `GetMaterialInput` (material_id) | `MaterialSpecOutput` | `view_catalog` | `services.materials.get_material_spec` |
@@ -43,11 +43,11 @@ scale. A business rejection (`unsupported`, `needs_clarification`, `insufficient
 
 - **Identity:** no input has a customer, user, role, permission or tenant field
   (`extra="forbid"`, enforced by the SDK before a tool body runs). The customer comes only
-  from the verified principal (Day 27). `rfq_id` is an untrusted key. The adapter loads it
+  from the verified principal. `rfq_id` is an untrusted key. The adapter loads it
   with `customer_id=principal.customer_id`, and a missing RFQ and someone else's RFQ both
   answer `NOT_FOUND`.
 - **Upstream results:** no input accepts `InventoryCheck`, `CapacityCheck`, `CostEstimate`,
-  `PriceCalculation`, rule documents or snapshot pins. Day 25/26 adapters must recompute
+  `PriceCalculation`, rule documents or snapshot pins. component/26 adapters must recompute
   the prerequisites (inventory → capacity/costs → price) in one `snapshot_session()`, and
   rules and snapshots must be selected server-side (`select_snapshots`, pinned
   `get_rule_version`).
@@ -77,7 +77,7 @@ failures as a tool error whose text includes the Pydantic message. That message 
 the caller's own input values, but no server data. It does not report them as JSON-RPC
 `-32602`.
 
-**Runtime (Day 25, `mcp/safety.py`):** the servers register the SDK `ServerMiddleware`
+**Runtime (component, `mcp/safety.py`):** the servers register the SDK `ServerMiddleware`
 `sanitize_tool_errors`.
 - **Error text:** it rewrites every `tools/call` error result to one of the six fixed
   texts (an allow-list), so SDK validation errors no longer echo input.
@@ -93,13 +93,13 @@ Failures inside a tool body go through `safe_call`:
 - Input conversion (`runtime.to_parts`: `Part.from_mapping` plus the existing
   `validate_lines`, e.g. duplicate part IDs) → `INVALID_INPUT`.
 - Any other `ValueError` (a service or output-contract check after validation), or any
-  other exception → `INTERNAL`, with details logged server-side only (Day 26 A1).
+  other exception → `INTERNAL`, with details logged server-side only (component A1).
 
 **Dispatch boundary:** call servers only through the SDK dispatch path (`mcp.Client` or a
 transport). Direct `MCPServer.call_tool()` bypasses `sanitize_tool_errors` and must not
 be used by application code.
 
-**Authorization (Day 27):** every tool runs only with a verified, request-scoped
+**Authorization:** every tool runs only with a verified, request-scoped
 `McpPrincipal`. `McpTokenVerifier` checks the bearer token over HTTP:
 - signature, issuer, the dedicated MCP audience, exp/nbf/iat, and `sub`;
 - revocation, which is always enforced;
@@ -116,11 +116,11 @@ unassigned RFQs all give the same `NOT_FOUND`. A visible RFQ without runtime lin
 `INVALID_INPUT`. Over MCP the customer comes only from the single binding: there is no
 customer-selection header, so a user with several bindings is refused.
 
-**Recomputation (Day 26):** every supply and pricing call runs in one snapshot session:
+**Recomputation:** every supply and pricing call runs in one snapshot session:
 `select_snapshots` → `check_inventory` → (`estimate_costs` → `calculate_quote`), and
 capacity/lead time via `estimate_lead_time`, quotation via `quote_parts`. The rule
 versions `mfg-v1.0` and `price-v1.0` are pinned in `mcp/runtime.py`, sha256-checked. No
-Day 26 tool needs approval rules.
+component tool needs approval rules.
 
 **Protocol versions:** the SDK may negotiate legacy revisions. Restricting them is a runtime
-responsibility (Day 28) and is not enforced by these contracts.
+responsibility and is not enforced by these contracts.

@@ -21,6 +21,7 @@ from pathlib import Path
 import httpx2
 import pytest
 from dotenv import dotenv_values
+from serving_process import mcp_process_environment
 from sqlalchemy import insert, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import ISSUER, bearer
@@ -377,8 +378,7 @@ def live_host(trust, **extra_env):
     env_file = dotenv_values(ROOT / ".env") if (ROOT / ".env").is_file() else {}
     secrets = [v for v in env_file.values() if v and len(v) >= 6]
     env = {
-        **os.environ,
-        **{k: v for k, v in env_file.items() if v is not None},
+        **mcp_process_environment(env_file, os.environ),
         "RFQ_MCP_RESOURCE_SERVER_URL": f"{base}/mcp",
         "RFQ_MCP_JWT_ISSUER": ISSUER,
         "RFQ_MCP_JWT_AUDIENCE": MCP_AUDIENCE,
@@ -391,6 +391,8 @@ def live_host(trust, **extra_env):
         "RFQ_MCP_HOST_ALLOWED_ORIGINS": base,
         **extra_env,
     }
+    if any(not key.startswith("RFQ_MCP_") for key in extra_env):
+        raise ValueError("Only MCP settings may be supplied to the test gateway process.")
     process = subprocess.Popen(
         [
             sys.executable,

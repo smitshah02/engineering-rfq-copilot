@@ -1,4 +1,4 @@
-# Supply and Scheduling Agent (A3, Day 39)
+# Supply and Scheduling Agent (A3)
 
 Module: `src/rfq_copilot/supply_agent.py`. Tests: `tests/test_supply_agent.py` (offline) and
 `tests/test_supply_agent_live_mcp.py` (opt-in live MCP).
@@ -13,14 +13,14 @@ For the parts A2 found manufacturable, A3 asks the existing supply tools four qu
 The answer is a planning estimate. A3 does not reserve stock, change capacity, create an
 order, set a price or approve anything.
 
-## Interface (for the future Supervisor)
+## Interface (Supervisor integration)
 
 ```python
 await evaluate_supply(
-    a2: ManufacturingAssessment,         # Day 38 output
+    a2: ManufacturingAssessment,         # manufacturing output
     execute: ToolExecutor | None,        # trusted, principal-bound: graph.mcp_executor(...)
     *, horizon_start: date | None,       # trusted planning policy (a Monday)
-    extraction: IntakeResult | None = None,  # Day 36 result of the same source
+    extraction: IntakeResult | None = None,  # intake extraction result of the same source
     timeout_seconds: float = 60.0,
 ) -> SupplyAssessment
 ```
@@ -54,7 +54,7 @@ would describe a different order.
 - **Planning horizon.** It comes only from the trusted caller policy, never from customer
   text.
 - **Requested delivery date.**
-  - It is used only when `extraction` is the Day 36 result of the same `source_id` and
+  - It is used only when `extraction` is the intake extraction result of the same `source_id` and
     `rfq_id`, and holds exactly one `requested_delivery_date` with status `verified` and a
     `date` value.
   - If the date is stated but not verified, A3 returns `needs_clarification` and calls

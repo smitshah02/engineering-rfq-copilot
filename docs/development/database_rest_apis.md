@@ -1,6 +1,6 @@
-# Protected read APIs (Day 18): database-backed REST reads
+# Protected read APIs: database-backed REST reads
 
-This document describes the code as implemented. Day 18 adds **read-only**, customer-scoped
+This document describes the code as implemented. protected reads adds **read-only**, customer-scoped
 routes backed by the existing repositories. There is no authenticator yet, so a real
 deployment answers **401** on every protected route. Integration tests inject a verified
 principal through a FastAPI dependency override.
@@ -17,7 +17,7 @@ principal through a FastAPI dependency override.
 
 **What each protected route returns:**
 - no verified identity: `401 {"detail":"Authentication required."}` with `WWW-Authenticate: Bearer`
-- invalid parameters: the Day 17 sanitized 422
+- invalid parameters: the API validation sanitized 422
 - not visible to the caller: `404 {"detail":"Not found."}`
 - database failure: `503 {"detail":"Service unavailable."}`
 - unexpected error: the opaque `500 Internal Server Error`
@@ -76,7 +76,7 @@ code allowlist, because query integers arrive as text.
 
 Database modules are imported lazily inside dependencies and endpoints. So the
 application, `/health/live` and `/api/v1/system/info` start without SQLAlchemy, and the
-Day 16 isolation test still holds.
+API foundation isolation test still holds.
 
 ## 4. Security
 
@@ -93,7 +93,7 @@ Day 16 isolation test still holds.
   rejected, expired, blocked and clarification quotes are never returned. The current
   dataset has no released quotes, so every real quote lookup is a 404 until a human
   release exists.
-- **Errors:** the Day 17 sanitization is unchanged. 503 and 500 bodies are fixed text.
+- **Errors:** the API validation sanitization is unchanged. 503 and 500 bodies are fixed text.
 
 **Mutation checks.** Each was run once, then reverted and verified with `cmp`:
 - removing the release filter: 8 tests fail

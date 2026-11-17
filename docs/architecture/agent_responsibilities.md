@@ -2,7 +2,6 @@
 
 **Document path (requested):** `docs/architecture/agent_resposibilities.md`  
 **Project:** Engineering RFQ Multi-Agent Copilot  
-**Roadmap:** Day 1 of 73 — Component 2: Multi-Agent System Architecture  
 **Design status:** Component 2 reference design; implementation not started  
 **Data baseline:** Approved synthetic RFQ dataset `v1.1.0`  
 **Simulated manufacturer:** Meridian Fabrication Lab (fictional)  
@@ -131,7 +130,7 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Must not:** Invent machine capability or CAD geometry conclusions; auto-approve an alternative grade; change customer drawings/specifications; set prices; assign production slots; release quotes.
 
-**Implementation (Day 38):** `rfq_copilot.manufacturing_agent`, see [manufacturing_agent.md](manufacturing_agent.md). It maps `supported` / `unsupported` / clarification / review to `feasible` / `infeasible` / `needs_clarification` / `requires_review`. The decisions come only from the `check_manufacturing_feasibility` MCP tool.
+**Implementation:** `rfq_copilot.manufacturing_agent`, see [manufacturing_agent.md](manufacturing_agent.md). It maps `supported` / `unsupported` / clarification / review to `feasible` / `infeasible` / `needs_clarification` / `requires_review`. The decisions come only from the `check_manufacturing_feasibility` MCP tool.
 
 **Escalation/failure:** Unsupported work may produce `unsupported_declined` at workflow level; uncertain/exceptional technical issues may require `engineering_review_required`. Supply availability does not override an unsupported-material finding.
 
@@ -156,7 +155,7 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Must not:** Reserve inventory or capacity (not part of dataset baseline); promise a ship date; unilaterally substitute materials; override engineering findings; directly alter production records; approve release.
 
-**Implementation (Day 39):** `rfq_copilot.supply_agent`, see [supply_scheduling_agent.md](supply_scheduling_agent.md). The read-only MCP tools `check_inventory`, `check_capacity` and `estimate_lead_time` make the decisions. The statuses are `available`, `constrained`, `needs_clarification`, `requires_review`, `not_evaluated` and `error`. A3 never reserves stock or commits a date.
+**Implementation:** `rfq_copilot.supply_agent`, see [supply_scheduling_agent.md](supply_scheduling_agent.md). The read-only MCP tools `check_inventory`, `check_capacity` and `estimate_lead_time` make the decisions. The statuses are `available`, `constrained`, `needs_clarification`, `requires_review`, `not_evaluated` and `error`. A3 never reserves stock or commits a date.
 
 **Escalation/failure:** Shortage or overloaded workcentre results in an evidence-based blocker or revised planning estimate; unresolved replacement materials must return to engineering and obtain customer authorization before substitution can be accepted.
 
@@ -184,7 +183,7 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Escalation/failure:** If pricing inputs are insufficient or a rule cannot be applied, stop that pricing path and request correction, clarification, or commercial review rather than presenting a fabricated figure.
 
-**Implementation (Day 40):** `rfq_copilot.pricing_agent`, see [pricing_agent.md](pricing_agent.md). The read-only MCP tools `estimate_costs` and `calculate_price` (`view_quote`) are the only source of amounts. A4 checks them against the trusted `price-v1.0` rule and A2/A3 evidence. The statuses are `priced`, `requires_review`, `not_evaluated` and `error`. A constrained supply is priced and flagged for review. A4 never quotes, approves or releases.
+**Implementation:** `rfq_copilot.pricing_agent`, see [pricing_agent.md](pricing_agent.md). The read-only MCP tools `estimate_costs` and `calculate_price` (`view_quote`) are the only source of amounts. A4 checks them against the trusted `price-v1.0` rule and A2/A3 evidence. The statuses are `priced`, `requires_review`, `not_evaluated` and `error`. A constrained supply is priced and flagged for review. A4 never quotes, approves or releases.
 
 **Important baseline limit:** Synthetic prices are internally consistent and deterministic, not industrially calibrated. The dataset model excludes **tax, shipping and freight**.
 
@@ -212,7 +211,7 @@ Avoid shipping entire customer databases, hidden benchmark labels, or arbitrary 
 
 **Escalation/failure:** If a human rejects or requests revisions, preserve the outcome and return the affected issue to the appropriate owner. On uncertain draft-write status, reconcile by idempotency key before any retry.
 
-**Implementation (Day 41):** `rfq_copilot.quotation_agent`, see [quotation_review_agent.md](quotation_review_agent.md). A5 re-verifies A4 by replaying it over A4's own evidence. It reads the quotation service once through the read-only `evaluate_quotation` tool (`view_quote`) and applies the `services.evaluation` policy helpers under the trusted `approval-v1.2`. It returns a **non-persisted** draft: `draft_ready_for_review`, `requires_review`, `clarification_required`, `not_evaluated` or `error`. Responsibilities 3, 6 and 7 (versioned draft write, review tracking, re-approval) are not implemented, because no authorized write or review-status tool exists. A5 never approves, releases or persists anything.
+**Implementation:** `rfq_copilot.quotation_agent`, see [quotation_review_agent.md](quotation_review_agent.md). A5 re-verifies A4 by replaying it over A4's own evidence. It reads the quotation service once through the read-only `evaluate_quotation` tool (`view_quote`) and applies the `services.evaluation` policy helpers under the trusted `approval-v1.2`. It returns a **non-persisted** draft: `draft_ready_for_review`, `requires_review`, `clarification_required`, `not_evaluated` or `error`. Responsibilities 3, 6 and 7 (versioned draft write, review tracking, re-approval) are not implemented, because no authorized write or review-status tool exists. A5 never approves, releases or persists anything.
 
 ## 10. Required workflow order and dependencies
 
@@ -318,20 +317,10 @@ The dataset's eight expected **RFQ-level** labels are distinct from internal age
 
 **Correct principle:** Stock availability cannot override technical feasibility or customer specifications. A workflow may end in clarification, review or decline instead of a quote.
 
-## 15. Component 2 design acceptance checklist
-
-- [x] One Supervisor and exactly five specialist roles are defined.
-- [x] Each agent has a purpose, inputs, responsibilities, outputs, forbidden actions and escalation behavior.
-- [x] Delegation and result handoffs have explicit conceptual structure.
-- [x] Business dependencies and safe rework behavior are documented.
-- [x] Deterministic calculations are separated from LLM coordination.
-- [x] MCP/service authorization, data visibility and write boundaries are described.
-- [x] Human-only, version-specific quotation release approval is mandatory.
-- [x] The eight v1.1.0 evaluation outcomes are mapped without conflating them with task statuses.
-- [x] The document is consistent with `business_workflow.md` and the approved synthetic baseline.
-
 ## 16. Authoritative source references and status
 
-Implementation should later be reconciled with the approved dataset's `README.md`, `docs/business_rules.md`, `docs/multi_agent_evaluation.md`, `docs/mcp_mapping.md`, `docs/recovery_policy.md`, `contracts/`, and `config/`. When these contain a more precise field, role, or tool contract, **the verified dataset contract takes precedence** over this conceptual summary.
+Implementation must remain aligned with the approved dataset's `README.md`, `docs/business_rules.md`, `docs/multi_agent_evaluation.md`, `docs/mcp_mapping.md`, `docs/recovery_policy.md`, `contracts/`, and `config/`. When these contain a more precise field, role, or tool contract, **the verified dataset contract takes precedence** over this conceptual summary.
 
-**Component 2 is closed as a documentation/learning milestone at the project owner's direction.** No additional written assessment is required. This document does not claim that the agent code, orchestration, MCP gateway, PostgreSQL services, or end-to-end approval controls exist yet.
+The specialized agents and Supervisor are implemented; their agent-facing tools remain
+read-only. Persistent quotation writes and human decisions use separate backend services.
+See the [project overview](../../README.md) for integration boundaries.

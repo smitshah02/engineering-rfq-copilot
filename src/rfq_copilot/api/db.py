@@ -6,7 +6,7 @@ described below; only attachment uploads use ``get_write_session``.
 - The session dependency depends on ``get_principal``, so an unauthenticated request is
   rejected before any database object is created or touched.
 - The ``Database`` is either injected into ``create_app`` (caller-owned) or built lazily
-  on first use from the process ``DATABASE_URL`` with ``read_only=True`` (PostgreSQL then
+  on first use from the process ``APP_DATABASE_URL`` with ``read_only=True`` (PostgreSQL then
   refuses writes), owned by the application and disposed at shutdown.
 - Each request gets its own ``AsyncSession`` from ``Database.session()``, which rolls
   back and closes it on success, error or cancellation. Nothing commits.
@@ -44,7 +44,7 @@ async def get_database(request: Request) -> "Database":
                 from rfq_copilot.database import Database
 
                 try:
-                    config = DatabaseConfig.from_env("development")
+                    config = DatabaseConfig.from_serving_env("development")
                 except DatabaseConfigurationError:
                     raise unavailable() from None
                 state.database = Database(config, read_only=True)
@@ -84,7 +84,7 @@ async def get_write_database(request: Request) -> "Database":
                 from rfq_copilot.database import Database
 
                 try:
-                    config = DatabaseConfig.from_env("development")
+                    config = DatabaseConfig.from_serving_env("development")
                 except DatabaseConfigurationError:
                     raise unavailable() from None
                 state.write_database = Database(config)

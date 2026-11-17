@@ -1,4 +1,4 @@
-# Supervisor parallel execution (Day 47, L01)
+# Supervisor parallel execution (L01)
 
 Scope: **per-part concurrency inside A2 (Manufacturing Feasibility)**. The six Supervisor
 stages (A1 extraction → A1 validation → A2 → A3 → A4 → A5) stay a strict sequential chain.
@@ -49,7 +49,7 @@ fan-out. Reasons:
 - The work items are A2-internal tool calls. A2 already owns their evidence checks
   (`_forged`, rule pins) and the result contract.
 - `Send` workers would put `PartSpecification`s and raw tool output into graph channels.
-  Day 46 keeps typed results out of graph state (custody, L06).
+  Supervisor delegation keeps typed results out of graph state (custody, L06).
 - A graph fan-out would also have needed a second record path for one stage.
 
 The Supervisor still records **exactly one** validated outcome per stage.
@@ -70,7 +70,7 @@ The Supervisor still records **exactly one** validated outcome per stage.
 | Setting | Where | Value |
 |---|---|---|
 | `a2.MAX_CONCURRENCY` | code constant | 4 (hard cap; `ValueError` above it) |
-| `evaluate_manufacturing_feasibility(max_concurrency=)` | keyword argument, trusted caller | default **1** (Phase 6 and direct callers stay sequential) |
+| `evaluate_manufacturing_feasibility(max_concurrency=)` | keyword argument, trusted caller | default **1** (specialist workflow and direct callers stay sequential) |
 | `SupervisorContext.part_concurrency` | trusted run context, never state or input | default **2**; anything not an `int` in 1..4 → `invalid_budget` before any agent runs |
 
 `bool`, `float` and `str` are refused (`type(x) is int`).
@@ -139,8 +139,8 @@ owning nodes. `approved` and `released` stay `Literal[False]`.
 ## 8. Parity
 
 The sequential path is the reference: `max_concurrency=1` (A2) and `part_concurrency=1`
-(Supervisor), plus Phase 6 `evaluate_rfq_workflow`, which still calls A2 sequentially. Tests
+(Supervisor), plus specialist workflow `evaluate_rfq_workflow`, which still calls A2 sequentially. Tests
 compare the full typed `ManufacturingAssessment` and every kept stage result
-(`SupplyAssessment`, `PricingAssessment`, `QuotationReview`) with Phase 6's. They also
+(`SupplyAssessment`, `PricingAssessment`, `QuotationReview`) with specialist workflow's. They also
 compare the whole `SupervisorExecutionResult` apart from attempt ids, the customer view, and
 the multiset of executor calls.

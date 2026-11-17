@@ -1,6 +1,8 @@
-# Day 4 — Database architecture
+# Database architecture
 
-**Roadmap:** Day 4 of 73, Relational Data Modeling and PostgreSQL Fundamentals. **Status:** completed architecture/documentation; no deployed database or application. **Verified:** 2026-11-07 against frozen synthetic dataset v1.1.0. This document refines the existing provisional Component 2 draft using local source evidence, and completes the eight requested Day 4 components. Day 1–3 files and dataset bytes are preserved.
+**Scope:** Relational design and source mapping for frozen dataset v1.1.0. The active
+SQLAlchemy/Alembic contract defines deployed constraints and reviewed extensions; see
+[database migrations](../development/database_migrations.md).
 
 ## 1. Architecture and evidence
 
@@ -12,7 +14,7 @@ Three separately controlled persistence domains are required:
 2. **Execution state:** `orchestration.workflow_runs` and a later selected LangGraph saver in a separate schema/store with distinct credentials. Checkpoints resume execution; they never prove a business operation succeeded or a human approved it. No business FK points into the checkpoint store.
 3. **Offline evaluation:** scenario manifests, hidden labels and scoring/security/failure/coordination fixtures stay in harness-only filesystem/storage or a separate evaluation database. They are not production-facing business tables. Production services cannot mount or query them.
 
-Source precedence is actual validated records and machine-readable entity/tool contracts, then versioned config, dataset dictionary/docs, Day 1–3 docs, then prior designs. The illustrative dataset SQL is not a complete schema. Primary sources inspected include all 17 business CSVs, historical RFQs, all scenario shapes/attachment metadata, five contracts, four policy JSONs, generation metadata, dataset database/dictionary/business/MCP/assumptions/evaluation/recovery/security docs, existing architecture/data docs, Day 3 log and checksum manifests. Detailed paths and fields are in [mapping](dataset_to_database_mapping.md); exact table/column/constraint authority is [table specifications](table_schemas.md).
+Source precedence is actual validated records and machine-readable entity/tool contracts, then versioned config, dataset dictionary/docs, foundational design docs, then prior designs. The illustrative dataset SQL is not a complete schema. Primary sources inspected include all 17 business CSVs, historical RFQs, all scenario shapes/attachment metadata, five contracts, four policy JSONs, generation metadata, dataset database/dictionary/business/MCP/assumptions/evaluation/recovery/security docs, existing architecture/data docs, dataset validation log and checksum manifests. Detailed paths and fields are in [mapping](dataset_to_database_mapping.md); exact table/column/constraint authority is [table specifications](table_schemas.md).
 
 ## 2. Verified source inventory
 
@@ -108,7 +110,7 @@ The following tool assignments are proposed responsibilities, constrained by the
 | --- | --- | --- |
 | supervisor | Delegation; conditional get_quote_status for already-authorized caller; no arbitrary SQL | Validate correlation/customer, schema, dependencies and receipts; escalate unreconciled writes and conflicts. |
 | rfq_intake | lookup_customer, get_customer_status, create_rfq → intake/customer services | parts, missing_fields, contradiction_findings, source_evidence → Engineering; incomplete specs block downstream writes. |
-| engineering | get_material_specs, get_supported_operations, check_manufacturing_capability → engineering service | validated_parts, capability_result; pricing rule pin → Pricing; material_ids → Supply. MFG-001 guard enforced by the application validator since Day 8 (`services/manufacturing.py`). |
+| engineering | get_material_specs, get_supported_operations, check_manufacturing_capability → engineering service | validated_parts, capability_result; pricing rule pin → Pricing; material_ids → Supply. MFG-001 guard enforced by the application validator since manufacturing (`services/manufacturing.py`). |
 | supply_scheduling | check_material_availability, check_production_capacity, estimate_lead_time → planning service | inventory_status, capacity_status, lead_business_days, snapshot_versions → Review. No stock/capacity writes. |
 | pricing | calculate_quote, get_pricing_breakdown → deterministic pricing/cache service | quote_total_usd, line_breakdown, pricing_rule_version → Review. Cannot override prices. |
 | quotation_review | create_quote_draft, get_quote_status, request_approval → quotation/review services | draft_status, quote_version, manager_review_required, human_release_approval_required → Supervisor. No approve/release tool. |
@@ -152,7 +154,7 @@ Checkpoint commits are separate from business commits. A timeout after a busines
 
 | Finding | Decision / limitation |
 | --- | --- |
-| MFG-001: configured hole_count_max=300 is skipped by scalar-limit path in reference validate_part | **Fixed in the application (Day 8):** `check_manufacturing_capability` enforces the rule's `hole_count_max` (0–300, `OUT_OF_RANGE_HOLE_COUNT`) and raises on any rule limit it does not enforce. Regression tests prove 300 passes and 301 fails. The frozen reference `validate_part` still has the limitation and must remain unchanged (dataset v1.1.0 is frozen; it is a test oracle only). |
+| MFG-001: configured hole_count_max=300 is skipped by scalar-limit path in reference validate_part | **Fixed in the application:** `check_manufacturing_capability` enforces the rule's `hole_count_max` (0–300, `OUT_OF_RANGE_HOLE_COUNT`) and raises on any rule limit it does not enforce. Regression tests prove 300 passes and 301 fails. The frozen reference `validate_part` still has the limitation and must remain unchanged (dataset v1.1.0 is frozen; it is a test oracle only). |
 | Narrative MCP map has 13 tools; machine-readable contract has 14 | Use contract, including create_rfq. Frozen narrative unchanged. |
 | Required CSV strings include empty values | Business-optional dates/approval fields become NULL. No empty string sentinel FK or bogus zero version. |
 | Prior versions lack prices/lines and rule/snapshot provenance | Preserve 16 metadata-only versions; 80 current versions are priced_partial; no retrospective snapshots. |
@@ -162,9 +164,12 @@ Checkpoint commits are separate from business commits. A timeout after a busines
 | Tool schemas allow version zero; persisted/handoff versions start at one | Zero is creation sentinel only; request_approval(version=0) is rejected. |
 | Handoff.workflow_id requires ^RFQ-[0-9]{4}$; legacy HRFQ/new RFQ-UUID do not match | Keep fixture external_workflow_id separate from business ID/run UUID. Production handoff needs a separately versioned contract extension before supporting those IDs; do not patch frozen contract or repurpose a fixture ID. |
 | Dataset read-only planning does not define durable reservations or live refresh service | Keep current baseline + immutable snapshot archive; introduce reservation ledgers only with future authorized booking operations. |
-| No LangGraph saver/version selected | Only application workflow metadata is specified. Saver physical checkpoint schema is a later workflow dependency, not guessed Day 5 business DDL. |
+| No LangGraph saver/version selected | Only application workflow metadata is specified. Saver physical checkpoint schema is a later workflow dependency, not guessed database implementation business DDL. |
 
-The business schema is ready to translate into SQLAlchemy/Alembic with these explicitly documented choices. Production agent integration still depends on the contract/scoping/ingestion/checkpoint decisions above (the MFG-001 guard was added in the application validator on Day 8). Nothing here asserts those services, permissions or database constraints already execute.
+SQLAlchemy models and Alembic migrations implement the relational schema, including the
+application manufacturing guard. This design explains the source mapping; the active K5
+contract and reviewed migrations define current physical integrity. Deployment acceptance
+and deferred integration decisions remain separate requirements.
 
 ## 10. Documentation and reference authority
 
@@ -172,6 +177,6 @@ The business schema is ready to translate into SQLAlchemy/Alembic with these exp
 - [Table specifications](table_schemas.md): every column, source/purpose, type, nullability, default, key and CHECK.
 - [Relationships, constraints and indexes](relationships_and_constraints.md): authoritative enforcement categories, transaction protocol and query/index catalog.
 - [Dataset mapping](dataset_to_database_mapping.md): exact fields/import dependencies/isolation.
-- [Day 4 development log](../dev_log/day_04.md): executed verification, limitations and final Git evidence.
+- Historical execution and Git evidence is retained privately; see the [current verification scope](../../README.md#verification) for the reported backend baseline.
 
 PostgreSQL references were checked for [declarative constraints and valid FK targets](https://www.postgresql.org/docs/18/ddl-constraints.html), [row locking](https://www.postgresql.org/docs/18/explicit-locking.html), and [partial indexes](https://www.postgresql.org/docs/18/indexes-partial.html). Cross-table policy checks remain transactional service rules; a row CHECK is not presented as a cross-table validator. These documentation references do not choose or install a PostgreSQL server version.

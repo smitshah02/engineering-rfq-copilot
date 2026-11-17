@@ -1,23 +1,23 @@
-# Day 5, Component 3 — SQLAlchemy ORM models
+# ORM model foundation
 
-**Status:** COMPONENT 3 COMPLETE, verified 2026-11-08. Component 3 itself defines and tests ORM metadata only. Subsequent Day 5 components deployed the 33-table schema and imported 1,089 approved records; see the [final verification report](day_05_final_verification_report.md) for the current state. Component 3 verification counts below remain the original milestone evidence.
+This guide preserves the original model design and its initial inventory. The current backend includes subsequent identity, provenance and lifecycle extensions; use [registered models](../../src/rfq_copilot/models/__init__.py), the [active schema contract](../../src/rfq_copilot/schema_contract.py), and the [project overview](../../README.md) for current scope. Original milestone counts below are historical design context, not new verification results.
 
 ## Authority and scope
 
-The complete approved Day 4 [architecture](../database/database_architecture.md), [table specifications](../database/table_schemas.md), [relationships/constraints/indexes](../database/relationships_and_constraints.md), [ER diagrams](../database/er_diagram.md) and [source mapping](../database/dataset_to_database_mapping.md) were read before implementation. A table-by-table checklist extracted their 33 tables, 261 columns, all defaults, keys, checks, relationships and indexes. The dataset contracts and earlier illustrative PostgreSQL schema were supporting evidence; their older table names/types did not replace the approved design.
+The complete approved database design [architecture](../database/database_architecture.md), [table specifications](../database/table_schemas.md), [relationships/constraints/indexes](../database/relationships_and_constraints.md), [ER diagrams](../database/er_diagram.md) and [source mapping](../database/dataset_to_database_mapping.md) were read before implementation. A table-by-table checklist extracted their 33 tables, 261 columns, all defaults, keys, checks, relationships and indexes. The dataset contracts and earlier illustrative PostgreSQL schema were supporting evidence; their older table names/types did not replace the approved design.
 
-Day 4 documents and the frozen dataset remain unchanged. There is no ORM table for scenarios, hidden labels, standalone master parts, multiple user roles or saver-owned checkpoint internals. Every implemented table is approved by Day 4. Earlier Day 5 log sections remain historical records of Components 1–2; the new Component 3 section records this implementation.
+The frozen dataset remains unchanged. There is no ORM table for scenarios, hidden labels, standalone master parts, multiple user roles or saver-owned checkpoint internals. The initial tables follow the database design; subsequent extensions are defined by reviewed later migrations and the active contract. Original implementation records are retained privately.
 
 ## Declarative architecture and organization
 
 [`models/base.py`](../../src/rfq_copilot/models/base.py) defines the only DeclarativeBase and MetaData, with default schema business and a naming convention for primary, foreign, unique, check and index names. Every class uses SQLAlchemy 2.x Mapped annotations and mapped_column. The existing [async connection/session layer](database_connection.md) is reused unchanged; no new engine/session factory or dependency was added.
 
-Import [`rfq_copilot.models`](../../src/rfq_copilot/models/__init__.py) to register every model in Base.metadata. MODEL_CLASSES is a static inventory of the 33 mappings. Importing any domain submodule first also initializes the package registry. Definitions are static Python; production model import reads no Markdown, dataset, environment file or credentials and performs no connection or physical DDL.
+Import [`rfq_copilot.models`](../../src/rfq_copilot/models/__init__.py) to register every model in Base.metadata. MODEL_CLASSES is the current static inventory of 36 mappings, including UserCustomerBinding, RfqAssignment and TokenRevocation added after the foundation. Importing any domain submodule first also initializes the package registry. Definitions are static Python; production model import reads no Markdown, dataset, environment file or credentials and performs no connection or physical DDL.
 
 | Module under src/rfq_copilot/models | Mapped classes |
 | --- | --- |
 | `rules.py` | BusinessRuleVersion, DataSnapshot |
-| `identity.py` | Role, Permission, RolePermission, User |
+| `identity.py` | Role, Permission, RolePermission, User, UserCustomerBinding, RfqAssignment, TokenRevocation |
 | `customers.py` | Customer, Contact |
 | `manufacturing.py` | Material, Finish, Operation, Workcentre, Supplier, MaterialThicknessOption, MaterialFinishCompatibility, MaterialSupportedOperation, FinishMaterialCategory, OperationRouting |
 | `supply.py` | MaterialInventory, ProcurementRecord, ProductionCapacity |
@@ -26,9 +26,9 @@ Import [`rfq_copilot.models`](../../src/rfq_copilot/models/__init__.py) to regis
 | `approvals.py` | ApprovalRequest, ApprovalHistory |
 | `reliability.py` | IdempotencyRecord, AuditEvent, WorkflowRun |
 
-base.py provides the foundation; __init__.py imports/exports the domain classes. business holds 32 tables; orchestration holds workflow_runs only. A mapped workflow run stores orchestration metadata and an opaque checkpoint reference, not a physical LangGraph checkpoint schema. No authoritative business FK points into checkpoint storage.
+base.py provides the foundation; __init__.py imports/exports the domain classes. the current registry has 35 business tables and orchestration.workflow_runs. A mapped workflow run stores orchestration metadata and an opaque checkpoint reference, not a physical LangGraph checkpoint schema. No authoritative business FK points into checkpoint storage.
 
-## Complete model inventory
+## Initial schema model inventory
 
 The relationships below include both the FK-side association and its inverse back_populates navigations. Class attribute names are ORM API choices; the database columns/relationships are unchanged.
 
@@ -76,7 +76,7 @@ The relationships below include both the FK-side association and its inverse bac
 - Calendar dates use Date; events use DateTime(timezone=True). The existing connection layer supplies UTC sessions. Backend/import validation must still supply aware instants; mapped constructors do not certify timezone correctness or business chronology.
 - PostgreSQL JSONB uses none_as_null=True so Python None means SQL NULL for missing nullable historical facts. Array/object shape CHECKs are explicit. Nested evidence/cost Decimal strings are preserved; Part contents, registry kinds, snapshot validity and authoritative results still require service validation.
 - Documented SQL defaults are server_default expressions; Python uuid4 defaults run at insertion. Ordinary DeclarativeBase constructors do not automatically evaluate insertion defaults. No arbitrary empty, zero or current-time replacement is supplied for missing historical facts.
-- Inventory available_kg and capacity available_hours/remaining_hours/utilization_fraction are Computed expressions over their documented base fields. STORED is the explicit SQLAlchemy physical-storage choice for the approved generated values; Day 4 specified the expressions but not stored versus virtual persistence. It changes no formula or business constraint. Expressions do not chain through another generated column.
+- Inventory available_kg and capacity available_hours/remaining_hours/utilization_fraction are Computed expressions over their documented base fields. STORED is the explicit SQLAlchemy physical-storage choice for the approved generated values; database design specified the expressions but not stored versus virtual persistence. It changes no formula or business constraint. Expressions do not chain through another generated column.
 - updated_at has only its documented insertion default. No automatic onupdate, implicit quote-version bump, mapper version generator, event listener, business-rule override or inferred historical snapshot was added. row_version remains the service-owned optimistic-concurrency counter.
 
 Constructors accept transient typed values and relationships; they do **not** execute or enforce PostgreSQL CHECK/FK/NOT NULL constraints before tables exist. Tests distinguish typed/source fixture construction from database-level enforcement. Standard JSONB containers have no speculative mutable-tracking extension; immutable snapshots and authorized modifications remain backend responsibilities.
@@ -116,7 +116,8 @@ The two header→version FKs remain DEFERRABLE INITIALLY DEFERRED. They use use_
 | Explicit B-tree indexes | 14, including seven partial indexes |
 | Bidirectional ORM relationship properties | 128 |
 
-The three partial unique indexes enforce primary contacts, current-version flags and pending review uniqueness. The remaining explicit indexes preserve exact names, column order (including submitted_at DESC), predicates and uniqueness from Day 4. No GIN/redundant standalone PK/UNIQUE indexes were added. PostgreSQL will supply indexes backing the 33 PK and 14 UNIQUE constraints when future migrations apply them; none exist physically today for these model tables.
+The three partial unique indexes enforce primary contacts, current-version flags and pending review uniqueness. The remaining explicit indexes preserve exact names, column order (including submitted_at DESC), predicates and uniqueness from database design. No GIN/redundant standalone PK/UNIQUE indexes were added. PostgreSQL supplies the indexes backing primary-key and unique constraints when migrations
+are applied. The active contract defines current catalog counts.
 
 All constraints have stable naming-convention names. The 65 table-specific checks retain document order as rule_01, rule_02, etc.; common checks use column/purpose labels. SQLAlchemy's convention handles PostgreSQL identifier truncation. See [constraints/naming](https://docs.sqlalchemy.org/en/21/core/constraints.html) and [server/computed defaults](https://docs.sqlalchemy.org/en/21/core/defaults.html).
 
@@ -124,15 +125,15 @@ Cross-table totals, exact-one-current-flag consistency, valid policy/snapshot ki
 
 ## Source reconciliation and nonblocking details
 
-The approved Day 4 table list, columns, key/check/index semantics, nullability and defaults matched across the table specifications, FK/index catalog and all seven ER views. Earlier dataset table names (historical_rfqs/inventory/capacity/quote_lines) and generic money precision did not replace the approved rfqs/material_inventory/production_capacity/quote_line_items and exact final/intermediate Numeric scales. Historical metadata-only versions keep nullable prices/rule/snapshot fields; no old prices or queue events are fabricated.
+The approved database design table list, columns, key/check/index semantics, nullability and defaults matched across the table specifications, FK/index catalog and all seven ER views. Earlier dataset table names (historical_rfqs/inventory/capacity/quote_lines) and generic money precision did not replace the approved rfqs/material_inventory/production_capacity/quote_line_items and exact final/intermediate Numeric scales. Historical metadata-only versions keep nullable prices/rule/snapshot fields; no old prices or queue events are fabricated.
 
-One nonblocking documentation metadata discrepancy was recorded: the business_constraints.json row in [Day 4 source mapping](../database/dataset_to_database_mapping.md) labels its source version as properties.schema_version.const=1.1. The [actual contract](../../data/rfq_synthetic_data/contracts/business_constraints.json) has neither that properties tree nor a standalone version. The Day 4 architecture already provides kind@sha256 content addressing for versionless contracts. No ORM column/default or seeding logic depends on the mistaken label, so no schema decision was required and neither approved documentation nor dataset was changed. Future importer work must use actual source metadata/content addressing and explicitly resolve that narrative label.
+One nonblocking documentation metadata discrepancy was recorded: the business_constraints.json row in [database design source mapping](../database/dataset_to_database_mapping.md) labels its source version as properties.schema_version.const=1.1. The `data/rfq_synthetic_data/contracts/business_constraints.json` (private package) has neither that properties tree nor a standalone version. The database design architecture already provides kind@sha256 content addressing for versionless contracts. No ORM column/default or seeding logic depends on the mistaken label, so no schema decision was required and neither approved documentation nor dataset was changed. Imports must use actual source metadata and content addressing.
 
-Other preexisting dependencies (MFG-001, fixture-only handoff ID format, ingestion/delegation and saver selection) remain as recorded in Day 4. They do not justify speculative ORM tables or business-policy changes. No blocking schema contradiction was found.
+Other preexisting dependencies (MFG-001, fixture-only handoff ID format, ingestion/delegation and saver selection) remain as recorded in database design. They do not justify speculative ORM tables or business-policy changes. No blocking schema contradiction was found.
 
-## Offline metadata verification and future Alembic discovery
+## Metadata compilation and Alembic discovery
 
-Future migration configuration can import the already registered metadata:
+Alembic configuration imports the registered metadata:
 
 ```python
 from rfq_copilot.models import Base
@@ -140,24 +141,13 @@ from rfq_copilot.models import Base
 target_metadata = Base.metadata
 ```
 
-That is an illustration for Component 4, **not Alembic infrastructure initialized here**. Future migration work must account for both named schemas (include_schemas=True with appropriate scope filtering) and create the schemas/tables/constraints in a reviewed migration. No Alembic dependency, configuration, revision or migration directory was added.
+The migration configuration includes both managed schemas with scope filtering. Schema changes belong in reviewed new revisions; do not rewrite applied migration history. See the [migration guide](database_migrations.md).
 
 Offline inspection compiles CreateTable for all 33 tables, AddConstraint for the two use_alter FKs, and CreateIndex for all 14 indexes with the PostgreSQL dialect. Compilation produces strings only; no engine executes those statements. A guarded fresh-process import blocks engine construction, connections, socket connections and physical table creation and still registers/configures all models successfully.
 
-## Executed verification
+## Verification scope
 
-```bash
-.venv/bin/python -m ruff check src tests
-.venv/bin/python -m ruff format --check src tests
-.venv/bin/python -m pytest tests/test_orm_models.py -q
-.venv/bin/python -m pytest -q
-```
-
-- Dedicated ORM suite: **241 passed**, zero failures/errors/skips, 0.40 seconds.
-- Full suite: **274 passed**, zero failures/errors/skips, 5.57 seconds; includes all **33 existing Component 2 tests**.
-- Models/mappers: 33 classes and tables; all 261 columns, 64 FKs, 14 UNIQUE constraints, 207 checks, defaults, computed values, nullability and 14 indexes matched independent expectations parsed from the immutable Day 4 documents. SQLAlchemy warnings are errors during mapper configuration.
-- Metadata-only construction covers every model plus actual CUST-001/HQUOTE-0001 source fixtures, Decimal values, JSON strings and in-memory relationship synchronization. Source fixtures were read, never imported into PostgreSQL.
-- The unchanged async session factory accepts pending mapped objects and rolls them back without opening a connection. Import and compilation require no PostgreSQL access.
-- Read-only PostgreSQL catalog snapshots before/after the full suite matched: both development and test return SELECT 1=1 as the restricted user, have only the public schema, and contain **zero user relations**. Neither business nor orchestration was created physically.
-
-[Day 5 log](../dev_log/day_05.md) records actual commands, exit codes, test XML evidence, database preservation and final repository checks. Physical constraint enforcement and persisted ORM round trips deliberately wait for later migration/test components. Offline compilation alone is not a claim that PostgreSQL has enforced these constraints.
+`tests/test_orm_models.py` checks model metadata against the approved schema documents.
+Migration, runtime-role and lifecycle tests cover the later physical integrity boundaries.
+Historical execution receipts are retained privately; see the [current baseline](../../README.md#verification).
+Offline metadata compilation does not prove that PostgreSQL has enforced constraints.

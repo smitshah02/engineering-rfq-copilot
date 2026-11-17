@@ -4,6 +4,7 @@
 import asyncio
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from test_quote_drafts import AGENT_MODULES, PRINCIPAL, SRC, imported_modules
@@ -133,3 +134,72 @@ def test_decisions_are_human_only_and_isolated_from_agents():
     source = path.read_text()
     assert "require_decision_runtime(session)" in source  # K5: before any read, for decisions
     assert "principal.permissions" not in source  # grants are re-read, never trusted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "permission_denied",
+        "not_found",
+        "separation_of_duties",
+        "attestation_mismatch",
+        "not_approvable",
+        "rule_version_changed",
+        "provenance_missing",
+        "quote_expired",
+    ],
+)
+async def test_receipt_recheck_never_replaces_security_or_evidence_refusals(monkeypatch, reason):
+    replay = AsyncMock(side_effect=AssertionError("A legitimate refusal reached receipt replay"))
+    monkeypatch.setattr(approval, "_replay", replay)
+    result = await approval._replay_after_serialization(
+        NoDatabase(), PRINCIPAL, "k", SHA, approval.APPROVE, DraftRefused(reason)
+    )
+    assert result is None
+    replay.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", [approval.SUBMIT, approval.APPROVE, approval.REJECT])
+@pytest.mark.parametrize("reason", ["stale_version", "not_assessable", "not_pending"])
+async def test_serialized_receipt_recheck_requires_current_authority(
+    monkeypatch, operation, reason
+):
+    authorize = AsyncMock(side_effect=DraftRefused("permission_denied"))
+    replay = AsyncMock(side_effect=AssertionError("Revoked authority reached receipt replay"))
+    monkeypatch.setattr(approval.drafts, "_authorize", authorize)
+    monkeypatch.setattr(approval, "_replay", replay)
+    with pytest.raises(DraftRefused, match="permission_denied"):
+        await approval._replay_after_serialization(
+            NoDatabase(), PRINCIPAL, "k", SHA, operation, DraftRefused(reason)
+        )
+    authorize.assert_awaited_once()
+    replay.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", [approval.APPROVE, approval.REJECT])
+async def test_serialized_decision_replay_still_requires_decision_role_and_approver(
+    monkeypatch, operation
+):
+    from rfq_copilot.database import PrivilegedRuntimeRole
+
+    monkeypatch.setattr(approval.drafts, "_authorize", AsyncMock())
+    guard = AsyncMock(side_effect=PrivilegedRuntimeRole("unsafe_role"))
+    approver = AsyncMock(side_effect=DraftRefused("permission_denied"))
+    replay = AsyncMock(side_effect=AssertionError("Invalid approver reached receipt replay"))
+    monkeypatch.setattr(approval, "require_decision_runtime", guard)
+    monkeypatch.setattr(approval, "_approver", approver)
+    monkeypatch.setattr(approval, "_replay", replay)
+    with pytest.raises(PrivilegedRuntimeRole):
+        await approval._replay_after_serialization(
+            NoDatabase(), PRINCIPAL, "k", SHA, operation, DraftRefused("not_assessable")
+        )
+    approver.assert_not_awaited()
+    guard.side_effect = None
+    with pytest.raises(DraftRefused, match="permission_denied"):
+        await approval._replay_after_serialization(
+            NoDatabase(), PRINCIPAL, "k", SHA, operation, DraftRefused("not_assessable")
+        )
+    replay.assert_not_awaited()

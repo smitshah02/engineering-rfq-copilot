@@ -1,9 +1,10 @@
-# API contracts (Day 17): Pydantic models and request validation
+# API contracts: Pydantic models and request validation
 
 This document describes the code in `src/rfq_copilot/api/schemas/` and `src/rfq_copilot/api/errors.py`
-as implemented. It adds **contracts, not endpoints**. The production application still
-serves only `GET /health/live` and `GET /api/v1/system/info` (Day 16). No RFQ is
-submitted, stored, evaluated, priced or approved through the API.
+as implemented. These modules define contracts and sanitized validation errors; routing,
+authentication, attachments and human decisions belong to their respective API modules.
+See [protected reads](day_18_database_rest_apis.md) and
+[authorization](day_21_rbac_authorization.md) for the current HTTP boundaries.
 
 ## 1. Objective and scope
 
@@ -39,7 +40,7 @@ The API follows the services: only `part_id` is required.
 
 ```
 src/rfq_copilot/api/
-    app.py              (Day 16) + installs the RequestValidationError handler
+    app.py + installs the RequestValidationError handler
     errors.py           ValidationIssue, ValidationErrorResponse, to_issue, handler,
                         VALIDATION_ERROR_RESPONSES
     schemas/
@@ -229,8 +230,8 @@ Verified:
 - An opted-in route documents `422 → ValidationErrorResponse`, `HTTPValidationError` is
   absent, and `ValidationIssue` forbids extra fields.
 
-Day 16 behaviour is unchanged: `/docs`, `/redoc` and `/openapi.json` are served only in
-development, and production OpenAPI lists only the two Day 16 paths.
+`/docs`, `/redoc` and `/openapi.json` are exposed only when the application settings
+enable documentation. Production defaults keep these endpoints disabled.
 
 ## 15–17. Security boundaries
 
@@ -239,7 +240,7 @@ development, and production OpenAPI lists only the two Day 16 paths.
   customer standing and approval are decided by the services, under the pinned rules.
 - **No identity in the body.** A body is attacker-controlled. The customer must come
   from verified authentication and be passed to the customer-scoped repositories, as
-  the Phase 2.5 boundary requires. `customer_id` in the body is rejected, so it cannot
+  the API validation boundary requires. `customer_id` in the body is rejected, so it cannot
   be mistaken for proof.
 - **Rule versions are never accepted from the client.** `pricing_rule_version` in a
   request is rejected, and responses only report the version the server used.
@@ -268,15 +269,8 @@ development, and production OpenAPI lists only the two Day 16 paths.
 - `part_type` is a contract vocabulary. If a future rule document allows a new type,
   the contract must change too.
 
-## 20. Verification (2026-11-10, after the security correction)
+## 20. Verification
 
-| Check | Result |
-| --- | --- |
-| `uv run --no-sync python -m pytest -q tests/test_api_schemas.py` | 123 passed (103 + 12 + 8 security regressions) |
-| `uv run --no-sync python -m pytest -q tests/test_api.py` | 40 passed (unchanged) |
-| Public smoke set (4 files), database variables unset | 205 passed |
-| `uv run --no-sync python -m pytest -q` | 1274 passed in 118.14s; 0 failed, 0 skipped, 0 warnings |
-| `uv lock --check`, `ruff check .`, `ruff format --check src tests alembic` | pass |
-| Uvicorn, development | `/health/live` 200, `/api/v1/system/info` 200, `/openapi.json` 200 (two paths, schemas `Liveness` and `SystemInfo`), `/docs` 200, `POST /test-only/rfq` 404 |
-| Uvicorn, production | health 200, info 200, `/openapi.json` 404, `/docs` 404, `POST /test-only/rfq` 404 |
-| Read-only integrity check (development database) | exit 0; 34 PASS; 1090 records |
+Run `uv run pytest -q tests/test_api_schemas.py tests/test_api.py` for schema and API-contract
+coverage. See the [project verification commands](../../README.md#verification) for the
+public smoke selection and database-backed checks. No execution result is implied here.

@@ -1,6 +1,8 @@
-# Day 5, Component 6 — Database integrity verification
+# Database integrity verification
 
-This component independently inspects PostgreSQL through read-only SQL and tests actual constraint enforcement only in the isolated test database. The approved [Day 4 design](../database/table_schemas.md), [relationships](../database/relationships_and_constraints.md), [mapping](../database/dataset_to_database_mapping.md), ORM, migrations and frozen v1.1.0 sources remain unchanged. No development import is run.
+This guide describes source/schema comparison and transaction-safety methods. The active [schema contract](../../src/rfq_copilot/schema_contract.py) supplies current revision and catalog expectations; original foundation counts are historical context.
+
+This component independently inspects PostgreSQL through read-only SQL and tests actual constraint enforcement only in the isolated test database. The approved [database design](../database/table_schemas.md), [relationships](../database/relationships_and_constraints.md), [mapping](../database/dataset_to_database_mapping.md), ORM, migrations and frozen v1.1.0 sources remain unchanged. No development import is run.
 
 ## Implementation and method
 
@@ -13,7 +15,7 @@ Checks cover:
 - All 33 PK tuples, including composites, and live COUNT versus COUNT(DISTINCT ROW(PK...)).
 - All 64 FK definitions: local/remote columns, schemas, MATCH SIMPLE, ON DELETE/UPDATE RESTRICT and both genuinely deferred quote pointers. FK names use SQLAlchemy's PostgreSQL identifier shortening before comparison. Every populated FK is independently checked with a full-tuple NOT EXISTS anti-join; nullable MATCH SIMPLE tuples are correctly exempt when any component is NULL.
 - All 14 additional UNIQUE definitions and 17 data-uniqueness checks (14 constraints plus three unique partial indexes). Grouping respects SQL NULL uniqueness and the exact partial predicate. Existing schema safety also verifies every explicit index and predicate.
-- Every non-nullable column and all 207 approved live-equivalent CHECK predicates. Required defaults, computed expressions, numeric types/precision/scale and physical definitions are checked through the existing schema verifier and current metadata; existing independent Day 4 migration tests verify that metadata against the approved documents.
+- Every non-nullable column and all 207 approved live-equivalent CHECK predicates. Required defaults, computed expressions, numeric types/precision/scale and physical definitions are checked through the existing schema verifier and current metadata; existing independent database design migration tests verify that metadata against the approved documents.
 - Actual PostgreSQL numeric results are Decimal. Compare all source-derived/default/generated values, including date, UTC timestamp, boolean, exact JSONB, source IDs, composite projections, snapshot tokens and nullable historical facts. Stored JSONB is selected as text and decoded with Decimal to retain exact numeric tokens and string evidence. Expected values reuse Component 5's checksum-validated audited transformations; actual reads and comparisons are separate from importer counters and its stored-row verifier.
 - Registration timestamps are present and aware, without inventing historical effective dates. Full-table fingerprints include them. Seven runtime tables must remain empty; older historical quote facts remain absent as documented.
 
@@ -46,41 +48,13 @@ Multi-record batches explicitly test whole-savepoint rollback for FK, UNIQUE and
 
 An otherwise legal FK association can still differ from the imported source. Such a case is detected by source parity, rather than pretending a nonexistent cross-record business constraint rejects it. The tests do not alter the approved schema to impose additional rules.
 
-## Execution evidence
+## Verification scope
 
-The initial independent audit confirmed 33 tables, 261 columns, 1,089 records, seven empty runtime tables, 64 FK checks, 207 CHECKs, 17 unique-data checks, 9,587 matching source-derived values and 1,353 Decimal values. Development was current at `20261108_01`, authenticated as the restricted `rfq_copilot_dev` role. Source integrity matched 681 files, 637 protected hashes and the archive.
+The integrity CLI is a read-only audit of the guarded target, accepted schema contract,
+source parity and referenced operational snapshots. Preserve the private dataset and
+snapshot bytes, and investigate a mismatch rather than reseeding or resetting the database.
 
-Final executed results follow below. Combined evidence is recorded in [database_components_6_7_results.json](database_components_6_7_results.json) and the Component 6/7 entries in the [Day 5 log](../dev_log/day_05.md).
-
-
-## Component 6: Database Integrity Verification Report
-
-**Executed:** 2026-11-08 (America/New_York). **Status: COMPONENT 6 COMPLETE.** Component 6 passed before Component 7 implementation began.
-
-| Verification | Actual result |
-| --- | --- |
-| Database / authenticated role | rfq_copilot_dev / rfq_copilot_dev |
-| Revision | 20261108_01 (current head) |
-| Tables / columns / records | 33 / 261 / 1,089 |
-| Populated / intentionally empty | 26 / 7 |
-| Primary keys | All 33 exact definitions; zero duplicate identities |
-| Foreign keys | All 64 definitions and data checks pass; actions, timing, composite and cross-schema links match |
-| UNIQUE constraints / partial unique indexes | 14 / 3; all 17 data checks pass |
-| CHECK constraints | All 207 definitions/data checks pass; actual PostgreSQL rejection tests pass |
-| Decimal-compatible values | 1,353 exact Decimal results; schema precision/scale verified |
-| Source/database value parity | 9,587 matching values; zero discrepancies |
-| Invalid INSERT / UPDATE / DELETE | Real PostgreSQL rejection checks passed; session reused after savepoint rollback |
-| Transaction behavior | Commit, explicit/exception/FK/UNIQUE/CHECK/multi-row rollback, cancellation and resource cleanup passed |
-| Focused tests | 80 passed, 0 failed/errors/skipped; 31.24s |
-| Before / after records | 1,089 / 1,089 |
-| Before / after fingerprint | Identical SHA-256 `05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee` |
-| Test cleanup | Original public-only catalog restored; zero user relations |
-| Source integrity | 681 original files, 637 protected hashes and archive verified |
-
-A second independently written SELECT-only projection also confirmed all 9,587 values, every FK/CHECK/required field and whole-row table fingerprints before and after the full suite. Development data was never reimported or modified. Both the separate audit and the query example use the same complete SHA-256 algorithm; the prior Component 5 independent verifier supplies an additional unchanged per-table server digest comparison.
-
-**Files created/modified:** `src/rfq_copilot/integrity.py`, `tests/test_database_integrity.py`, this guide, the combined `database_components_6_7_results.json`, and the separate Component 6 entry in `docs/dev_log/day_05.md`. Existing ORM, seeding implementation, migration/tests, connection/configuration and dependency files are unchanged.
-
-**Resolved findings:** PostgreSQL shortens long naming-convention identifiers, so compare dialect-rendered names. Actual PostgreSQL 18 DELETE RESTRICT reports 23001, not the initially assumed 23503; numeric overflow is 22003 and may be a base DBAPIError. A DELETE fixture must choose a genuinely referenced user. A source-association fixture must avoid first violating the unrelated primary-contact index. These were test/audit assumptions, not schema faults; no schema or source was changed. Intermediate fixture runs had failures, followed by clean 80-test and 593-test final runs. JSONB comparison additionally rejects boolean/numeric type substitutions that plain Python equality would consider equal.
-
-**Unresolved problems: none.** No Component 8 work was performed.
+Relevant coverage is in `tests/test_database_integrity.py` and the migration/lifecycle
+regression modules. Historical structured receipts and command histories are archived
+privately. See the [reported baseline and manual verification guidance](../../README.md#verification);
+this documentation edit did not rerun those checks.

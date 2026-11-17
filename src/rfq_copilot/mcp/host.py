@@ -358,5 +358,5 @@ def create_app_from_env() -> McpGateway:
     auth = McpAuthSettings.from_env(environ)
     host = McpHostSettings.from_env(environ)
     target = environ.get("RFQ_MCP_DATABASE_TARGET", "development")
-    database = Database(DatabaseConfig.from_env(target), read_only=True)
+    database = Database(DatabaseConfig.from_serving_env(target), read_only=True)
     return create_mcp_host(host, auth, database, owns_database=True)

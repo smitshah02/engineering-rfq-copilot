@@ -1,6 +1,6 @@
 # ADR-001: MCP deployment architecture
 
-- Status: **Accepted (design)**, 2026-11-11, Day 23
+- Status: **Accepted**
 - Context doc: [mcp_architecture.md](mcp_architecture.md)
 
 ## Context
@@ -9,7 +9,7 @@ The repository has a FastAPI REST app (`rfq_copilot.api.app.create_app`) whose s
 lives in FastAPI dependencies (`api.auth.get_principal`, `require_route_permission`).
 Those read `Request` and `app.state`. The deterministic services (`rfq_copilot.services.*`)
 are transport-neutral `async` functions over a caller-owned `AsyncSession`. Agents arrive
-in Phases 5–7 and need read/evaluation tools only. The official Python SDK is `mcp` 2.x
+and need read/evaluation tools only. The official Python SDK is `mcp` 2.x
 (2.3.0 on PyPI at decision time), with `MCPServer`, Streamable HTTP and protocol `2026-07-28`.
 
 ## Options
@@ -38,12 +38,12 @@ src/rfq_copilot/mcp/
   security.py      # SDK TokenVerifier adapter -> shared resolve_principal()
   permissions.py   # tool -> permission, per policy version
   adapters/        # one module per server; snapshot_session + pinned rules + DTO mapping
-  contracts/       # Day 24 Pydantic input/output models
+  contracts/       # MCP contract Pydantic input/output models
   servers/         # manufacturing.py, supply.py, pricing.py: MCPServer instances
   gateway.py       # Starlette host app, lifespan enters each session_manager.run()
 ```
 
-Run it as its own ASGI process (`uvicorn rfq_copilot.mcp.gateway:app`), separate from the
+Run it as its own ASGI process (`uvicorn --factory rfq_copilot.mcp.host:create_app_from_env`), separate from the
 REST app. Each server is mounted at `/mcp/<name>` with `streamable_http_path="/"`. The host
 lifespan enters every `session_manager.run()` in an `AsyncExitStack`, as the SDK ASGI guide
 requires, because mounted sub-app lifespans never run.
@@ -58,33 +58,26 @@ Supporting decisions:
   legacy leg, so it is irrelevant until we serve that leg.
 - **D-4 Errors:** domain outcomes are structured results. Bad input is `-32602` /
   `MCPError`. Unexpected failure is a tool error with generic text.
-- **D-5 Auth:** SDK `token_verifier` + `AuthSettings(resource_server_url=..., validate_token_resource=True)`.
-  The adapter reuses `api.tokens.TokenVerifier` and the DB checks; the MCP audience differs from the REST audience.
-  *Amended Day 30:* `validate_token_resource=False`. The adapter verifies `aud` itself (one
-  shared MCP audience), which is the SDK's documented configuration for that case; `True`
-  had compared a value the adapter copied from its own settings. See architecture §11.
-- **D-6 Dependency:** add `mcp>=2.3,<3` on Day 24 (first code day) with approval, and keep
-  `uv.lock` committed and checked with `uv lock --check`. Most transitive packages are already
-  locked (pydantic, pyjwt, starlette, uvicorn, httpx2, jsonschema, python-multipart).
-  New ones: `mcp-types`, `sse-starlette`, `opentelemetry-api`, `typing-inspection`.
-  Review the upgrade notes before each minor bump (2.x is still adding behavior, e.g.
-  `validate_token_resource` becomes the default in 3.0).
+- **D-5 Auth:** SDK `token_verifier` with `validate_token_resource=False`. The adapter
+  reuses the REST JWT verifier and shared database identity checks, and verifies `aud`
+  against the dedicated MCP audience. REST and MCP audiences remain distinct. See
+  [resource scope](mcp_architecture.md#11-backend-mcp-client-and-rest-delegation).
+- **D-6 Dependency:** `mcp>=2.3,<3` is declared and locked. Keep `uv.lock` committed,
+  check it with `uv lock --check`, and review SDK upgrade notes before changing versions.
 
 ## Consequences
 
 - Positive: REST security stays untouched. MCP gets a boundary that does not depend on
   FastAPI and is enforced inside each server. No business logic is duplicated.
-- Negative: one more process to deploy and monitor. A refactor on Day 27 moves principal
-  resolution out of `api.auth` into a shared function, and it must keep REST behavior
-  identical (covered by the existing RBAC and JWT suites).
+- Negative: one more process to deploy and monitor. Shared principal
+  resolution must keep REST behavior consistent (covered by the existing RBAC and JWT suites).
 - Limitation: the three servers share one process, so a crash or overload hits all three.
   Splitting them later is a deployment change (same package, three entry points).
 
-## Unresolved (need implementation evidence)
+## Deployment decisions
 
-1. Exact tool granularity and whether composite tools replace fine-grained ones (Day 24).
-2. Identity provider and audience values for the MCP resource (TD-024; deployment).
-3. Rate-limit mechanism: in-process vs proxy (Day 28).
-4. Whether to serve handshake-era clients (D-3), decided only if a real client needs it.
-5. Agent service identities versus on-behalf-of user tokens (Phase 5). Until then, every
-   tool call carries a human user's token.
+- Configure the identity provider and dedicated MCP audience values.
+- Retain the in-process gateway limits and apply reviewed proxy limits where needed.
+- Serve legacy transports only if a real client requires them.
+- Supply on-behalf-of user credentials through the provider interface. Tools must never
+  substitute a universal privileged service identity for the verified user.

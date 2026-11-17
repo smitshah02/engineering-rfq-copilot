@@ -239,6 +239,22 @@ async def _replay(session, principal, key, digest, operation):
     return await drafts._replay(session, principal, key, digest, operation, QuoteDecision)
 
 
+async def _replay_after_serialization(session, principal, key, digest, operation, refused):
+    """Only these assessment refusals occur after the scoped quote lock is acquired.
+
+    A twin may have committed while we waited. READ COMMITTED now sees its receipt;
+    different content still raises idempotency_key_conflict. Authorization, scope,
+    separation and evidence refusals are never replaced by a successful replay.
+    """
+    if refused.reason not in {"not_assessable", "not_pending", "stale_version"}:
+        return None
+    await drafts._authorize(session, principal, operation)
+    if operation in {APPROVE, REJECT}:
+        await require_decision_runtime(session)
+        await _approver(session, principal)
+    return await _replay(session, principal, key, digest, operation)
+
+
 def _history(quote_id, version, action, actor, now, reason, request_id) -> ApprovalHistory:
     return ApprovalHistory(
         approval_id=f"APH-{secrets.token_hex(16).upper()}",
@@ -348,9 +364,15 @@ async def submit_for_review(
     replay = await _replay(session, principal, key, digest, SUBMIT)
     if replay is not None:
         return replay
-    assessment, quote, version, _ = await policy._assessed(
-        session, principal, quote_id, expected_version, permission=SUBMIT, share=False
-    )
+    try:
+        assessment, quote, version, _ = await policy._assessed(
+            session, principal, quote_id, expected_version, permission=SUBMIT, share=False
+        )
+    except DraftRefused as refused:
+        replay = await _replay_after_serialization(session, principal, key, digest, SUBMIT, refused)
+        if replay is not None:
+            return replay
+        raise
     if quote.rejection_reason is not None:
         raise DraftRefused("resubmission_blocked")  # K4 would refuse its approval (module doc)
     if assessment.human_review != "eligible" or assessment.integrity_findings:
@@ -441,13 +463,23 @@ async def approve_quote(
         principal, quote_id, expected_version, APPROVE, {"attestation": attestation.to_json()}
     )
     key = idempotency_key
+    await require_decision_runtime(session)
     await drafts._authorize(session, principal, APPROVE)
+    await _approver(session, principal)
     replay = await _replay(session, principal, key, digest, APPROVE)
     if replay is not None:
         return replay
-    assessment, quote, version, request = await _decided(
-        session, principal, quote_id, expected_version, APPROVE, "approved"
-    )
+    try:
+        assessment, quote, version, request = await _decided(
+            session, principal, quote_id, expected_version, APPROVE, "approved"
+        )
+    except DraftRefused as refused:
+        replay = await _replay_after_serialization(
+            session, principal, key, digest, APPROVE, refused
+        )
+        if replay is not None:
+            return replay
+        raise
     if assessment.classification not in policy.REVIEWABLE or assessment.integrity_findings:
         raise DraftRefused("not_approvable")
     if any(r.kind == "engineering_review" for r in assessment.policy.reviews):
@@ -533,13 +565,21 @@ async def reject_quote(
         principal, quote_id, expected_version, REJECT, {"reason_sha256": reason_sha256}
     )
     key = idempotency_key
+    await require_decision_runtime(session)
     await drafts._authorize(session, principal, REJECT)
+    await _approver(session, principal)
     replay = await _replay(session, principal, key, digest, REJECT)
     if replay is not None:
         return replay
-    assessment, quote, version, request = await _decided(
-        session, principal, quote_id, expected_version, REJECT, "rejected"
-    )
+    try:
+        assessment, quote, version, request = await _decided(
+            session, principal, quote_id, expected_version, REJECT, "rejected"
+        )
+    except DraftRefused as refused:
+        replay = await _replay_after_serialization(session, principal, key, digest, REJECT, refused)
+        if replay is not None:
+            return replay
+        raise
     now = await k3.database_now(session)
     try:
         async with session.begin_nested():

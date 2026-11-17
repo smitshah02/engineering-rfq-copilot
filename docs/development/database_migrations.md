@@ -1,6 +1,6 @@
-# Database migrations — Day 5, Component 4
+# Database migrations
 
-Verified on 2026-11-08 (America/New_York). Component 4 deploys the approved Day 4 design and Component 3 models; its original evidence below predates seeding. Completed development now contains 1,089 approved records at the same revision, preserved by read-only migration checks. Isolated migration lifecycle tables still start and finish empty. See the [final Day 5 verification report](day_05_final_verification_report.md) for current consolidated results.
+The active development contract is K5 (`20261116_04`), defined by [`schema_contract.py`](../../src/rfq_copilot/schema_contract.py). K2/K3/K4/K5 history and decision guards extend the initial schema. Proposed multi-customer revisions remain [deferred](../../alembic/proposed/README.md). The initial-schema design and verification method below are foundation references; their original counts are not the current catalog. See the [project setup](../../README.md#local-setup) and [verification scope](../../README.md#verification).
 
 ## Architecture and files
 
@@ -9,13 +9,15 @@ alembic.ini
 alembic/
     env.py
     script.py.mako
-    README
     versions/20261108_01_initial_rfq_database_schema.py
+    versions/...  # subsequent active revisions through K5
+    proposed/README.md
+    proposed/deferred/
 src/rfq_copilot/migration_safety.py
 tests/test_database_migrations.py
 ```
 
-The documented [Alembic async approach](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic) uses an async connection's `run_sync()` to run the synchronous Alembic migration context. `env.py` imports the existing `rfq_copilot.models.Base.metadata`; importing the models registers all 33 tables on that single registry. It obtains an engine through the existing `Database` owner and `DatabaseConfig` validation. It creates no additional Base, global application engine or session factory. Each command disposes its temporary engine when its async context exits, including failures.
+The documented [Alembic async approach](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic) uses an async connection's `run_sync()` to run the synchronous Alembic migration context. `env.py` imports the existing `rfq_copilot.models.Base.metadata`; importing the models registers the current mappings on that single registry. It obtains an engine through the existing `Database` owner and `DatabaseConfig` validation. It creates no additional Base, global application engine or session factory. Each command disposes its temporary engine when its async context exits, including failures.
 
 Identity/version-table preflight SELECTs start a SQLAlchemy transaction. The environment explicitly ends that read transaction before Alembic starts its transactional DDL, so a successful migration commits and an unsuccessful one rolls back completely. A session advisory lock `(461441, 504)` rejects concurrent migration commands for the same database and is released in `finally`.
 
@@ -36,7 +38,7 @@ Offline CLI `--sql` execution is deliberately refused: it cannot perform the man
 | Item | Value |
 | --- | --- |
 | Revision file | `alembic/versions/20261108_01_initial_rfq_database_schema.py` |
-| Revision ID / sole head | `20261108_01` |
+| Initial revision ID (historical head) | `20261108_01` |
 | Parent / dependencies / branch labels | None |
 | Description | `initial_rfq_database_schema` |
 | Application schemas | `business` (32 tables), `orchestration` (`workflow_runs` only) |
@@ -112,57 +114,38 @@ uv lock --check
 git diff --check
 ```
 
-Actual final migration-only run: **71 passed in 1.36s**, no failures/skips. Complete suite: **345 passed in 6.96s**, including all **274 unchanged regressions**, no failures/skips. The development parity test obtains a read-only engine; destructive lifecycle operations use only the explicitly verified test target.
+The development parity test obtains a read-only engine; destructive lifecycle operations use only the explicitly verified test target.
 
 ## Independent physical verification and drift
 
-Expectations are parsed from the approved Day 4 Markdown through the existing independently authored ORM-test fixture, including documented common CHECK conventions and the additional-index table. Tests compare these expectations directly to PostgreSQL catalogs and SQLAlchemy reflection, independently of the revision's contents.
+Expectations are parsed from the approved database design Markdown through the existing independently authored ORM-test fixture, including documented common CHECK conventions and the additional-index table. Tests compare these expectations directly to PostgreSQL catalogs and SQLAlchemy reflection, independently of the revision's contents.
 
 Every column's PostgreSQL type, precision/scale, nullability, default and stored generated expression is compared. Every PK/UNIQUE key's ordered columns and every FK's ordered local/remote columns, schema, RESTRICT actions, MATCH SIMPLE, deferred flags, validation and enforcement are checked. Index checks include ordered key columns, ASC/DESC/null ordering, uniqueness, B-tree method, validity, key count and partial predicates.
 
 For all 207 CHECKs, both approved and actual expressions are normalized with PostgreSQL `EXPLAIN (VERBOSE, FORMAT JSON, COSTS FALSE)` in the same typed table context. This is read-only and handles PostgreSQL's casts, parentheses and `IN`/`ANY` rewriting without stripping boolean precedence or altering literal case. Typed SELECT-only probes then compare exact TRUE/FALSE/NULL behavior and demonstrate both rejection and CHECK acceptance for every rule, including sparse NULLs, boundaries, valid/invalid states, JSON shapes, dates and numeric NaN. Catalog flags confirm all constraints are validated and enforced. Application tables are empty within the isolated migration lifecycle; the development check instead fingerprints and preserves its seeded records. Alembic's check alone is not treated as CHECK proof.
 
-| Application object | Expected | Actual | Result |
-| --- | ---: | ---: | --- |
-| Business tables | 32 | 32 | PASS |
-| Orchestration tables | 1 | 1 | PASS |
-| Total tables | 33 | 33 | PASS |
-| Columns | 261 | 261 | PASS |
-| Primary keys | 33 | 33 | PASS |
-| Foreign keys | 64 | 64 | PASS |
-| Additional UNIQUE constraints | 14 | 14 | PASS |
-| CHECK constraints | 207 | 207 | PASS |
-| Explicit indexes | 14 | 14 | PASS |
+The comparisons use the active schema contract and the approved initial-schema documents.
+Original execution tables and environment/debugging chronology are retained privately.
+A documented comparison method is not a claim that it was rerun against the current database.
 
-The 14 explicit indexes include seven partial indexes, three of them unique. PostgreSQL additionally creates 47 supporting PK/UNIQUE indexes, yielding **61 application indexes**. `public.alembic_version` adds one framework table/column, one PK and its supporting index; these are excluded from application counts. PostgreSQL 18 also reports **215 native NOT NULL constraints** (`contype='n'`) for application columns; these are distinct from the 207 CHECKs. See the [PostgreSQL 18 constraint catalog](https://www.postgresql.org/docs/18/catalog-pg-constraint.html).
+## Current integrity boundary
 
-There are no pending Alembic operations, missing constraints/indexes, unexplained differences or unexpected managed objects. The physical names/nullability fingerprint matches the frozen revision value `8ef8e5a94fd625915001aa834f4a37cddf20abc122a087f934d227b7424da9ff`.
+The active contract supplies the accepted revision, schema digest, catalog counts and
+ordered guard revisions. Guard migration files are independently SHA-256 pinned; even
+comment-only edits would invalidate their exact-byte pins. Preserve every historical
+revision and test the deferred contract without activating it in development.
 
-## Environment, preservation and resolved issues
+The initial schema remains documented by [table specifications](../database/table_schemas.md)
+and [relationships/constraints](../database/relationships_and_constraints.md). Tests consume
+those documents; they are not disposable reports. Historical migration execution receipts
+are archived privately, and no migration or verification was run for this documentation edit.
 
-Python 3.12.14; SQLAlchemy 2.1.8; asyncpg 0.32.0; PostgreSQL 18.6; Alembic 1.20.1; uv 0.12.12. The existing virtual environment was reused. Only Alembic and its Mako 1.4.3 / MarkupSafe 3.0.4 dependencies were added. All 23 previously installed distribution versions were preserved. Installation used `uv add --no-sync 'alembic>=1.16,<2'` and `uv sync --locked --inexact` (both exit 0); `uv lock --check` passed.
+## Revision 20261109_01: capacity key per snapshot
 
-Issues resolved during implementation:
+This reviewed revision replaces `UNIQUE (workcentre_id, week_start)` with
+`UNIQUE (workcentre_id, week_start, snapshot_id)`, allowing overlapping capacity snapshots
+without changing their source data. Current revision/digest expectations come from the
+active schema contract, not a hardcoded claim that this early revision is still head.
 
-- Identity preflight initially rejected PostgreSQL's `127.0.0.1/32` text rendering. Using `host(inet_server_addr())` compares the actual address correctly; no migration ran on the rejected attempt.
-- The generated cyclic FKs required explicit late create/drop operations before deployment, as described above.
-- Early behavior-probe verification needed BIGINT values and sparse NULL combinations for compound approval rules. Only the verifier changed; schema definitions remained correct.
-- The first lifecycle fixture compared reflected TypeEngine object identities. It now snapshots exact compiled PostgreSQL type spellings. Its guarded finalizer successfully restored the test database even on that failed attempt.
-- `uv lock --check` first hit the filesystem sandbox's uv-cache restriction, then passed with authorized cache access. A package-preservation audit initially compared differently cased distribution names; normalized package names showed zero version changes.
-- A supplemental `ruff format --check .` also inspected Markdown examples and flagged existing quote styles in `docs/data/data_integrity_report.md` and `docs/development/database_connection.md`. Those earlier-component documents were preserved byte-for-byte. The existing Python formatting scope (`src tests`), expanded to `alembic`, passes; root-wide lint also passes.
-
-Final preservation checks matched all 681 frozen dataset files, all 637 protected asset checksums and the archive SHA-256. The five Day 4 documents, all ORM files and Component 2 code/tests/configuration are byte-identical. Development was upgraded only and retains its original database OID/owner; no pre-existing data existed, and no rows were imported. Test is again public-only with zero relations and no version tracker. Secrets remain private/ignored. No Git staging, resetting, cleaning, commit, push or Component 5 work occurred. See the appended [Day 05 log](../dev_log/day_05.md) for command results and Git status snapshots.
-
-## Revision 20261109_01: capacity key per snapshot (approved TD-005, 2026-11-09)
-
-`production_capacity` now has `UNIQUE (workcentre_id, week_start, snapshot_id)`, which replaces `(workcentre_id, week_start)`. Several capacity snapshots can therefore hold the same week. No data changes. `seeding/safety.py` pins `REVISION = "20261109_01"` and the measured shape digest `6cc43f0e...`.
-
-The Day 4 schema documents are unchanged. The tests apply this single approved delta to them, and assert the original key first.
-
-The downgrade back to `20261108_01` restores the old key. PostgreSQL refuses it while overlapping snapshots exist; nothing is deleted.
-
-Development was upgraded with:
-
-```
-.venv/bin/python -m alembic -x target=development -x env_file=.env upgrade head
-```
+The test-only downgrade restores the older key and refuses overlapping data rather than
+deleting it. Later migrations and K2/K5 privilege provisioning remain separate concerns.

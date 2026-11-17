@@ -1,6 +1,6 @@
 # Pricing Agent (A4)
 
-`rfq_copilot.pricing_agent` (Day 40). It computes the evidence-backed manufacturing cost and
+`rfq_copilot.pricing_agent`. It computes the evidence-backed manufacturing cost and
 the deterministic, non-binding selling price for parts that A2 found manufacturable and A3
 scheduled. It does not quote, approve, release, reserve or write anything.
 

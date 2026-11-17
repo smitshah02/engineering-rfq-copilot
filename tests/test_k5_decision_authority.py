@@ -231,7 +231,7 @@ def test_the_decision_credential_is_read_only_by_the_decision_process():
         str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if "DECISION_DATABASE_URL" in p.read_text()
     )  # fmt: skip
     assert readers == ["api/decision_app.py", "config.py"]
-    openers = [str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if 'from_env("development", decision=True)' in p.read_text()]  # fmt: skip
+    openers = [str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if 'from_serving_env("development", decision=True)' in p.read_text()]  # fmt: skip
     assert openers == ["api/decision_app.py"]
     importers = [str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if "rfq_copilot.api.decision_app" in imported_modules(p)]  # fmt: skip
     assert importers == []  # served on its own (uvicorn --factory), mounted by nothing else

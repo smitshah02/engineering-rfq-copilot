@@ -1,9 +1,8 @@
-# Supervisor Delegation (Day 46)
+# Supervisor Delegation
 
-**Status:** implemented, **not verified** (no tests run).
 **Code:** `src/rfq_copilot/supervisor.py` (delegation section).
 **Tests:** `tests/test_supervisor_delegation.py`.
-**Builds on:** `supervisor_foundation.md` (Day 44) and `supervisor_routing.md` (Day 45).
+**Builds on:** `supervisor_foundation.md` and `supervisor_routing.md`.
 
 ## 1. Topology
 
@@ -14,7 +13,7 @@ route_supervisor --> clarification_required | review_required | blocked |
                      workflow_failed | routing_complete -> END
 ```
 
-- **Builder:** `_execution_graph(custody)` is the Day 45 routing graph built with
+- **Builder:** `_execution_graph(custody)` is the Supervisor routing graph built with
   `attach_routing(delegate="delegate_stage")`. There is no `await_delegation` node.
 - **Public runner:** `run_supervisor_workflow(context) -> SupervisorExecutionResult`. It takes
   only the trusted context: no state, no stage results, no graph.
@@ -27,8 +26,8 @@ route_supervisor --> clarification_required | review_required | blocked |
 
 ## 2. Trusted dependencies
 
-`SupervisorContext` gains two fields, both with defaults, so Day 44/45 callers are unaffected.
-They come from the trusted caller exactly as Phase 6 receives them:
+`SupervisorContext` includes two optional fields used by delegation; foundation and routing callers may omit them.
+They come from the trusted caller exactly as specialist workflow receives them:
 
 - `intake_graph: CompiledStateGraph | None`, with `repr=False`;
 - `horizon_start: date | None`.
@@ -78,13 +77,13 @@ if its ids and source hash are identical. The tests prove this with object ident
 not hashes.
 
 **Residual boundary.** The agent functions are trusted in-process code, looked up on their
-modules at call time as Phase 6 does. If such a function itself returned an object produced
+modules at call time as specialist workflow does. If such a function itself returned an object produced
 earlier, that is outside this boundary. This is not cryptographic authentication of
 independently transmitted evidence; that is L04/L21.
 
 ## 5. Stage execution (`_arguments`, `_STAGE_TIMEOUTS`)
 
-| Stage | Call (Phase 6 signature) |
+| Stage | Call (specialist workflow signature) |
 |---|---|
 | A1 extraction | `(intake_graph, source_text, source_id, rfq_id)` |
 | A1 validation | `(kept extraction, source_text, rules=manufacturing_rules, catalog=execute)` |
@@ -116,11 +115,11 @@ It holds:
 
 `draft` is excluded from `summary()`. `human_approval_required` is fixed `True`; `approved`
 and `released` are fixed `False`. Nothing is persisted, numbered or sent. A draft exists
-exactly when Phase 6's would: A5 accepted, status in `_DRAFT`, and a customer view present.
+exactly when specialist workflow's would: A5 accepted, status in `_DRAFT`, and a customer view present.
 
-## 7. Phase 6 parity
+## 7. specialist workflow parity
 
-All 11 Day 45 scenarios run through `run_supervisor_workflow` and through
+All 11 Supervisor routing scenarios run through `run_supervisor_workflow` and through
 `evaluate_rfq_workflow` with fresh identical fakes. They must agree on:
 
 - the route action and stopping stage;
@@ -132,13 +131,13 @@ All 11 Day 45 scenarios run through `run_supervisor_workflow` and through
 
 The only intentional difference is the shape of the result contract.
 
-## 8. Day 47 parallel part checks
+## 8. parallel execution parallel part checks
 
 Inside the manufacturing stage, A2 may check independent parts concurrently, bounded by the
 trusted `SupervisorContext.part_concurrency`. The stage still records one outcome. See
 `supervisor_parallel.md`.
 
-## 9. Day 48 dispositions
+## 9. escalation dispositions
 
 Every result from `run_supervisor_workflow` carries a `disposition`. It is derived only from
 the settled route (`decide(outcomes)`) and this attempt's custody codes. See

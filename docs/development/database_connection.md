@@ -1,8 +1,8 @@
-# Day 5, Component 2 — Asynchronous database connection layer
+# Database connections and session ownership
 
-This guide describes the Component 2 boundary and its original verification. The completed Day 5 schema, seeding, queries and current test results are summarized in the [final verification report](day_05_final_verification_report.md).
+This guide explains the asynchronous connection foundation. For the completed backend and current setup, see the [project overview](../../README.md#local-setup). Database-owner, restricted-runtime and human-decision credentials have distinct authority; see the [K2](../database/k2_runtime_roles.sql) and [K5](../database/k5_decision_roles.sql) provisioning artifacts. Foundation-specific counts and examples below describe their original scope, not the current schema or a new verification run.
 
-This component implements connections and session ownership only. The approved [Day 4 architecture](../database/database_architecture.md), [table specifications](../database/table_schemas.md), [relationships](../database/relationships_and_constraints.md) and [source mapping](../database/dataset_to_database_mapping.md) remain unchanged. No ORM entities, application tables, migrations, seeding, MCP servers or FastAPI endpoints are introduced.
+This document covers connections and session ownership. The approved [database design architecture](../database/database_architecture.md), [table specifications](../database/table_schemas.md), [relationships](../database/relationships_and_constraints.md) and [source mapping](../database/dataset_to_database_mapping.md) remain unchanged. ORM models, migrations, seeding and serving integrations are documented separately.
 
 ## Architecture decision
 
@@ -26,13 +26,13 @@ The existing `uv` project and Python 3.12 virtual environment are retained. The 
 
 The `uv_build` backend makes the existing `src/rfq_copilot/` package importable through an editable installation. It defines no ORM models. No Alembic, FastAPI, Pydantic or unrelated runtime packages were added.
 
-Reproduce the locked installation while retaining manually installed Day 3 dataset-validation packages:
+Reproduce the locked installation while retaining manually installed dataset validation dataset-validation packages:
 
 ```bash
 uv sync --locked --inexact
 ```
 
-`--inexact` deliberately preserves extra existing packages; ordinary exact synchronization can remove undeclared Day 3 tools. The original 17 installed distributions were checked for unchanged versions. See [uv synchronization options](https://docs.astral.sh/uv/reference/cli/#uv-sync).
+`--inexact` deliberately preserves extra existing packages; ordinary exact synchronization can remove undeclared dataset validation tools. See [uv synchronization options](https://docs.astral.sh/uv/reference/cli/#uv-sync).
 
 ## Environment configuration
 
@@ -40,11 +40,13 @@ Start with the safe placeholders in [`.env.example`](../../.env.example). Actual
 
 | Variable | Meaning |
 | --- | --- |
-| `DATABASE_URL` | Development URL using `postgresql+asyncpg://` |
+| `DATABASE_URL` | Development owner URL using `postgresql+asyncpg://` |
 | `TEST_DATABASE_URL` | Separate test URL using the same async driver |
 | `TEST_DATABASE_NAME` | Explicit expected database name ending in `_test` |
+| `APP_DATABASE_URL`, `TEST_APP_DATABASE_URL` | Restricted runtime role on the matching database |
+| `DECISION_DATABASE_URL`, `TEST_DECISION_DATABASE_URL` | Separate K5 role, supplied only to human-decision execution |
 
-Enter the existing restricted-role credentials locally, using the secure terminal helper supplied for this setup or your local editor/password manager. Create `.env` only if it is absent; preserve any existing file. Set its permissions to `0600`. The helper percent-encodes username/password characters; when editing manually, encode characters such as `@`, `:`, `/`, `%` and `#` in the URL credential portions. Development and test URLs must identify different databases. The local resources from Component 1 are the development and testing databases; do not use the PostgreSQL administrator for the application connection.
+Enter the intended role credentials privately using your editor or password manager; do not confuse owner credentials with the restricted application or decision roles. Create `.env` only if it is absent; preserve any existing file. Set its permissions to `0600`. The helper percent-encodes username/password characters; when editing manually, encode characters such as `@`, `:`, `/`, `%` and `#` in the URL credential portions. Development and test URLs must identify different databases. The local resources from Component 1 are the development and testing databases; do not use the PostgreSQL administrator for the application connection.
 
 There is no implicit dotenv search. `DatabaseConfig.from_env(..., env_file=Path('.env'))` reads only that explicit file, with interpolation disabled. Process variables override file values without mutating `os.environ`. With no file argument, only process variables are read. Missing configuration fails explicitly. An explicitly requested missing file also fails.
 
@@ -75,7 +77,6 @@ from sqlalchemy import text
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database
 
-
 async def check_backend_connection():
     config = DatabaseConfig.from_env(env_file=Path('.env'))
     async with Database(config) as database:
@@ -89,7 +90,7 @@ async def check_backend_connection():
 - Normal exit rolls back unfinished work. Exceptions also trigger rollback and closure. A business exception propagates; database/driver failures become sanitized `DatabaseError` exceptions.
 - Call `await session.commit()` only after the owning business service intentionally completes its transaction. Explicitly entering SQLAlchemy's `session.begin()` context is another caller-owned commit boundary. Already committed work cannot be undone by a later rollback; split commits must not be mistaken for an atomic business operation.
 - Closed sessions are permanently closed (`close_resets_only=False`); obtain a new scope instead of reusing one.
-- `get_session(database)` provides a yield-style async dependency for a later framework adapter. Framework/manual consumers must close the generator on early exit; the tests exercise this. No FastAPI dependency or endpoint is implemented today.
+- `get_session(database)` provides a yield-style async dependency for a later framework adapter. Framework/manual consumers must close the generator on early exit; the tests exercise this. The current FastAPI session adapters are in `src/rfq_copilot/api/db.py`.
 - Wait for all owned session/task scopes to finish before `await database.dispose()`. `async with Database(...)` does this at outer-scope exit. Disposal is idempotent; the wrapper rejects new sessions after disposal. Do not keep an engine alive across different asyncio event loops. SQLAlchemy disposal does not forcibly reclaim a caller's still-checked-out connection.
 
 `read_only=True` sets PostgreSQL default_transaction_read_only on each new connection. Development verification CLIs and development test connections use this protection. Guarded migration, seeding and constraint fixtures use writable connections only to the isolated test database. Backend application engines default to writable transactions, with explicit caller-owned commits; authentication/authorization and business state transitions still belong to later services, not this generic connection layer.
@@ -115,4 +116,4 @@ The integration suite checks development/test identity, UTC and read-only mode; 
 
 Transaction tests use PostgreSQL's transactional `application_name` session setting as observable state. They commit/roll back that connection-local setting and restore it where necessary; they create no tables and write no business rows. Negative connection tests reserve a non-listening local port or supply an intentionally incorrect password. Cancellation uses pg_sleep, then checks pool recovery. The disposal test also confirms the previous backend PID has disconnected.
 
-See [Day 5 log](../dev_log/day_05.md) for exact commands, exit codes, each test result and the final observed database/repository checks. These tests validate this component, not future ORM mappings, migrations, business authorization or agent behavior.
+Historical command receipts are retained privately. See the [current verification scope](../../README.md#verification) and [limitations register](technical_debt.md); this documentation update did not execute the commands above.

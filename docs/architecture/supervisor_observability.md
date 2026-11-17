@@ -1,6 +1,6 @@
-# Supervisor observability (Day 50, L07)
+# Supervisor observability (L07)
 
-Opt-in, privacy-safe telemetry for the Phase 7 Supervisor, with an optional Langfuse exporter.
+Opt-in, privacy-safe telemetry for the Supervisor, with an optional Langfuse exporter.
 Code: `src/rfq_copilot/observability.py`; hooks in `supervisor.py` (delegation node, tool
 wrapper, `_execute`) and `recovery.py` (`_reported`). Tests:
 `tests/test_supervisor_observability.py`.
@@ -105,9 +105,9 @@ none of these appear in telemetry.
 
 | Level | Status |
 |---|---|
-| Local instrumentation (events at workflow, stage, route, tool, A2 and recovery boundaries) | Implemented (Day 50), tests authored |
-| Mocked export behaviour (fake SDK: mapping, metadata-only, bounds, failures) | Tests authored, not yet run |
-| Live Langfuse delivery | Not verified: needs the gated smoke test (`docs/dev_log/day_50.md`) |
+| Local instrumentation (events at workflow, stage, route, tool, A2 and recovery boundaries) | Implemented; coverage in the Supervisor observability tests |
+| Mocked export behaviour (fake SDK: mapping, metadata-only, bounds, failures) | Offline test coverage; does not establish live delivery |
+| Live Langfuse delivery | Requires the gated [live smoke test](../../tests/test_langfuse_live_smoke.py); offline checks do not establish delivery |
 | Production monitoring, dashboards, alerting, retention policy | Not implemented (deployment) |
 
 ## 7. Limits

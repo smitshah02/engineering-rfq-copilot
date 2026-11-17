@@ -903,7 +903,7 @@ async def test_metadata_list_requires_identity(tmp_path, fakes):
 
 
 async def test_production_upload_is_unreachable_without_an_authenticator(tmp_path, monkeypatch):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("APP_DATABASE_URL", raising=False)
     app = create_app(ApiSettings(environment="production", attachment_dir=tmp_path / "store"))
     response = await upload(app, files=pdf_file())
     assert response.status_code == 401

@@ -5,8 +5,8 @@ API (``api/app.py``) never mounts these routes and never reads the decision cred
 
 Boundary. The database cannot authenticate a person; it can only refuse decisions from any
 role outside ``rfq_quote_decision`` (the k5_* triggers). This process is the only holder of
-that credential (``DECISION_DATABASE_URL``, read at startup; missing or unsafe -> startup
-fails), and it records a decision only for:
+that credential (``DECISION_DATABASE_URL``; missing or invalid configuration fails startup,
+unsafe live privileges fail before a session is yielded), and it records a decision only for:
 
 - a bearer token verified by the existing ``TokenVerifier`` (signature, issuer, audience,
   lifetime, subject; ``api/auth.get_principal``), whose subject is an active user;
@@ -196,7 +196,7 @@ def create_decision_app(
         from rfq_copilot.config import DatabaseConfig
         from rfq_copilot.database import Database
 
-        database = Database(DatabaseConfig.from_env("development", decision=True))
+        database = Database(DatabaseConfig.from_serving_env("development", decision=True))
     app.state.settings = settings
     app.state.token_verifier = TokenVerifier.from_settings(settings)
     # Identity reads (get_principal) use the same decision credential: no owner URL here.

@@ -4,13 +4,15 @@ The mapping below describes the frozen v1.1.0 baseline. Current schema expectati
 
 ## Mapping audit — completed before the first import
 
-Authority: all five unchanged [Day 4 database documents](../database/dataset_to_database_mapping.md). Initial live read-only audit: `rfq_copilot_dev`, authenticated role/owner `rfq_copilot_dev`, PostgreSQL 18.6, revision `20261108_01`, all 33 approved tables empty. The independent Day 4 catalog verifier checked 261 columns, 33 PKs, 64 FKs, 14 additional UNIQUEs, 207 CHECKs and 14 explicit indexes. Test database `rfq_copilot_test` initially had only public and no user relations. Initial working tree already contained the uncommitted Components 1–4; those files are preserved.
+Authority: the approved [database mapping](../database/dataset_to_database_mapping.md),
+source manifests and active schema contract. Seeding requires an explicitly selected,
+guarded database and validates its state before import.
 
 Source preflight independently measured **681 files**, **637/637 protected hashes**, and matching archive SHA-256 `681a882fd7c22cd4e874b57fd31ab6bd12602bc826b2c02cfa79eb17a5ad5080`. The archive has 680 entries; the existing extra root `.DS_Store` accounts for the tree difference. All 28 allowlisted source documents also match that authenticated archive, including configuration outside the 637-file manifest. No source is regenerated or repaired.
 
 The mapping covers 17 CSVs (731 records), historical RFQ JSON (80 records), nine rule/contract documents and one generation metadata file: **28 mapped files**, **811 business source records**, **1,089 target records**, **26 populated tables**, **seven intentionally empty runtime tables**. No unresolved mapping remains.
 
-The Day 4 version-field label is incorrect: `properties.schema_version.const = "1.1"` belongs to `contracts/agent_handoff_schema.json`. `contracts/business_constraints.json` has no version property. Its approved identity is `business_constraints@sha256:<full exact-byte digest>`, preserving the complete object without inventing a version. All five contracts use namespaced content-addressed keys; the four policies retain their declared version IDs.
+The database design version-field label is incorrect: `properties.schema_version.const = "1.1"` belongs to `contracts/agent_handoff_schema.json`. `contracts/business_constraints.json` has no version property. Its approved identity is `business_constraints@sha256:<full exact-byte digest>`, preserving the complete object without inventing a version. All five contracts use namespaced content-addressed keys; the four policies retain their declared version IDs.
 
 “Direct” below includes explicit wire conversion and the approved application fields; “derived” identifies projections/registries and the current-header join. An RFQ gets `archived`, NULL creator and row_version=1. Inventory/capacity get their documented snapshot token and row_version=1. Quote headers get row_version=1 and NULL release fields. Approval events get NULL approval_request_id. Neither historical actor identity nor approval flags certify current release eligibility.
 
@@ -267,7 +269,6 @@ Computed from all 64 ORM FKs. Only the two documented, genuinely DEFERRABLE INIT
 
 `business_rule_versions` → `customers` → `data_snapshots` → `operations` → `permissions` → `roles` → `suppliers` → `contacts` → `finishes` → `materials` → `role_permissions` → `users` → `workcentres` → `finish_material_categories` → `idempotency_records` → `material_finish_compatibility` → `material_supported_operations` → `material_thickness_options` → `operation_routing` → `production_capacity` → `rfqs` → `material_inventory` → `pricing_calculations` → `quotes` → `rfq_attachments` → `rfq_line_items` → `workflow_runs` → `procurement_records` → `quote_versions` → `approval_requests` → `audit_events` → `quote_line_items` → `approval_history`.
 
-
 ## Architecture and resource ownership
 
 The `rfq_copilot.seeding` package has eight small modules: `sources` (fixed readers/integrity), `transform` (strict wire conversions and exact JSON encoding), `mapping` (approved projections, native validation and FK order), `validation` (nested and cross-record business facts), `safety` (live identity/head/schema checks), `loader` (snapshots, comparison, transaction and verification), `cli` (explicit actions/JSON summaries), and `__init__` (safe error type). There is no second engine, session factory, declarative base, tracking table or schema-creation path. `DatabaseConfig` and `Database` retain their existing ownership and sanitization behavior.
@@ -332,9 +333,10 @@ uv lock --check
 
 The new integration fixture acquires the existing test lifecycle lease `(461441,505)`, verifies test identity and a completely empty original catalog, and applies only the approved Alembic head. Individual imports execute inside rollback-only test transactions. A real savepoint commit exercises `run_seed`'s success boundary under an outer rollback-only transaction. Negative tests inject failures after parents have been inserted, including immediate and deferred FK failures, CHECK/unique failures, application failure, cancellation and post-insert verification failure. The finalizer verifies zero test rows, uses the existing guarded empty-test downgrade/tracker cleanup, and matches the original catalog, even after assertion failure. It never deletes committed development data.
 
-The former development-empty migration assertion is obsolete after this component. It now verifies the same exact physical design in a server-enforced read-only connection and compares complete server-side data fingerprints before/after. Every isolated migration lifecycle test still requires empty application tables. No earlier physical, constraint or isolation assertion was removed.
-
-Independent actual post-import inspection used fresh read-only SQL queries: per-table COUNT versus COUNT(DISTINCT ROW(PK...)), every NOT NULL column, 64 full-tuple anti-join FK checks, all 207 live CHECK predicates, and complete table fingerprints using ordered `to_jsonb` aggregation. A separately written source projection compared 9,587 values, including exact decimals, aware timestamps, generated fields and nullable historical facts. It did not use importer counters or importer transformation functions. All 33 fingerprints matched before/after replay and after regression testing.
+Development parity verification uses a server-enforced read-only connection and compares
+complete server-side data fingerprints before and after inspection. Isolated migration
+lifecycle tests require empty application tables and preserve physical-schema, constraint
+and target-isolation checks.
 
 ## Recovery and limits
 
@@ -344,9 +346,7 @@ Independent actual post-import inspection used fresh read-only SQL queries: per-
 - Interrupt/failure before commit: the owned transaction rolls back and resources close. If an interruption or connection loss occurs at the commit acknowledgement boundary, run verify and independently inspect the database before deciding whether to retry; do not infer rollback from a lost acknowledgement.
 - This importer intentionally supports only frozen v1.1.0, the approved local databases, active schema contract and the documented baseline/allowlisted registrations. It is not an incremental loader or deployment/runtime RBAC implementation. Historical pricing/release evidence remains intentionally incomplete. The frozen MFG-001 validator remains unchanged; seeding independently enforces its scalar limits.
 
-## Historical evidence
+## Operational safety
 
-Original dry-run, import, replay and independent parity receipts are retained privately.
-They are not current execution results. The [README](../../README.md#verification) identifies
-the reported Phase 8 baseline and separates it from checks not run during documentation cleanup.
-Do not infer that an operational database can be reseeded safely from a historical empty-runtime report.
+Do not infer that a database can be reseeded safely from an old empty-runtime report.
+Inspect its current state and follow the guarded importer workflow above.

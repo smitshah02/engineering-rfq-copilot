@@ -1,6 +1,6 @@
-# Day 5, Component 7 — Representative database reads
+# Repository reads and query boundaries
 
-The internal `rfq_copilot.repositories` package implements seven async read operations over the existing ORM. It contains `queries.py` (bound SQLAlchemy queries and input validation), `results.py` (typed result wrappers), `__init__.py` (public exports), and `demo.py` (a read-only execution/verifier command). No API endpoint, MCP tool, agent, feasibility engine, pricing engine, table or migration is introduced.
+The internal `rfq_copilot.repositories` package implements seven async read operations over the existing ORM. It contains `queries.py` (bound SQLAlchemy queries and input validation), `results.py` (typed result wrappers), `__init__.py` (public exports), and `demo.py` (a read-only execution/verifier command). These are repository-level reads; authenticated API/MCP adapters and business engines are separate layers. For current capabilities, see the [project overview](../../README.md).
 
 ## Public functions and results
 
@@ -43,7 +43,6 @@ Use the existing application Database and one session per operation/task. Prefer
 ```python
 from rfq_copilot.repositories import get_customer, get_rfq
 
-
 async def read_customer_inquiry(database, authorized_customer_id, rfq_id):
     async with database.session() as session:
         async with session.begin():
@@ -68,92 +67,45 @@ Customer contacts use selectinload; RFQ/customer uses a scalar joinedload plus s
 
 Real SQL instrumentation, including consumption of returned children, measured these SELECT counts for representative seeded results: customer 2, RFQ 2, inventory 2, manufacturing 6, capacity 2, quotation history 3, pending approvals 1. Tests verify these counts and parameter binding. All observed repository statements were SELECTs, with no INSERT/UPDATE/DELETE or commit. Local milliseconds in the execution evidence are observations on this small dataset, not production performance claims. Large-history pagination and deployment authorization belong to later requirements; no speculative cache/pagination/security service is added here.
 
-## Executed development examples
-
-Command:
+## Read-only examples and verification
 
 ```bash
 .venv/bin/python -m rfq_copilot.repositories.demo --target development --env-file .env
 ```
 
-The command reuses one Database/session, validates identity/head/schema, selects valid identifiers from current seeded records, runs all seven reads in a server-enforced read-only REPEATABLE READ transaction, tests missing IDs, compares full fingerprints, and closes the session/pool. Output contains only safe identifiers, counts and quantities/units, not customer names, contact details or credentials.
+The example runner validates target identity/schema and runs representative queries inside
+one read-only repeatable-read transaction, comparing state before/after. Its safe summary
+contains identifiers, counts and quantities, not credentials or customer contact details.
+`verify_query_examples` also supports the guarded integration fixture without committing.
 
-`repositories.demo.verify_query_examples(session, config)` exposes the same verification sequence to the integrated lifecycle test using its existing transaction. It performs no commit, write or session creation; `run_examples(config)` retains ownership of the read-only CLI resources. This allows real test seeding, audit and all seven queries to run together before the fixture rolls back. The [final Day 5 report](day_05_final_verification_report.md) records that complete lifecycle.
+`tests/test_database_queries.py` covers lookups, customer mismatch, ordering, exact decimals,
+loading/query counts and rollback-isolated fixtures. Historical input/output tables and
+execution receipts are retained privately. See the [current verification scope](../../README.md#verification).
+No command was executed for this documentation edit.
 
-| Query | Actual input | Actual result | Status |
-| --- | --- | --- | --- |
-| Customer | CUST-001 | One customer, one associated contact | PASS |
-| RFQ | HRFQ-0001, CUST-001 | Two historical part IDs, zero runtime lines | PASS |
-| Material inventory | MAT-001, all availability | Six inventory rows, 385.300000 available kg | PASS |
-| Manufacturing | MAT-001, flat_panel | Six operations, six workcentres, four routes, five finishes, six thicknesses | PASS |
-| Capacity | WC-BND, 2026-11-09 through 2026-11-09 | One week, 15.0000 remaining hours | PASS |
-| Quotation history | CUST-001, HRFQ-0001 | One quote, two versions, two priced lines; one older metadata-only version | PASS |
-| Pending approvals | CUST-001, sales_manager | Zero pending requests | PASS |
-
-All seven missing-ID checks passed. Read-only mode was on; the full database fingerprint was unchanged. The source-derived development state remained 1,089 rows across 33 tables at `20261108_01`.
-
-## Tests and execution report
-
-```bash
-.venv/bin/python -m pytest tests/test_database_queries.py -q
-.venv/bin/python -m pytest -q
-```
-
-The 45 focused query tests passed with zero failures/errors/skips in 8.03s. They cover existing/missing lookups, contacts and scope, historical/runtime distinction, inventory status/thickness/Decimal totals, stored compatibility/routing, capacity ranges/hours, historical quote versions/lines/ordering, empty and test-only nonempty pending queues, invalid inputs, parameter binding, no autoflush, bounded eager loading, read-only development preservation and session release.
-
-The full regression result and final preservation evidence are recorded in [database_components_6_7_results.json](database_components_6_7_results.json) and appended below. Test setup reuses the existing guarded migration/seeding fixtures, with all new rows and mutations confined to rollback-only test transactions and the original test catalog restored.
-
-
-## Component 7: Database Queries Verification Report
-
-**Executed:** 2026-11-08 (America/New_York). **Status: COMPONENT 7 COMPLETE.** All seven operation/input/result/PASS rows above are actual development reads; all seven missing-ID checks passed.
-
-- Module organization and all seven function signatures/return types are documented above. Async sessions come from the existing infrastructure; functions never create engines/sessions or commit.
-- Eager-loading SELECT counts were verified as 2 / 2 / 2 / 6 / 2 / 3 / 1. Traversing requested child results caused no per-child queries. Root quotations remain unique and all historical versions remain present.
-- Empty/missing results, customer mismatch, pending-role/status scoping, Decimal kg/hours/USD, deterministic ordering, bound parameters and no autoflush were tested. The real pending queue remains empty; nonempty behavior used only rollback-isolated test requests.
-- Every observed read statement was SELECT. Server-enforced read-only mode was on for development. Full before/after SHA-256: `05f65a5515aae4c277f8e08a4437dcb7255772b69e19935fabb30902637aa6ee`. All 1,089 records and seven empty runtime tables were preserved.
-- **Focused tests:** 45 passed, 0 failed/errors/skipped, 8.03s. **Full regression:** 593 passed, 0 failed/errors/skipped, 54.41s; all 468 prior tests still pass.
-- **Files created/modified:** `src/rfq_copilot/repositories/{__init__,queries,results,demo}.py`, `tests/test_database_queries.py`, this guide, combined `database_components_6_7_results.json`, and the separate Component 7 entry in `docs/dev_log/day_05.md`.
-- **Unresolved problems: none.** Internal filters are not a replacement for future authenticated service authorization. No endpoint/tool/agent/engine or Component 8 was implemented.
-
-## Combined verification summary
-
-| Suite | Passed | Failed | Errors | Skipped | Duration |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Component 6 focused | 80 | 0 | 0 | 0 | 31.24s |
-| Component 7 focused | 45 | 0 | 0 | 0 | 8.03s |
-| Previous regression cases inside full run | 468 | 0 | 0 | 0 | 18.387s summed case time |
-| Full regression | 593 | 0 | 0 | 0 | 54.41s elapsed pytest time |
-
-Separate connections confirm **1,089 before / 1,089 after**, 33 tables, unchanged revision `20261108_01`, identical full fingerprints, unchanged seven empty runtime tables, no new migrations and no development reseeding/writes/deletes/duplicates. The test database is restored to its exact prior public-only catalog with zero user relations. All dataset/source/manifest checks pass without hidden-answer ingestion.
-
-Ruff root lint, formatting of all 39 Python files, application/model imports, unchanged dependency lockfile and `git diff --check` passed. Exact initial/final Git statuses, full per-table fingerprints, query measurements and all final command exit codes are in [database_components_6_7_results.json](database_components_6_7_results.json). The initial dirty/untracked Components 1–5 are preserved. Credentials remain only in ignored/private settings; the final audit scans actual private URLs/passwords in-memory without displaying them. No staging, commit or push occurred.
-
-**Final decision: COMPONENTS 6 AND 7 COMPLETE.** Stop before Component 8.
-
-## Day 6 additions — parts and rule versions
+## Parts and rule versions
 
 Two reads extend the same pattern (bound identifiers, `raiseload("*")`, `no_autoflush`, caller-owned session, no commit):
 
 - `get_rfq_parts(session, rfq_id, *, customer_id)` delegates to `get_rfq` and converts runtime `rfq_line_items` to immutable `rfq_copilot.entities.Part` objects in `line_number` order. Returns `None` for a missing or out-of-scope RFQ, `()` for a historical RFQ (no runtime lines). Two SELECTs, same as `get_rfq`.
 - `get_rule_version(session, rule_kind, rule_version, *, expected_sha256=None)` reads one `business.business_rule_versions` row in one SELECT. It raises `RuleIntegrityError` when the stored kind differs, the stored sha256 is malformed, the caller's pin differs, a versioned document declares another version, or a hash-named rule's name no longer matches its stored hash. The document is parsed from PostgreSQL's jsonb text with `parse_float=Decimal` and returned deeply read-only. `fingerprint` is sha256 of that canonical jsonb text and can be recomputed at any time; `sha256` is the seeded source file's hash (provenance), which JSONB storage cannot reproduce.
 
-`Part` checks types only (exact Decimal at the `Numeric(12, 3)` scale, strict int, nonblank ≤64-character identifiers, no unknown keys, no floats). Manufacturing ranges and missing-field findings belong to the Day 8 validator.
+`Part` checks types only (exact Decimal at the `Numeric(12, 3)` scale, strict int, nonblank ≤64-character identifiers, no unknown keys, no floats). Manufacturing ranges and missing-field findings belong to the manufacturing validator.
 
-## Day 7 addition — material lookup
+## Material lookup
 
 - `find_materials(session, *, grade=None, category=None, thickness_mm=None, finish_id=None)` returns the material IDs matching every given filter, ordered by ID, in one SELECT. `grade` matches case-insensitively after trimming; `thickness_mm` (exact `Decimal`, compared numerically) and `finish_id` are `EXISTS` checks against `material_thickness_options` and `material_finish_compatibility`. Unknown values return `()`. Arguments are validated before any SQL; the thickness rule is the shared `_thickness` helper also used by `get_material_availability`.
 
 The decisions built on it (supported thickness, finish compatibility, findings) live in `rfq_copilot.services.materials`, not in the repository layer.
 
-## Day 8 addition — part routing
+## Part routing
 
 - `list_part_routing(session, part_type)` returns the stored `business.operation_routing` steps for one part type, ordered by `sequence` then `routing_id`, in one SELECT. Unknown part types return `()`. Unlike the routing inside `get_manufacturing_capabilities`, it is not filtered by a material's supported operations, so the validator can detect a routed operation the material does not support.
 
-## Day 12 addition — material catalog rows for costing
+## Material catalog rows for costing
 
-- `list_materials(session, material_ids)` returns the `business.materials` rows for the distinct given IDs, ordered by `material_id`, in one SELECT (`raiseload("*")`, `no_autoflush`). An empty list issues no SQL; unknown IDs are simply absent. It is the only service read of `cost_usd_per_kg`; the Day 7 `MaterialSpec` deliberately excludes cost. Costing checks each row's `pricing_rule_version` against the pinned pricing rule.
+- `list_materials(session, material_ids)` returns the `business.materials` rows for the distinct given IDs, ordered by `material_id`, in one SELECT (`raiseload("*")`, `no_autoflush`). An empty list issues no SQL; unknown IDs are simply absent. It is the only service read of `cost_usd_per_kg`; the material catalog `MaterialSpec` deliberately excludes cost. Costing checks each row's `pricing_rule_version` against the pinned pricing rule.
 
-## Day 13 addition — operation catalog rows for pricing
+## Operation catalog rows for pricing
 
 - `list_operations(session, operation_ids)` returns the `business.operations` rows for the distinct given IDs, ordered by `operation_id`, in one SELECT. An empty list issues no SQL. Pricing uses `is_quoted` to refuse any routed operation that is catalog-only (TD-001).

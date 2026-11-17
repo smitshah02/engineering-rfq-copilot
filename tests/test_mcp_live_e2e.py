@@ -20,10 +20,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from conftest import connection_config
 from sqlalchemy import func, insert, select, text, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import bearer
@@ -42,10 +42,12 @@ from test_day21_rbac_database import bound, grants, one_active_user_per_role, ow
 from test_mcp_auth import MCP_AUDIENCE, granted_user, settings
 from test_mcp_client import PLAN, TestIssuer, hardened, live_host
 from test_phase35_completion_database import files, operator_with, policy_v2
+from test_runtime_role_database import grant_block
 
 from rfq_copilot import identity_admin
 from rfq_copilot.api.app import create_app
 from rfq_copilot.api.mcp_integration import McpIntegration
+from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database
 from rfq_copilot.mcp import contracts as c
 from rfq_copilot.mcp import security
@@ -147,10 +149,20 @@ async def test_hardened_profile_enforces_revocation_and_upload_idempotency(
 async def live(seed_database, seed_plan):
     """Committed synthetic world on the guarded test DB; truncated again in teardown."""
     a, b = customer_id(seed_plan), other_customer(seed_plan)
+    # Reapply the existing K2 artifact after the guarded test migration lifecycle. No new
+    # privileges: both the REST reader and the child gateway now use this restricted role.
+    runtime_config = DatabaseConfig.from_env(
+        "test",
+        env_file=Path(__file__).resolve().parents[1] / ".env",
+        runtime=True,
+    )
+    quote_role = seed_database.engine.dialect.identifier_preparer.quote(runtime_config.url.username)
     try:
         async with seed_database.session() as s, s.begin():
             await execute_seed(s, seed_database.config, seed_plan, "apply", confirm_database="rfq_copilot_test")  # fmt: skip
             await register_policy(s, "rbac-policy-v2")
+            for statement in grant_block(quote_role):
+                await s.execute(text(statement))
             await s.execute(update(Customer).where(Customer.customer_id.in_([a, b])).values(account_status="active"))  # fmt: skip
             user_a = await granted_user(s)
             user_b = await granted_user(s, exclude={user_a.user_id})
@@ -204,7 +216,12 @@ async def test_authenticated_live_end_to_end(trust, live):
 
         # 1. REST caller -> FastAPI (hardened) -> test provider -> live host -> Manufacturing
         issuer = TestIssuer(trust)
-        async with Database(connection_config("test"), read_only=True) as rest_db:
+        runtime_config = DatabaseConfig.from_env(
+            "test",
+            env_file=Path(__file__).resolve().parents[1] / ".env",
+            runtime=True,
+        )
+        async with Database(runtime_config, read_only=True) as rest_db:
             integration = McpIntegration(client, issuer, MCP_AUDIENCE, REST_AUDIENCE)
             app = create_app(trust.settings(**hardened(trust)), database=rest_db, mcp=integration)
             rest_a = trust.mint(sub=sub["a"])

@@ -1,4 +1,4 @@
-# Supervisor clarification and escalation (Day 48)
+# Supervisor clarification and escalation
 
 Module: `src/rfq_copilot/escalation.py`. Integration: `supervisor._execute` (trusted `build`)
 and `SupervisorExecutionResult.disposition` / `customer_outcome()`.
@@ -6,7 +6,7 @@ and `SupervisorExecutionResult.disposition` / `customer_outcome()`.
 ## 1. Authority and data flow
 
 ```text
-A1..A5 results ─> record_outcome ─> StageOutcome ─> decide() ─> RouteDecision      (Day 45/46)
+A1..A5 results ─> record_outcome ─> StageOutcome ─> decide() ─> RouteDecision
                                                          │
              custody (this attempt only) ─ codes ─┐      │
                                                    v      v
@@ -48,7 +48,7 @@ A1..A5 results ─> record_outcome ─> StageOutcome ─> decide() ─> RouteDec
 
 ## 2. Categories
 
-| Route (Day 45) | Route outcome | Category | Customer outcome |
+| Route | Route outcome | Category | Customer outcome |
 |---|---|---|---|
 | `clarification` | `clarification_required` | `clarification_required` | `information_needed` |
 | `blocked` | `not_quotable` (A2 infeasible) | `not_quotable` | `not_quotable` |
@@ -64,7 +64,7 @@ validated against the category. Constant fields: `automatic_continuation=False`,
 
 ## 3. Clarification
 
-- Codes are the route's (Phase 6 `_clarifications`): Intake ids `"<part>:<field>:<kind>"`,
+- Codes are the route's (specialist workflow `_clarifications`): Intake ids `"<part>:<field>:<kind>"`,
   A2 `"<part>:<spec field>:missing"`, and A3
   `"0:requested_delivery_date:requested_delivery_date_unverified"`.
 - Questions come from fixed templates per kind:
@@ -78,7 +78,7 @@ validated against the category. Constant fields: `automatic_continuation=False`,
 - Questions are deduplicated, kept in the route's order, and capped at `MAX_QUESTIONS` (25).
 - Intake's own `Clarification.question` is **not** reused, because it quotes customer text.
 - Nothing runs downstream (the route stopped). Nothing is resumed: answering is a new attempt
-  that re-validates everything (Day 49 owns interruption and resumption).
+  that re-validates everything (recovery owns interruption and resumption).
 
 ## 4. Blocking
 
@@ -101,7 +101,7 @@ validated against the category. Constant fields: `automatic_continuation=False`,
 | `intake` | other `intake_<kind>` review findings (catalog unavailable or not checked, rules not checked, injection suspected) |
 | `other` | any unknown code; also a review with no code |
 
-- Constrained supply still continues to pricing (Phase 6 `_NEXT`). Its concern surfaces at
+- Constrained supply still continues to pricing (specialist workflow `_NEXT`). Its concern surfaces at
   A5, and that sequence is unchanged.
 - Categories are recommendations only. Nobody is assigned, no ticket is created, nothing is
   notified or approved.
@@ -112,7 +112,7 @@ validated against the category. Constant fields: `automatic_continuation=False`,
 `customer_account_status` and `credit_limit` as unevaluated. The disposition therefore always
 has `customer_status="not_verified"` and carries A5's codes in `unevaluated_conditions`. It
 is never a pass, and never a block on its own. An authoritative account and credit service
-is a Phase 8 requirement (L08–L17).
+is a quotation lifecycle requirement (L08–L17).
 
 ## 6. Draft
 

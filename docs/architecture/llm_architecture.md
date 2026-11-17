@@ -1,7 +1,8 @@
-# LLM and Agent Model Architecture (Day 31)
+# LLM and Agent Model Architecture
 
-Status: foundation implemented in `src/rfq_copilot/llm.py`. No provider selected. No tool
-executes. Tests: `tests/test_llm.py` (mocked models only).
+`src/rfq_copilot/llm.py` provides provider-independent model calls and proposal validation.
+Tool execution belongs to the secured graph/MCP integration, described below.
+Tests: `tests/test_llm.py` (mocked models).
 
 ## 1. Model interface
 
@@ -37,7 +38,7 @@ validated MCP result       ──► ToolMessage                             dat
 - No principal, JWT, role, permission or customer scope goes into any message. Prompt
   parts shaped like credentials (bearer, JWT, `sk-`/`AIza` keys, PEM) are refused.
 - LangSmith tracing (a transitive dependency of `langchain-core`) is off unless the
-  `LANGSMITH_TRACING` variable is set. Day 31 found it unset. Keep it off until there is a
+  `LANGSMITH_TRACING` variable is set. Keep it off until there is a
   data-handling decision.
 
 ## 3. Tool-call trust boundary
@@ -51,7 +52,7 @@ A model tool call is a request, not an authorization.
    or `token` is rejected.
 2. A `ProposedToolCall` holds only `id`, `name` and validated `arguments`. It has no
    credential and no execute method.
-3. Execution (implemented Day 34, `graph.execute_tools` via `graph.mcp_executor`; see
+3. Execution (implemented tool execution, `graph.execute_tools` via `graph.mcp_executor`; see
    `langgraph_foundation.md`). The runtime takes the proposal, adds the authenticated
    principal's MCP-audience token from `api.mcp_integration`, and calls
    `mcp.client.McpToolClient.call(..., token=...)` through the secured host. JWT, RBAC, revocation and customer
@@ -65,29 +66,21 @@ the result is `malformed_output`. Schemas describe wording and classification on
 quantities, lead times and approvals still come from the deterministic services through
 MCP, never from model output.
 
-## 5. Provider comparison (for later selection; re-verify before choosing)
+## 5. Provider selection
 
-| | Tool calling | Structured output | Cost | Latency | Fit for development |
-|---|---|---|---|---|---|
-| OpenAI | Mature, parallel calls | Native JSON-schema strict mode | Mid; small models cheap | Low–mid | Strong; widest LangChain coverage |
-| Anthropic | Mature, strong at following instructions | Through tool use or native structured outputs | Mid; small models cheap | Low–mid | Strong for agentic and long-context work |
-| Gemini | Supported, parallel calls | Native response schema | Often lowest per token among the three | Low (Flash tiers) | Good; schema-dialect quirks |
-| Local (Ollama / vLLM) | Depends on the model; weaker | JSON mode or grammar; less reliable | No API fee; hardware cost | Depends on hardware | Good for offline tests and privacy; weaker reasoning |
+Keep `BaseChatModel` injection as the provider boundary. Evaluate candidates on development
+scenarios using tool-call validity, schema-failure rate, latency and cost. Never use frozen
+evaluation data for iterative provider selection. Provider-specific capabilities and prices
+must be checked before selection; local Ollama support is an optional development path.
 
-Recommendation: keep `BaseChatModel` injection as the only seam. Select a provider after
-Day 32 graph tests, using a small evaluation on development scenarios. Never use the frozen
-evaluation data for this. Measure tool-call validity, schema-failure rate, latency and cost.
+## 6. Runtime integration
 
-## 6. Roadmap
+- The [LangGraph workflow](langgraph_foundation.md) calls the model helpers and validates
+  proposals without putting credentials into state.
+- The execution node maps allowed proposals to secured MCP calls using the runtime
+  principal's delegated credential. Tool results pass through `tool_result_message`.
 
-- **Day 32:** a LangGraph `StateGraph` whose nodes call `invoke`, `invoke_structured` and
-  `inspect_tool_calls`. Graph state holds facts and `ProposedToolCall`s, never credentials.
-- **Day 34 (done):** an execution node maps approved proposals to `mcp.client` calls with the
-  runtime principal's token. MCP results come back through `tool_result_message`.
-
-References: LangChain docs on [chat models](https://docs.langchain.com/oss/python/langchain/models),
+References: LangChain [models](https://docs.langchain.com/oss/python/langchain/models),
 [messages](https://docs.langchain.com/oss/python/langchain/messages),
-[tools](https://docs.langchain.com/oss/python/langchain/tools) and
+[tools](https://docs.langchain.com/oss/python/langchain/tools), and
 [structured output](https://docs.langchain.com/oss/python/langchain/structured-output).
-API behaviour was checked against the installed `langchain-core` 1.8.0 source
-(`BaseChatModel.bind_tools` and `with_structured_output`).

@@ -205,7 +205,7 @@ def test_unexpected_error_is_an_opaque_500(monkeypatch):
 
 
 def test_missing_database_configuration_is_a_503(monkeypatch):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("APP_DATABASE_URL", raising=False)
     app = authorized_app()
     with TestClient(app) as client:
         response = client.get("/api/v1/customers/me")
@@ -214,7 +214,10 @@ def test_missing_database_configuration_is_a_503(monkeypatch):
 
 
 def test_lazily_created_database_is_owned_reused_and_disposed(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://r:p@127.0.0.1:1/lazy_db")
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+asyncpg://r:p@127.0.0.1:1/lazy_db")
+    monkeypatch.setenv("DATABASE_HOST", "127.0.0.1")
+    monkeypatch.setenv("DATABASE_PORT", "1")
+    monkeypatch.setenv("DEVELOPMENT_DATABASE_NAME", "lazy_db")
     app = authorized_app()
     with TestClient(app) as client:
         assert client.get("/api/v1/customers/me").status_code == 503  # refused, as above
@@ -235,7 +238,10 @@ def test_lazy_database_sets_read_only_transactions(monkeypatch):
         real_init(self, config, read_only=read_only)
 
     monkeypatch.setattr(Database, "__init__", spy)
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://r:p@127.0.0.1:1/lazy_db")
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql+asyncpg://r:p@127.0.0.1:1/lazy_db")
+    monkeypatch.setenv("DATABASE_HOST", "127.0.0.1")
+    monkeypatch.setenv("DATABASE_PORT", "1")
+    monkeypatch.setenv("DEVELOPMENT_DATABASE_NAME", "lazy_db")
     with TestClient(authorized_app()) as client:
         client.get("/api/v1/rfqs")
     assert created == [True]

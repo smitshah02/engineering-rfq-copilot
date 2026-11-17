@@ -9,7 +9,7 @@ compute business results with exact decimal arithmetic. Quotation persistence re
 those results from stored requirements; authorized humans approve, reject, and release
 specific quotation versions.
 
-**Status:** backend Phases 1–8 are complete, including the LangGraph Supervisor and persistent
+**Status:** the backend is implemented, including the LangGraph Supervisor and persistent
 quotation lifecycle. This is a development project: frontend integration and production
 hardening remain open, and production deployment has not been approved.
 
@@ -213,9 +213,11 @@ uv run uvicorn --factory rfq_copilot.mcp.host:create_app_from_env --host 127.0.0
 
 Protected operations fail closed when trust configuration, grants, bindings, storage, or
 required credentials are missing. A working liveness response does not establish readiness.
-The default API/MCP factories still use the owner URL, and runtime/decision configuration
-currently validates an owner URL before selecting its credential. Serving credential
-isolation remains open; these entry points are not hardened deployment instructions.
+Serving factories select only their restricted application or decision URL and target
+metadata, without owner-credential loading or dotenv discovery. Each restricted session
+checks live database authority before yielding. Supply process-specific credentials and
+matching `DEVELOPMENT_DATABASE_NAME`, `DATABASE_HOST`, and `DATABASE_PORT`; test serving
+also requires `TEST_DATABASE_NAME`. These entry points do not establish production readiness.
 
 The [Supervisor](src/rfq_copilot/supervisor.py) and
 [conversational agent](docs/architecture/langgraph_foundation.md) are Python integration
@@ -224,10 +226,6 @@ model, and principal-bound MCP executor. A runtime delegated-credential provider
 shipped; test-only issuers/providers are not a production authentication solution.
 
 ## Verification
-
-**Historical Phase 8 baseline, reported November 17, 2026:** 4,722 passed, 10 intentionally
-skipped opt-in integrations. This is a prior verification record, not a result reproduced
-by the repository-hygiene changes. Skipped integrations do not establish live readiness.
 
 The public, dataset-free smoke selection is maintained in
 [`.github/workflows/smoke.yml`](.github/workflows/smoke.yml). It is a subset of the regression.
@@ -258,8 +256,9 @@ optional extra. Do not interpret mocked-model or offline results as a live demon
   human context attestation are distinct from cryptographic source authentication.
 - Automatic expiry/supersession transitions and verified engineering-review completion are
   incomplete. Human approval/release checks fail closed where required evidence is absent.
-- Serving credential isolation, consistent decision retries, API contract gaps, and broader
-  decision-HTTP/CI coverage remain follow-up work; this documentation cleanup fixes none of them.
+- Owner-free serving configuration, serialized decision-receipt replay, and authenticated
+  decision HTTP/database tests have been added and await manual verification. API contract
+  gaps and broader integration coverage remain follow-up work.
 - Production identity provisioning, observability, deployment and operational acceptance
   remain pending. Production deployment is not approved.
 

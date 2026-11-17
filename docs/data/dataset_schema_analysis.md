@@ -1,7 +1,6 @@
 # Dataset Schema and Relationship Analysis
 
 **Project:** Engineering RFQ Multi-Agent Copilot  
-**Roadmap:** Day 3 of 73  
 **Baseline:** Synthetic RFQ dataset v1.1.0  
 **Authoritative source:** `data/rfq_synthetic_data/contracts/entity_schemas.json`
 
@@ -79,7 +78,7 @@ These are **schema property names**, not inferred business values. The official 
 5. A scenario RFQ links to a customer, but is a **separate scenario fixture** from historical RFQs; do not merge the two ID spaces without reviewing dataset semantics.
 6. Bill-of-materials attachments can contain multiple rows for the same `rfq_id`; this alone does not violate primary-key uniqueness.
 
-## Proposed future import rules (not yet implemented)
+## Import interpretation rules
 
 - Apply exact primary- and foreign-key constraints from the authoritative `entity_relationships` metadata.
 - Convert money, hours, quantities, thicknesses, and ratios from CSV strings to appropriate fixed-precision numeric SQL values; do not use binary floating point for price calculations.
@@ -89,6 +88,9 @@ These are **schema property names**, not inferred business values. The official 
 - Preserve split membership and hard-isolate hidden `evaluation/ground_truth/` files from production tools and agent prompts.
 - Keep client-visible/customer text separate from authenticated actor identity and customer authorization scope.
 
-## Day 3 validation evidence and limits
+## Reference-engine limits
 
-The official validator returned `referential_integrity: pass`; entity-schema Pytest coverage and all 38 non-regenerating tests passed; the isolated reproducibility test passed. No live SQL database was created or validated. See [`data_integrity_report.md`](data_integrity_report.md) for the confirmed manufacturing rule gap `MFG-001`.
+The frozen reference manufacturing validator does not enforce its scalar hole-count maximum.
+The application validator enforces `0 <= hole_count <= 300` and rejects unsupported rule
+limits; see [manufacturing validation](../../src/rfq_copilot/services/manufacturing.py).
+Keep the reference dataset unchanged and use the approved database mapping for imports.

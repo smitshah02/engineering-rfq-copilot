@@ -228,6 +228,15 @@ class Database:
         try:
             async with self._session_factory() as session:
                 try:
+                    # A URL/flag cannot prove restricted authority. Check before identity
+                    # reads or route work, on every session, without leaving an implicit
+                    # transaction that would break caller-owned begin()/snapshot setup.
+                    if self.config.runtime or self.config.decision:
+                        if self.config.decision:
+                            await require_decision_runtime(session)
+                        else:
+                            await require_restricted_runtime(session)
+                        await session.rollback()
                     yield session
                 finally:
                     # A committed transaction is already complete; rollback then becomes a no-op.

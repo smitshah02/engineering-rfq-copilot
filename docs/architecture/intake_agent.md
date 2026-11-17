@@ -1,13 +1,13 @@
-# RFQ Intake Agent (A1): extraction (Day 36) and validation (Day 37)
+# RFQ Intake Agent (A1): extraction and validation
 
 `src/rfq_copilot/intake.py` turns customer-authored RFQ text into a **provisional,
 evidence-checked** per-part extraction. It does not validate for manufacturing, check
 feasibility, map catalog ids, price or approve anything. Every result has
-`readiness="pending_validation"`. Day 37 adds `src/rfq_copilot/intake_validation.py`
-(completeness, contradictions, catalog recognition, clarification, downstream readiness);
-see "Day 37: validation and clarification" below.
+`readiness="pending_validation"`. The validation layer in `src/rfq_copilot/intake_validation.py`
+checks completeness, contradictions, catalog recognition, clarification and downstream readiness;
+see [validation and clarification](#validation-and-clarification) below.
 
-## Interface (for the future Supervisor)
+## Interface (Supervisor integration)
 
 ```python
 graph = intake.build_intake_graph(model)            # injected BaseChatModel, no tools
@@ -112,7 +112,7 @@ The following are refused:
    - text as whole words
 
    Otherwise: `unverified/value_not_in_evidence`.
-3a. **Clause context (remediation D36-01/02/03/07).** For each occurrence of the value, the
+3a. **Clause context.** For each occurrence of the value, the
    clause around it is checked. Clauses split at `, ; ( ) [ ] ! ?`, a full stop, "and",
    "with", "plus", "but" and "while". At least one occurrence must pass all three checks
    below. Otherwise the field is `ambiguous`, with the first failing reason.
@@ -135,7 +135,7 @@ The following are refused:
        arrive, later than).
      - **Quantity.** The number is not followed by a unit, the clause has no "hole", and
        either the clause has a quantity word (qty, quantity, pcs, pieces, units, off, ea,
-       each, sets) or a part noun (the Phase 5 `grounding.PART_KIND` vocabulary) follows
+       each, sets) or a part noun (the conversational agent `grounding.PART_KIND` vocabulary) follows
        within three words.
 4. **Exact parsing.** Counts must be whole integers. Lengths must be one exact decimal with
    an explicit unit. Unit conversion uses only the fixed table:
@@ -179,12 +179,12 @@ The following are refused:
 | `unverified` | anything else: unnamed parts, duplicate or repeated labels, description labels, empty parts, or one entry for a multi-part source |
 | `none` | no parts |
 
-**Unverified boundaries (D36-05).** When boundaries are `unverified`, every field that would
+**Unverified boundaries.** When boundaries are `unverified`, every field that would
 have been verified becomes `ambiguous/part_association_unverified`. Its evidence, span and
 value are kept for review; `normalized` is cleared. No value is trusted as belonging to a
 particular part.
 
-**Labels (D36-06).** Single-part and multi-part requests use the same checks. A label is
+**Labels.** Single-part and multi-part requests use the same checks. A label is
 verified only if all of these hold:
 - it is identifier-shaped: a keyword form ("Part A", "Item 2", "P/N 7731", "drawing …") or
   one code token with a digit ("BRK-200") or of at most two letters ("A")
@@ -242,28 +242,13 @@ no-finish (`finish_id="none"`) are mapped. `material_id`, `finish_id` (other tha
 and parsed deterministically. It does not mean the customer's request is correct,
 consistent, complete or manufacturable.
 
-## Real-model observations (qwen3:4b-instruct-2507-q4_K_M, local Ollama)
+## Extraction integrity controls
 
-- With optional fields, the model fills mainly quantity and thickness. It often adds a
-  spurious second, empty part.
-- With all fields required, it fills more but assigns values to the wrong fields (for
-  example "3 mm thick" as height and as finish). This led to rule 6, and to keeping
-  optional fields.
-- Without a clear label rule, it used specification phrases as labels. This led to the
-  overlap and empty-part boundary rules.
-- In the remediation run, the model split one labelled part into two "Part A" entries.
-  This led to the rule that a label claimed by several entries is not verified.
-- Because of these rules, every observed bad output came back as `extracted_with_issues`
-  or `unverified`, never as a trusted wrong value. Extraction recall with this 4B model is
-  low; a stronger model is expected to improve recall without changing the verifier.
-
-## Final remediation (D36-09 .. D36-13)
-
-- **Signs outside the quote (D36-09).** The sign is read from the source just before the
+- **Signs outside the quote.** The sign is read from the source just before the
   digits, even when it lies outside the quoted span. A positive proposal never verifies
   against a source that has "-3", "−3", "–3", "+3" or "±3". `±`, `+/-` and
   `+-` are accepted only for tolerance.
-- **Material, grade and finish attribution (D36-10).** Recognition is narrow and aligned
+- **Material, grade and finish attribution.** Recognition is narrow and aligned
   with the catalog's material categories and finishes (`master_data`). It is not catalog
   mapping:
   - A **material** needs a material term (aluminum/aluminium, steel, stainless, copper,
@@ -273,25 +258,25 @@ consistent, complete or manufacturable.
   - A **grade** must be code-shaped (304, 6061-T6, A36, C110, CRS) and not a measurement.
 
   Anything else is `field_not_attributable`.
-- **Part ownership (D36-11).** `candidate_specification(result, part)` accepts an
+- **Part ownership.** `candidate_specification(result, part)` accepts an
   `IntakePart` only by object identity with one of `result.parts`, or a 1-based index. It
   refuses:
   - a foreign part (even an equal copy), a missing part, or `bool`/`None`
   - an `error` or `no_parts_found` result, or a non-`IntakeResult`
   - unverified boundaries or an unverified label
-- **Superseded statements (D36-12).** A source containing correction wording (wrong,
+- **Superseded statements.** A source containing correction wording (wrong,
   incorrect, mistake, typo, correction, revised, superseded, amended, disregard, cancel,
   obsolete, "scratch that") trusts no structured value:
   `ambiguous/superseded_or_contradicted`. Notes are exempt. Deciding which value survives
-  is Day 37.
-- **Coded parts (D36-13).** Two or more distinct code labels followed by a colon
+  is intake validation.
+- **Coded parts.** Two or more distinct code labels followed by a colon
   ("BRK-200:", "BRK-201:") mark a multi-part source. One entry for such a source gets
   `unverified` boundaries.
 - **Grounding names.** Grounding now exports `ITEM_NUMBER` and `PART_KIND` as public
   aliases of the same objects; its behaviour is unchanged. Intake no longer imports private
   names.
 
-## Known limitations (after the independent audit remediation)
+## Known limitations
 
 - **Attribution and negation are lexical clause rules, not language understanding.** They
   fail conservatively: a legitimate value whose clause lacks a cue word becomes
@@ -300,7 +285,7 @@ consistent, complete or manufacturable.
   `negated_or_conditional`.
 - **Negation and conditions spread only within a clause.** A prohibition stated in one
   clause or sentence and referring to a value in another is not detected. Example:
-  "Coating: none of the following. Black powder coating." Day 37's contradiction checks
+  "Coating: none of the following. Black powder coating." The validation layer's contradiction checks
   should cover this.
 - **Unverified boundaries hide useful values.** With `unverified` boundaries (including the
   real 4B model's habit of adding an empty second part), no field is verified. Recall is
@@ -310,7 +295,7 @@ consistent, complete or manufacturable.
   The one-measurement rule blocks the common dimension case. Quantities rely on part
   nouns or quantity words.
 
-## Day 37: validation and clarification
+## Validation and clarification
 
 ```python
 graph = intake.build_intake_graph(model)
@@ -323,7 +308,7 @@ validation = await intake_validation.validate_intake(result, text, rules=rules, 
 ### Flow
 
 ```
-customer text --run_intake--> IntakeResult (Day 36, provisional, evidence-checked)
+customer text --run_intake--> IntakeResult (intake extraction, provisional, evidence-checked)
              --validate_intake(text, pinned rules, catalog executor)--> IntakeValidation
 ```
 
@@ -372,7 +357,7 @@ from three backward-compatible fields with defaults: `IntakeResult.source_sha256
 | `needs_clarification` | at least one `clarify` finding: missing, ambiguous, contradiction, ownership, invalid, unknown operation, no parts |
 | `requires_review` | no customer question, but an internal finding: catalog not checked, unavailable or no match; rules not supplied; an unsupported requirement from the pinned rules; a tolerance standard; suspected injection |
 | `ready_for_manufacturing_evaluation` | every pinned mandatory field is verified, the material id and finish id are catalog-recognized, and there are no findings. **Not** a feasibility, stock, schedule or price result |
-| `not_evaluated` | the Day 36 result was an error |
+| `not_evaluated` | the intake extraction result was an error |
 
 The RFQ readiness is the worst of the RFQ-level findings and all parts.
 
@@ -393,11 +378,11 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   Lookups are sequential, at most `MAX_CATALOG_CALLS = 20` per validation, with a timeout
   and no retries. Every failure, including off-contract output, is `unavailable`; text is
   never surfaced.
-  - **Pagination (D37-05).** Every page of a query is read (`limit = MAX_PAGE_SIZE`, `offset`
+  - **Pagination.** Every page of a query is read (`limit = MAX_PAGE_SIZE`, `offset`
     advanced) within the same call budget. An incomplete result is `unavailable`, never a
     match: an empty page with `has_more`, offsets past `MAX_OFFSET`, or an exhausted budget
     (`incomplete_results` or `call_budget`).
-  - **Row consistency (D37-06).** Every returned row must have the requested category (and
+  - **Row consistency.** Every returned row must have the requested category (and
     grade, case-insensitive), and the page must echo the requested offset. Otherwise the
     response is `unavailable` / `inconsistent_response`, and the catalog is not trusted for
     the rest of the validation. This also applies to finish queries. The material text maps to a catalog category:
@@ -438,7 +423,7 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
     **Limitation:** operation requests phrased in other shapes ("knurled edges", "edges to
     be knurled") are not detected unless the model extracts them. This is deliberately not
     open natural-language understanding.
-- **RFQ-wide requirements (D37-07).** Text outside every part's segment (for example
+- **RFQ-wide requirements.** Text outside every part's segment (for example
   "All parts must be stainless steel." before the labelled parts) is scanned for material
   category, grade and finish, both requested and prohibited. Each value is compared with
   each part's own verified or source-scanned value; it is never copied into a part.
@@ -453,9 +438,9 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
     to that segment; before it, the repeated label interleaves and boundaries fail safe as
     `unverified`.
 - **Contradictions.** Each scanned field is scanned across clauses and sentences within the
-  part's own segment, with the Day 36 attribution, negation and alternative rules. The
+  part's own segment, with the intake extraction attribution, negation and alternative rules. The
   scanned fields are quantity, hole count, thickness, width, length, height, tolerance,
-  finish, **material category (D37-02)** and **grade (D37-03)**.
+  finish, **material category** and **grade**.
   - A grade counts only next to a material word, before or after it ("aluminum 6061-T6",
     "6061-T6 aluminum", D37-09), or after "grade", "alloy" or "type", or in a clause naming
     a grade. It must not be a size, a count, a date or a part label.
@@ -465,7 +450,7 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   - Limitation: a bare-number grade written before the material and followed by a part noun
     ("304 stainless brackets") reads as a quantity, so it is not taken as a grade there.
   - A contested material or grade is never looked up in the catalog.
-  - **Prohibitions (D37-04).** The same value both requested and prohibited, in any clause
+  - **Prohibitions.** The same value both requested and prohibited, in any clause
     of the segment ("powder coat finish … Do not powder coat these parts"), is a
     `contradiction` with detail `requested_and_prohibited`. Two or more firm
   values give a `contradiction`, with every value's evidence. When correction wording is
@@ -478,7 +463,7 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   - the field has no finding
   - the segment states exactly one firm value, once, with no alternatives
 
-  This needs established boundaries, and it reuses the Day 36 rules. Values are never
+  This needs established boundaries, and it reuses the intake extraction rules. Values are never
   moved between parts.
 
 ### Clarification behaviour
@@ -496,7 +481,7 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   appended as new customer text, and `run_intake` + `validate_intake` run again. No
   persistence or Supervisor exists yet.
 
-### Extraction changes (Day 37)
+### Extraction normalization
 
 - **Prompt.** One entry per part, null for unstated fields, short values, an identifier-only
   label, and a complete example.
@@ -509,7 +494,7 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   - Split digits ("30 0 mm", "BRK- 201") are rejoined only when the original is not in the
     source and the rejoined text is. The result is the customer's own wording, and it is
     still verified.
-- **Verifier fixes found during Day 37:**
+- **Verifier safeguards:**
   - A count token is never part of a code ("5052-H32") or the year of an ISO date.
   - A number after a material word, "grade", "alloy" or "type" is not a quantity
     ("steel 1018").
@@ -520,30 +505,6 @@ The RFQ readiness is the worst of the RFQ-level findings and all parts.
   - The label-overlap check compares the label with verified structured values, not with
     whole quotes.
 
-### Real-model evaluation (qwen3:4b-instruct-2507-q4_K_M, local, temperature 0, seed 7)
-
-The fixed set is `tests/intake_eval_set.py`: eight authored RFQs, not frozen evaluation data
-(single, multi, complete, coded, incomplete, ambiguous, malicious, correction).
-
-| Metric | Day 36 final | Day 37 |
-|---|---|---|
-| Correct part count | 4/8 | 7/8 |
-| Extra entries | 51 | 0 |
-| Verified correct / gold | 9/33 (recall 0.27) | 29/33 (recall 0.88) |
-| Incorrect trusted values | 0 | 0 (precision 1.00) |
-| Complete RFQ readiness | n/a | `ready_for_manufacturing_evaluation` |
-
-The remaining misses are model-quality issues:
-- The model returns no part for the vague "incomplete" request, so the customer is asked to
-  list the parts.
-- Some fields are missed or garbled (for example, Part A's finish in the multi-part case).
-
-The opt-in test (`tests/test_intake_ollama.py`) asserts the following:
-- zero incorrect trusted values
-- recall ≥ 0.6
-- the complete RFQ is ready
-- the incomplete, ambiguous, correction and malicious cases are not ready
-
 ### Outside the Intake scope
 
 - **Attachment retrieval and cross-document checks.** No authorized intake or attachment
@@ -553,11 +514,9 @@ The opt-in test (`tests/test_intake_ollama.py`) asserts the following:
 - **Applying clarification answers in a conversation.** This needs the Supervisor and
   conversation state.
 
-## Interview notes (how it works end to end)
+## End-to-end behavior
 
-- **Two layers.** The LLM reads free text and proposes structured values with quotes (Day
-  36). Deterministic code then decides what is true (verifier) and what is enough (Day 37
-  validation). The model never decides readiness and never writes a question.
+- **Two layers.** The LLM reads free text and proposes structured values with quotes. Deterministic code then decides what is true (verifier) and what is enough (completeness validation). The model never decides readiness and never writes a question.
 - **Evidence first.** Every trusted value points at exact source text in that part's own
   segment, attributed to the right field, not negated, with no alternatives. Contradictions
   are found by scanning the source itself, not by trusting the model.
@@ -567,7 +526,7 @@ The opt-in test (`tests/test_intake_ollama.py`) asserts the following:
 - **Readiness is not feasibility.** `ready_for_manufacturing_evaluation` hands a complete,
   catalog-recognized `PartSpecification` to the Manufacturing Agent, which may still
   decline it.
-- **Supervisor integration.** The Supervisor will:
+- **Supervisor integration.** The Supervisor must:
   1. call `run_intake`, then `validate_intake` with the pinned rules and a principal-bound
      catalog executor;
   2. route on `readiness`: ask the customer the `clarifications`, send `requires_review`

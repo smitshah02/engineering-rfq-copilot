@@ -1,4 +1,4 @@
-# Day 4 — Proposed relational ER diagrams
+# Proposed relational ER diagrams
 
 These seven Mermaid `erDiagram` blocks describe the [33 specified logical tables](table_schemas.md). They are design documentation, not deployed schema. The overall block includes every specified FK; domain blocks show relationships whose endpoints are in that domain view. Field subsets show PK/FK columns; complete types, nullability, checks, alternate keys and generated values are in the table specifications.
 

@@ -2,7 +2,6 @@
 
 **Recommended path:** `docs/architecture/supervisor_langgraph_architecture.md`  
 **Project:** Engineering RFQ Multi-Agent Copilot  
-**Roadmap:** Day 1 of 73 — Component 3: Supervisor Agent & LangGraph  
 **Document status:** Approved *conceptual design baseline* for learning; implementation and integration tests not started  
 **Data baseline:** Approved synthetic RFQ dataset `v1.1.0`  
 **Manufacturer:** Meridian Fabrication Lab (fictional)  
@@ -280,7 +279,7 @@ These are intentionally not encoded as imaginary final APIs or enums:
 - Human-review UX, authentication flows, release endpoints and notification mechanism.
 - Retry budgets, timeouts and fault-to-outcome mapping from `config/` and recovery contract files.
 
-Resolve these from verified v1.1.0 dataset contracts and then validate in tests. This Day 1 document gives **architectural intent and invariants**, not fabricated implementation certainty.
+Resolve these from verified v1.1.0 dataset contracts and then validate in tests. This architecture document gives **architectural intent and invariants**, not fabricated implementation certainty.
 
 ## 16. Component 3 design acceptance checklist
 

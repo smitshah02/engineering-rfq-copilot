@@ -1,13 +1,14 @@
 # Synthetic RFQ Dataset Inventory
 
 **Project:** Engineering RFQ Multi-Agent Copilot  
-**Roadmap:** Day 3 of 73  
 **Dataset baseline:** `data/rfq_synthetic_data/` (synthetic RFQ data v1.1.0)  
 **Status:** Inventory documented from local terminal outputs; original dataset unchanged
 
 ## Purpose and source of evidence
 
-This is an inventory of the pre-existing synthetic dataset. It does not regenerate data or claim that a future PostgreSQL import, MCP service, FastAPI API, or agent system exists. Findings are drawn from the file listings, formal contracts, official validator output, and independent tests executed locally during Day 3. For authoritative definitions, consult the dataset files rather than this summary.
+This inventory describes the frozen synthetic dataset and its formal contracts.
+It does not regenerate data or establish deployment readiness. Consult the private dataset
+package for authoritative definitions and the [project overview](../../README.md) for runtime capabilities.
 
 ## Package overview
 
@@ -112,4 +113,4 @@ Each manifest entry identifies a `scenario_file` and corresponding `label_file`.
 - Test suite: 38 non-regenerating tests and 1 reproducibility test in an isolated temporary copy, all passing.
 - Original dataset preservation checks: 681 files before/after validator, no changes; clean project Git tree after testing.
 
-See [`dataset_schema_analysis.md`](dataset_schema_analysis.md), [`data_integrity_report.md`](data_integrity_report.md), and [`multiagent_data_mapping.md`](multiagent_data_mapping.md).
+See [`dataset_schema_analysis.md`](dataset_schema_analysis.md) and [`multiagent_data_mapping.md`](multiagent_data_mapping.md).

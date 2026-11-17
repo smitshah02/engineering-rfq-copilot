@@ -1,6 +1,6 @@
 # Specialized Agent Integration (A1 → A5)
 
-`rfq_copilot.agent_integration` (Day 43). One RFQ evaluation runs through all five
+`rfq_copilot.agent_integration`. One RFQ evaluation runs through all five
 specialized agents in a fixed order, with checked handoffs. It returns one typed result.
 
 This is not a Supervisor, a planner or a router. It does not approve, release, persist or
@@ -105,7 +105,7 @@ Workflow statuses:
 
 ## 5. Verified Intake pairing
 
-`IntakeValidation` has no `source_sha256` (Day 42). The workflow therefore never accepts an
+`IntakeValidation` has no `source_sha256`. The workflow therefore never accepts an
 Intake pair from outside:
 
 - The extraction and its validation are produced here, from the same `text`, within one
@@ -149,7 +149,7 @@ unsigned.
   `quotation_agent._approval_trusted`), so there is one implementation of each check.
 - A4 and A5 then repeat their own checks. A3's acceptance of the pricing rule (version and
   cross-tool fingerprint) is **not** treated as proof of authenticity. A4's manifest check
-  still runs (Day 42).
+  still runs.
 - `mfg-v1.0` is not manifest-checked here. `pinned_rules` checks its source sha256, and A2
   compares every tool result's server-pinned rule and fingerprint with the ones Intake
   validated against. A difference means `requires_review`.
@@ -255,25 +255,25 @@ A4 diagnostic amounts kept under rule drift stay inside `pricing.evidence`. They
 ## 15. Testing and live MCP strategy
 
 - **Offline:** `tests/test_specialized_agent_integration.py`. One `Router` executor sends
-  each tool to the existing Day 37–41 fake, which runs the real services. A1 runs its real
-  graph on the Day 36 fake chat model. Bent-part scenarios replace only A1's validation
+  each tool to the existing specialist fake, which runs the real services. A1 runs its real
+  graph on the intake extraction fake chat model. Bent-part scenarios replace only A1's validation
   output. Status-override tests patch one agent's result to check gating. Every stop asserts
   that no later stage's tool ran.
 - **Live (opt-in):** `tests/test_specialized_agent_integration_live_mcp.py`, with
-  `RFQ_AGENT_LIVE_MCP=1` and marked `integration`. It uses the Day 41 host fixtures over the
+  `RFQ_AGENT_LIVE_MCP=1` and marked `integration`. It uses the quotation review host fixtures over the
   guarded test database, with no paid or local model:
   - An authorized principal reaches A5.
   - A restricted principal (`manufacturing_engineer`) and a revoked principal get no price
     and no draft.
   - `approval-v1.2` is registered with the existing idempotent `register_rule_version`, as
-    on Day 41.
+    on quotation review.
 - **Observability:** the agents have no logging convention, so none was added. `stages` plus
   `summary()` is the structured trace a caller may log. It never contains credentials,
   customer text, amounts or raw evidence.
 
 ## 16. Accepted limitations and Supervisor handoff
 
-| Limitation | Day 43 handling |
+| Limitation | specialist workflow handling |
 |---|---|
 | `IntakeValidation` has no source sha | The pair is created in-process from one text; the same extraction goes to A3 |
 | Upstream evidence is unsigned | Consistency is validated; no cryptographic authenticity is claimed |
@@ -291,7 +291,7 @@ A4 diagnostic amounts kept under rule drift stay inside `pricing.evidence`. They
 | A5 has no persistence | No quote id or version |
 | Human approval | Never automatic |
 
-What a future Supervisor may and may not do:
+Supervisor integration boundaries:
 
 | The Supervisor may | The Supervisor must never |
 |---|---|
