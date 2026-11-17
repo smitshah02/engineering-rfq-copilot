@@ -11,6 +11,7 @@ from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import session as session
 from test_orm_models import approved as approved
 
+from rfq_copilot import schema_contract
 from rfq_copilot.integrity import audit_integrity, fingerprint
 from rfq_copilot.repositories.demo import verify_query_examples
 from rfq_copilot.seeding.loader import execute_seed, insert_table
@@ -29,8 +30,9 @@ async def test_complete_day5_database_lifecycle(
     assert await session.scalar(text("SELECT current_database()")) == "rfq_copilot_test"
     connection = await session.connection()
     physical = await connection.run_sync(verify_physical, approved)
-    assert physical["revision"] == ["20261111_06"]  # includes TD-012 and Phase 3.5
-    assert len(physical["columns"]) == 36 and physical["counts"]["f"] == 71
+    assert physical["revision"] == [schema_contract.CURRENT.revision]
+    assert len(physical["columns"]) == 36
+    assert physical["counts"]["f"] == schema_contract.CURRENT.catalog_counts["f"]  # measured pin
 
     bundle = load_sources(SOURCE, ARCHIVE)
     plan = build_plan(bundle, tmp_path / "snapshots")
@@ -39,7 +41,8 @@ async def test_complete_day5_database_lifecycle(
     )
     assert first["inserted"] == 1089 and first["already_existing"] == 0
     integrity = await audit_integrity(session, seed_database.config, plan)
-    assert integrity["status"] == "PASS" and integrity["source_values_checked"] == 9587
+    # K3: +7 evidence columns x 96 seeded versions
+    assert integrity["status"] == "PASS" and integrity["source_values_checked"] == 10259
     second = await execute_seed(
         session, seed_database.config, plan, "apply", confirm_database="rfq_copilot_test"
     )

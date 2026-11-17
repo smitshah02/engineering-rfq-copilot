@@ -1,6 +1,6 @@
-"""Fresh-database lifecycle under the NEXT contract (deferred 20261111_05; guarded test DB).
+"""Fresh-database lifecycle under the NEXT contract (deferred 20261111_05 + merge 20261116_02; guarded test DB).
 
-Upgrade an empty guarded test database through 20261111_05 (alembic/proposed/deferred),
+Upgrade an empty guarded test database through both branches (K2 -> K3 and 20261111_05) to the merge 20261116_02 (alembic/proposed/deferred),
 seed dataset v1.1.0, apply the pinned overlay, verify with the real seeding verifier and
 integrity audit, exercise several active bindings with explicit context selection, then
 restore with the guarded downgrade. NEXT is switched on only for this module; the
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from migration_cleanup import drop_empty_version_table
 from sqlalchemy import func, insert, select, text, update
 from test_auth import bearer
 from test_auth import trust as trust
@@ -28,7 +29,6 @@ from rfq_copilot.database import Database
 from rfq_copilot.integrity import audit_integrity, verify_definitions
 from rfq_copilot.migration_safety import (
     MigrationSettings,
-    cleanup_test_tracker,
     owned_shape,
     shape_digest,
     verify_identity,
@@ -75,7 +75,7 @@ async def next_database():
                             assert await lease.scalar(select(func.count()).select_from(table)) == 0
                         await lease.rollback()
                         await asyncio.to_thread(command.downgrade, next_config(), "base")
-                    await lease.run_sync(cleanup_test_tracker)
+                    await lease.run_sync(drop_empty_version_table)
                     await lease.commit()
                     assert await lease.run_sync(user_objects) == original
                     await lease.execute(text("SELECT pg_advisory_unlock(461441,505)"))
@@ -103,12 +103,12 @@ async def seeded(session, database, plan):
 
 async def test_next_contract_pins_are_the_measured_schema(next_database):
     async with next_database.engine.connect() as connection:
-        assert await connection.scalar(text("SELECT version_num FROM public.alembic_version")) == "20261111_05"  # fmt: skip
+        assert await connection.scalar(text("SELECT version_num FROM public.alembic_version")) == "20261116_02"  # fmt: skip
         digest = await connection.run_sync(lambda c: shape_digest(owned_shape(c)))
         assert digest == schema_contract.NEXT.shape_digest, digest
         assert digest != schema_contract.CURRENT.shape_digest
         await connection.run_sync(verify_definitions)
-        assert (await connection.run_sync(verify_schema, next_database.config))["alembic_revision"] == "20261111_05"  # fmt: skip
+        assert (await connection.run_sync(verify_schema, next_database.config))["alembic_revision"] == "20261116_02"  # fmt: skip
         index = await connection.scalar(text("SELECT to_regclass('business.uq_user_customer_bindings_active_user')"))  # fmt: skip
         assert index is None
 
@@ -117,7 +117,7 @@ async def test_seed_overlay_and_integrity_under_next(session, next_database, see
     await seeded(session, next_database, seed_plan)
     report = await audit_integrity(session, next_database.config, seed_plan)
     assert report["status"] == "PASS" and report["policy_overlay"] == "applied:rbac-policy-v2"
-    assert report["schema_contract"] == "next-20261111_05"
+    assert report["schema_contract"] == "next-20261116_02"
 
 
 async def operator(session):

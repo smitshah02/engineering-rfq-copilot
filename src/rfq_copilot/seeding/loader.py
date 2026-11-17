@@ -11,7 +11,7 @@ from sqlalchemy import CheckConstraint, Text, bindparam, insert, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from rfq_copilot.database import Database
-from rfq_copilot.seeding.mapping import TABLES, SeedPlan, key_for, validate_plan
+from rfq_copilot.seeding.mapping import DATABASE_STAMPED, TABLES, SeedPlan, key_for, validate_plan
 from rfq_copilot.seeding.policy import is_policy_extra, overlay_state
 from rfq_copilot.seeding.rules import is_registered_extra
 from rfq_copilot.seeding.safety import validate_target, verify_live_identity, verify_schema
@@ -170,7 +170,7 @@ def snapshot_artifacts(plan, *, create=False):
 
 async def insert_table(session, name, records):
     table = TABLES[name]
-    columns = [c for c in table.c if not c.computed and c.name != "registered_at"]
+    columns = [c for c in table.c if not c.computed and c.name not in DATABASE_STAMPED]
     statement = insert(table).values(
         {
             c.name: bindparam(c.name, type_=Text).cast(JSONB)

@@ -16,6 +16,7 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rfq_copilot.canonical import fingerprint
 from rfq_copilot.entities import Part
 from rfq_copilot.repositories import RuleVersionDetails, list_operations
 from rfq_copilot.seeding.transform import decimal_value
@@ -24,6 +25,17 @@ from rfq_copilot.services.costing import CostEstimate, LineCost, display_costs, 
 
 PriceResult = Literal["priced", "needs_clarification", "not_manufacturable"]
 CALCULATION_PREFIX = "CALC-"
+# K3 (Day 54B): the reusable pricing-content fingerprint of a persisted calculation record.
+CALCULATION_CONTENT_VERSION = "calculation-content-v1"
+_UNROUNDED = (
+    "material_cost_per_unit",
+    "labour_cost_per_unit",
+    "finish_cost_per_unit",
+    "packaging_cost_per_unit",
+    "variable_cost_per_unit",
+    "setup_cost_per_line",
+    "total_manufacturing_cost",
+)
 # Canonical number spelling for calculation IDs: one value, one spelling. Integral
 # dimensions are JSON integers; these fields keep at least this many decimals (the
 # dataset's contract convention), so the IDs also match the reference's.
@@ -199,6 +211,83 @@ def display_quote(calculation: PriceCalculation, pricing: RuleVersionDetails) ->
         "freight_included": calculation.freight_included,
         "shipping_included": calculation.shipping_included,
     }
+
+
+def calculation_record_content(
+    calculation: PriceCalculation, pricing: RuleVersionDetails, parts: Sequence[Part]
+) -> tuple[list[dict[str, object]], str, str]:
+    """``(lines, content_sha256, manufacturing_rule_version)`` of a priced calculation (K3).
+
+    ``lines`` is the internal per-line record stored in ``pricing_calculations.lines``: the
+    ``display_quote`` line, the canonical part (specification), the material master facts
+    used (cost per kg, density), the unrounded cost components,
+    every operation's minutes, rate and setup, and the manufacturing rule that routed it.
+    Decimals are exact ``str()`` spellings. ``content_sha256`` fingerprints those lines with
+    ``calculation_id``, both rule fingerprints, margin, scrap, currency, inclusion flags and
+    the total: identical only for identical pricing inputs and results. It holds no RFQ,
+    customer, snapshot, horizon or validity: those are version evidence. Internal: costs.
+    """
+    parts = tuple(parts)
+    if calculation.result != "priced" or calculation.quote_total_usd is None:
+        raise ValueError("Only a priced calculation has calculation content.")
+    if (calculation.pricing_rule_version, calculation.pricing_rule_fingerprint) != (
+        pricing.rule_version,
+        pricing.fingerprint,
+    ):
+        raise ValueError("The calculation used a different pricing rule version.")
+    checks = calculation.costs.inventory.manufacturing
+    routed = {(check.rule_version, check.rule_fingerprint) for check in checks}
+    if len(routed) != 1 or len(checks) != len(parts):
+        raise ValueError("The calculation must be routed by exactly one manufacturing rule.")
+    ((manufacturing_version, manufacturing_fingerprint),) = routed
+    shown = display_quote(calculation, pricing)["lines"]
+    lines = []
+    for part, priced, display, check in zip(parts, calculation.lines, shown, checks, strict=True):
+        cost, material = priced.cost, check.material.material
+        if (cost.part_id, material.material_id) != (part.part_id, part.material_id):
+            raise ValueError("The calculation lines do not match these parts.")
+        lines.append(
+            {
+                **display,
+                "part": canonical_part(part),
+                # Costing already refused a material priced under another pricing version.
+                "material": {
+                    "material_id": material.material_id,
+                    "cost_usd_per_kg": str(cost.material_cost_usd_per_kg),
+                    "density_kg_m3": str(material.density_kg_m3),
+                },
+                "unrounded": {name: str(getattr(cost, name)) for name in _UNROUNDED},
+                "operation_costs": [
+                    {
+                        "operation_id": op.operation_id,
+                        "run_minutes_per_unit": str(op.run_minutes_per_unit),
+                        "hourly_rate_usd": str(op.hourly_rate_usd),
+                        "labour_per_unit_usd": str(op.labour_per_unit_usd),
+                        "setup_minutes": str(op.setup_minutes),
+                        "setup_cost_usd": str(op.setup_cost_usd),
+                    }
+                    for op in cost.operation_costs
+                ],
+                "manufacturing_rule_version": check.rule_version,
+            }
+        )
+    content = fingerprint(
+        {
+            "fingerprint_version": CALCULATION_CONTENT_VERSION,
+            "calculation_id": calculation.calculation_id,
+            "currency": calculation.currency,
+            "gross_margin": str(calculation.gross_margin),
+            "scrap_fraction": str(calculation.costs.inventory.scrap_fraction),
+            "tax_included": calculation.tax_included,
+            "freight_included": calculation.freight_included,
+            "shipping_included": calculation.shipping_included,
+            "pricing_rule": [pricing.rule_version, pricing.fingerprint],  # equal: checked above
+            "manufacturing_rule": [manufacturing_version, manufacturing_fingerprint],
+            "lines": lines,
+            "quote_total_usd": str(calculation.quote_total_usd),
+        }
+    )
+    return lines, content, manufacturing_version
 
 
 async def calculate_quote(

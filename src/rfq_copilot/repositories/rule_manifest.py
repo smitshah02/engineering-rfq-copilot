@@ -42,6 +42,21 @@ TRUSTED_RULES = MappingProxyType(
             "7d0489f38690ce80f836692ae1e09c35ea8c59b0b1597ab51b83e4f680549906",
             "7e30e224edcc4b3bc46c2bf7cffde5c94423b75e66576da1c82f7d551215a1b2",
         ),
+        # Not in dataset v1.1.0: approved 2026-11-15 (Day 52, Option B: revised_draft ->
+        # revised_draft), source src/rfq_copilot/rules/workflow-v1.1.json.
+        "workflow-v1.1": (
+            "workflow",
+            "0844380a636d0c59b95d05f0ff82337cab1fc12d27eaa43bc2b31cfaf71de1b2",
+            "ba8b391a9f6ceefb88c08c1066577d45a7820eee699697d1cac202448816c977",
+        ),
+        # Not in dataset v1.1.0: Day 54B K3 quotation validity (R5), approved for development
+        # 2026-11-16, source src/rfq_copilot/rules/workflow-v1.2.json, pinned 2026-11-16
+        # (file: shasum -a 256; document: canonical.fingerprint, reproduced by jq -cjS).
+        "workflow-v1.2": (
+            "workflow",
+            "1b4e0dfac019201a0a6f7c6af641d955fb07ef3c326129a7bde6180d2597c38d",
+            "5efe61ea40fa88095e9b12c9fed57b2608df7e35a531d8c9c999359654ccc33e",
+        ),
         "entity_contract@sha256:ab3276b33cbd72de59fe2e1f41a95b6944b7c834f82e5225adb9a4649e3b63a1": (
             "entity_contract",
             "ab3276b33cbd72de59fe2e1f41a95b6944b7c834f82e5225adb9a4649e3b63a1",

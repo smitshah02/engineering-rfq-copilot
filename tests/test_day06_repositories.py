@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from history_corruption import corrupted
 from sqlalchemy import insert, update
 from test_database_queries import other_customer, statements
 from test_database_queries import populated as populated
@@ -75,11 +76,12 @@ async def test_wrong_kind_and_pin_mismatch_are_integrity_errors(populated):
 
 async def test_document_claiming_another_version_is_rejected(populated):
     rule = await get_rule_version(populated, "pricing", "price-v1.0")
-    await populated.execute(
-        update(BusinessRuleVersion)
-        .where(BusinessRuleVersion.rule_version == "price-v1.0")
-        .values(document={**thaw(rule.document), "version": "price-v2.0"})
-    )
+    async with corrupted(populated, "business_rule_versions"):  # K3 refuses rule updates
+        await populated.execute(
+            update(BusinessRuleVersion)
+            .where(BusinessRuleVersion.rule_version == "price-v1.0")
+            .values(document={**thaw(rule.document), "version": "price-v2.0"})
+        )
     with pytest.raises(RuleIntegrityError, match="declares version price-v2.0"):
         await get_rule_version(populated, "pricing", "price-v1.0")
 
@@ -186,10 +188,11 @@ async def test_part_and_rule_reads_are_bounded_selects(populated, seed_database,
 async def test_hash_named_rule_must_match_its_stored_hash(populated):
     kind, path, _ = next(r for r in RULE_SOURCES if r[0] == "coordination")
     rule_version, _ = stored_version(kind, path, None)
-    await populated.execute(
-        update(BusinessRuleVersion)
-        .where(BusinessRuleVersion.rule_version == rule_version)
-        .values(sha256="f" * 64)
-    )
+    async with corrupted(populated, "business_rule_versions"):  # K3 refuses rule updates
+        await populated.execute(
+            update(BusinessRuleVersion)
+            .where(BusinessRuleVersion.rule_version == rule_version)
+            .values(sha256="f" * 64)
+        )
     with pytest.raises(RuleIntegrityError):
         await get_rule_version(populated, kind, rule_version)

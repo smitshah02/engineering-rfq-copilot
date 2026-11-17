@@ -1,6 +1,15 @@
-"""Real constraint/transaction enforcement, reusing Component 5's guarded fixtures."""
+"""Real constraint/transaction enforcement, reusing Component 5's guarded fixtures.
+
+K2 (20261115_01) and K3 (20261116_01) triggers refuse changes to recorded history before
+any constraint is checked. Tests of the constraints themselves on those tables therefore
+disable that table's guard triggers inside their savepoint (``history_corruption``; owner,
+guarded test database), so the constraint is still what refuses; the triggers themselves
+are tested in ``test_history_immutability_database.py`` and
+``test_k3_calculation_provenance_database.py``.
+"""
 
 import asyncio
+from contextlib import nullcontext
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -8,6 +17,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from history_corruption import GUARDS, corrupted
 from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import DBAPIError
@@ -24,6 +34,7 @@ from test_database_seeding_integration import (
     session as session,
 )
 
+from rfq_copilot import schema_contract
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.integrity import (
     IntegrityVerificationError,
@@ -31,10 +42,16 @@ from rfq_copilot.integrity import (
     fingerprint,
     run_integrity,
 )
+from rfq_copilot.models import Base
 from rfq_copilot.seeding.loader import execute_seed, insert_table
 from rfq_copilot.seeding.mapping import EXPECTED_COUNTS, TABLES, build_plan
 from rfq_copilot.seeding.rules import REGISTERED
 from rfq_copilot.seeding.transform import json_text
+
+
+def constraint_only(session, name):
+    """Only for a K2 table: let its constraints, not its K2 trigger, refuse (savepoint only)."""
+    return corrupted(session, name) if name in GUARDS else nullcontext()
 
 
 def expected_records(overlay_state):
@@ -81,25 +98,29 @@ async def test_current_development_integrity_and_preservation(seed_bundle):
     plan = build_plan(seed_bundle, ROOT / "data/rfq_seed_snapshots")
     result = await run_integrity(config, plan)
     assert result["database"] == "rfq_copilot_dev" and result["role"] == "rfq_copilot_dev"
-    # Head 20261111_06 (TD-012 + Phase 3.5); values measured on the seeded test DB.
-    assert result["alembic_revision"] == "20261111_06"
+    # Head 20261116_03 (TD-012 + Phase 3.5 + K2 + K3 + K4). The catalog counts are the K3
+    # contract's, pinned only after measurement on the seeded test DB (fail closed before).
+    counts = dict(schema_contract.CURRENT.catalog_counts)
+    assert result["alembic_revision"] == schema_contract.CURRENT.revision
     assert result["definitions"] == {
         "tables": 36,
-        "columns": 278,
-        "primary_keys": 36,
-        "foreign_keys": 71,
-        "additional_unique_constraints": 14,
-        "check_constraints": 218,
+        "columns": sum(len(t.c) for t in Base.metadata.tables.values()),  # the ORM's columns
+        "primary_keys": counts.get("p"),
+        "foreign_keys": counts.get("f"),
+        "additional_unique_constraints": counts.get("u"),
+        "check_constraints": counts.get("c"),
         "explicit_indexes": 19,
         "unique_partial_indexes": 5,
     }
-    # The 1089-record baseline, each approved post-baseline rule (approval-v1.2) and, if
-    # applied, exactly one overlay the active contract accepts (complete; partial fails).
+    # The 1089-record baseline, each approved post-baseline rule (approval-v1.2,
+    # workflow-v1.1, workflow-v1.2) and, if applied, exactly one overlay the active contract
+    # accepts (complete; partial fails).
     assert result["records"] == expected_records(result["policy_overlay"])
-    assert result["source_values_checked"] == 9587
+    assert result["source_values_checked"] == 10259  # K3: +7 columns x 96 seeded versions
     assert result["decimal_values_checked"] == 1353
-    assert result["foreign_key_data_checks"] == 71 and result["check_data_checks"] == 218
-    assert result["unique_data_checks"] == 19 and result["violations"] == 0
+    assert result["foreign_key_data_checks"] == counts.get("f")
+    assert result["check_data_checks"] == counts.get("c")
+    assert result["unique_data_checks"] == counts.get("u", 0) + 5 and result["violations"] == 0
     assert result["populated_tables"] == 26 and len(result["empty_runtime_tables"]) == 10
     assert result["preserved"]
 
@@ -163,7 +184,8 @@ async def test_invalid_updates_rejected(populated, seed_plan, name, column, valu
     where = [c == record[c.name] for c in table.primary_key]
 
     async def invalid():
-        await populated.execute(update(table).where(*where).values({column: value}))
+        async with constraint_only(populated, name):
+            await populated.execute(update(table).where(*where).values({column: value}))
 
     await reject(populated, name, invalid, state)
 
@@ -230,9 +252,10 @@ async def test_restrict_delete_preserves_referenced_parent(populated, seed_plan,
         record = next(r for r in seed_plan.rows[name] if r["is_current"])
 
     async def invalid():
-        await populated.execute(
-            delete(table).where(*(c == record[c.name] for c in table.primary_key))
-        )
+        async with constraint_only(populated, name):
+            await populated.execute(
+                delete(table).where(*(c == record[c.name] for c in table.primary_key))
+            )
 
     await reject(populated, name, invalid, "23001")
 
@@ -315,11 +338,12 @@ async def test_approval_request_version_triple_foreign_key(populated, seed_plan)
     )
 
     async def wrong_request():
-        await populated.execute(
-            update(TABLES["approval_history"])
-            .where(TABLES["approval_history"].c.approval_id == event["approval_id"])
-            .values(approval_request_id="TEST-APPROVAL-TRIPLE")
-        )
+        async with constraint_only(populated, "approval_history"):
+            await populated.execute(
+                update(TABLES["approval_history"])
+                .where(TABLES["approval_history"].c.approval_id == event["approval_id"])
+                .values(approval_request_id="TEST-APPROVAL-TRIPLE")
+            )
 
     await reject(populated, "approval_history", wrong_request, "23503")
 
@@ -376,11 +400,12 @@ async def test_json_boolean_cannot_masquerade_as_numeric_zero(populated, seed_da
     )
     document = {**rule["document"], "agent_can_finalize_approval": 0}
     table = TABLES["business_rule_versions"]
-    await populated.execute(
-        update(table)
-        .where(table.c.rule_version == rule["rule_version"])
-        .values(document=literal(json_text(document)).cast(JSONB))
-    )
+    async with corrupted(populated, "business_rule_versions"):  # K3: rules are append-only
+        await populated.execute(
+            update(table)
+            .where(table.c.rule_version == rule["rule_version"])
+            .values(document=literal(json_text(document)).cast(JSONB))
+        )
     with pytest.raises(IntegrityVerificationError, match="source value differs"):
         await audit_integrity(populated, seed_database.config, seed_plan)
 

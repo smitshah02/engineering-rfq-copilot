@@ -8,6 +8,7 @@ test_langfuse_, test_recovery_, test_concurrency_."""
 import asyncio
 import dataclasses
 import hashlib
+import itertools
 import json
 import re
 import sys
@@ -416,6 +417,19 @@ async def test_trace_a2_tool_failure_and_refused_fan_in_are_counted(monkeypatch)
 @A
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
 async def test_privacy_no_identity_text_or_money_in_any_scenario(monkeypatch, name):
+    # Run and attempt ids are random token_hex(16): a 32-hex id can contain a forbidden digit
+    # run such as "5052" by chance. Distinct letter-only ids keep the substring check exact.
+    ids = itertools.count()
+
+    def letters(nbytes=16):  # distinct: the counter in base 6 over "abcdef", "a"-padded
+        i, digits = next(ids), ""
+        while True:
+            i, r = divmod(i, 6)
+            digits = "abcdef"[r] + digits
+            if not i:
+                return digits.rjust(2 * nbytes, "a")
+
+    monkeypatch.setattr(sv.secrets, "token_hex", letters)
     sink = obs.MemorySink()
     ctx = await prepared(name, monkeypatch)
     spy = Spy(monkeypatch)

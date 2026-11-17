@@ -1,6 +1,6 @@
 """Operator provisioning and RFQ assignment administration (guarded PostgreSQL test DB).
 
-Everything runs in the seeded fixture transaction (head 20261111_06) with the pinned
+Everything runs in the seeded fixture transaction (head 20261115_01) with the pinned
 overlay applied there, and is rolled back. No real account, binding or assignment is
 created anywhere else.
 """

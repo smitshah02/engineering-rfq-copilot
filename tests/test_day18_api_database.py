@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx2
 import pytest
+from history_corruption import corrupted
 from sqlalchemy import func, insert, select, text, update
 from test_database_queries import customer_id, other_customer, statements
 from test_database_queries import populated as populated
@@ -189,11 +190,12 @@ async def test_only_released_quotes_are_visible_and_only_to_their_customer(popul
         approver = await populated.scalar(
             select(Quote.approver_id).where(Quote.quote_id == quote_id)
         )
-        await populated.execute(
-            update(Quote)
-            .where(Quote.quote_id == quote_id)
-            .values(status="released", released_by=approver, released_at=datetime.now(UTC))
-        )
+        async with corrupted(populated, "quotes"):  # no release workflow yet (K2)
+            await populated.execute(
+                update(Quote)
+                .where(Quote.quote_id == quote_id)
+                .values(status="released", released_by=approver, released_at=datetime.now(UTC))
+            )
         populated.expunge_all()
         response = await get(app_for(owner, populated), f"/api/v1/quotes/{quote_id}")
         assert response.status_code == 200

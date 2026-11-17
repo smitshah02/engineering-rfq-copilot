@@ -1,4 +1,4 @@
-"""Phase 3.5 features against the guarded PostgreSQL test database at head 20261111_06.
+"""Phase 3.5 features against the guarded PostgreSQL test database at head 20261115_01 (K2 on top of 06).
 
 The seeded fixture database already has the activated schema (02, 03, 04, 06). The
 pinned rbac-policy-v2 overlay and the deferred 20261111_05 are applied inside the
@@ -109,8 +109,11 @@ async def test_active_chain_ends_at_06_and_05_stays_deferred():
         assert list(VERSIONS.glob(f"{revision}_*.py"))  # activated
         previous = revision
     deferred = migration("20261111_05")
-    assert deferred.down_revision == "20261111_06"
+    assert deferred.down_revision == "20261111_06"  # its original parent (restored, Day 54B)
     assert not list(VERSIONS.glob("20261111_05_*")) and list(DEFERRED.glob("20261111_05_*"))
+    merge = migration("20261116_02")  # schema-free join of 05 and the active head (K5)
+    assert merge.down_revision == ("20261111_05", "20261116_04")
+    assert not list(VERSIONS.glob("20261116_02_*")) and list(DEFERRED.glob("20261116_02_*"))
     assert not list((DEFERRED.parent / "approved").glob("*.py"))
 
 

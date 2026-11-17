@@ -1,7 +1,7 @@
 """Fresh-database lifecycle under the active contract (guarded test database).
 
-Upgrade an empty guarded test database to head (20261111_06; 05 stays deferred outside
-alembic/versions), seed dataset v1.1.0, apply the pinned rbac-policy-v2 overlay, verify
+Upgrade an empty guarded test database to head (20261116_01, K3 on K2; 05 and its merge stay
+deferred outside alembic/versions), seed dataset v1.1.0, apply the pinned rbac-policy-v2 overlay, verify
 with the real seeding verifier and integrity audit, then restore the database with the
 guarded downgrade. The development database is never touched.
 """
@@ -17,6 +17,7 @@ import pytest_asyncio
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.util import CommandError
+from migration_cleanup import drop_empty_version_table
 from sqlalchemy import delete, func, insert, select, text, update
 from test_database_migrations import alembic_config, user_objects
 from test_database_seeding_integration import seed_bundle as seed_bundle
@@ -29,7 +30,6 @@ from rfq_copilot.database import Database
 from rfq_copilot.integrity import IntegrityVerificationError, audit_integrity, verify_definitions
 from rfq_copilot.migration_safety import (
     MigrationSettings,
-    cleanup_test_tracker,
     owned_shape,
     shape_digest,
     verify_identity,
@@ -72,7 +72,7 @@ async def proposed_database():
                             assert await lease.scalar(select(func.count()).select_from(table)) == 0
                         await lease.rollback()
                         await asyncio.to_thread(command.downgrade, alembic_config(allow=True), "base")  # fmt: skip
-                    await lease.run_sync(cleanup_test_tracker)
+                    await lease.run_sync(drop_empty_version_table)
                     await lease.commit()
                     assert await lease.run_sync(user_objects) == original
                     await lease.execute(text("SELECT pg_advisory_unlock(461441,505)"))
@@ -118,15 +118,16 @@ def grants(rows):
 async def test_current_contract_pins_are_the_measured_schema(proposed_database):
     async with proposed_database.engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM public.alembic_version"))
-        assert revision == schema_contract.CURRENT.revision == "20261111_06"
+        assert revision == schema_contract.CURRENT.revision == "20261116_04"
+        # The measurement point: the failure message prints the digest to pin (K3, Day 54B).
         digest = await connection.run_sync(lambda c: shape_digest(owned_shape(c)))
         assert digest == schema_contract.CURRENT.shape_digest, digest
-        await connection.run_sync(verify_definitions)  # catalog counts p36 f71 u14 c218
+        await connection.run_sync(verify_definitions)  # catalog counts: CURRENT (measured)
         drift = await connection.run_sync(metadata_drift)
         assert drift == [], drift
         report = await connection.run_sync(verify_schema, proposed_database.config)
-        assert report["alembic_revision"] == "20261111_06"
-        assert digest != schema_contract.PREVIOUS.shape_digest
+        assert report["alembic_revision"] == "20261116_04"
+        assert digest not in (schema_contract.PREVIOUS.shape_digest, schema_contract.ACTIVATED_06.shape_digest, schema_contract.K2.shape_digest)  # fmt: skip
 
 
 # --- The lifecycle ---------------------------------------------------------------------------
@@ -137,7 +138,7 @@ async def test_seed_then_overlay_then_integrity(session, proposed_database, seed
     baseline = await audit_integrity(session, proposed_database.config, seed_plan)
     assert (
         baseline["policy_overlay"] == "absent"
-        and baseline["schema_contract"] == "activated-20261111_06"
+        and baseline["schema_contract"] == schema_contract.CURRENT.name
     )
     assert await register_policy(session, "rbac-policy-v2") == "applied"
     assert await register_policy(session, "rbac-policy-v2") == "already present"  # repeatable

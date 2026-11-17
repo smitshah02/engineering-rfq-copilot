@@ -32,6 +32,153 @@ class DatabaseConnectionError(DatabaseError):
     """Connection verification failed without exposing connection secrets."""
 
 
+class PrivilegedRuntimeRole(DatabaseError):
+    """The session's role could rewrite history; binding work must not run on it."""
+
+
+# The only columns the runtime role may UPDATE (K2/K4/K5, docs/database/k2_runtime_roles.sql):
+# the Day 52 revision pointer, the superseded-version flag, submission (K4) and the K5
+# clearing of a rejection on revision. Decisions are not here (K5: DECISION_UPDATABLE).
+RUNTIME_UPDATABLE = frozenset(
+    {
+        "quotes.current_version",
+        "quotes.status",
+        "quotes.row_version",
+        "quote_versions.is_current",
+        "quotes.submitted_by",
+        "quotes.rejection_reason",
+    }
+)
+# K5 (Day 55): the NOLOGIN group whose members alone may record human decisions
+# (docs/database/k5_decision_roles.sql), and what it may write. Bound by the k5_* triggers.
+DECISION_GROUP = "rfq_quote_decision"
+DECISION_UPDATABLE = frozenset(
+    {
+        "quotes.status",
+        "quotes.row_version",
+        "quotes.approved_version",
+        "quotes.approver_id",
+        "quotes.approval_timestamp",
+        "quotes.rejection_reason",
+        "quotes.released_by",
+        "quotes.released_at",
+        "quote_versions.approval_valid",
+        "approval_requests.status",
+        "approval_requests.resolved_by",
+        "approval_requests.resolved_at",
+    }
+)
+DECISION_INSERTABLE = frozenset({"approval_history", "audit_events", "idempotency_records"})
+# The only tables the runtime role may INSERT into: the six K2 tables and, since K3, the
+# calculation records (docs/database/k2_runtime_roles.sql). Rule versions, RFQs, approval
+# rows and everything else are owner-written; an INSERT grant there is a violation.
+RUNTIME_INSERTABLE = frozenset(
+    {
+        "rfq_attachments",
+        "idempotency_records",
+        "audit_events",
+        "quotes",
+        "quote_versions",
+        "quote_line_items",
+        "pricing_calculations",
+        # K4 (Day 54D): one pending request per version and its append-only history.
+        "approval_requests",
+        "approval_history",
+    }
+)
+_RUNTIME_ROLE_CHECKS = text(
+    "WITH me AS (SELECT r.* FROM pg_roles r WHERE r.rolname = current_user), "
+    "managed AS (SELECT c.oid, c.relname, c.relowner FROM pg_class c "
+    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+    "WHERE n.nspname IN ('business','orchestration') AND c.relkind IN ('r','p')) "
+    "SELECT ARRAY_REMOVE(ARRAY["
+    "CASE WHEN me.rolsuper OR me.rolcreaterole OR me.rolcreatedb OR me.rolreplication "
+    "OR me.rolbypassrls THEN 'role_attributes' END, "
+    "CASE WHEN pg_has_role(current_user, d.datdba, 'MEMBER') THEN 'database_owner' END, "
+    "CASE WHEN EXISTS (SELECT 1 FROM managed m WHERE pg_has_role(current_user, m.relowner, 'MEMBER')) "
+    "THEN 'table_owner' END, "
+    "CASE WHEN has_database_privilege(current_user, d.oid, 'CREATE') "
+    "OR has_schema_privilege(current_user, 'business', 'CREATE') "
+    "OR has_schema_privilege(current_user, 'orchestration', 'CREATE') "
+    "OR has_schema_privilege(current_user, 'public', 'CREATE') THEN 'create' END, "
+    "CASE WHEN EXISTS (SELECT 1 FROM managed m WHERE "
+    "has_table_privilege(current_user, m.oid, 'DELETE') "
+    "OR has_table_privilege(current_user, m.oid, 'TRUNCATE') "
+    "OR has_table_privilege(current_user, m.oid, 'TRIGGER') "
+    "OR has_table_privilege(current_user, m.oid, 'REFERENCES')) THEN 'table_privileges' END, "
+    "CASE WHEN EXISTS (SELECT 1 FROM managed m JOIN pg_attribute a ON a.attrelid = m.oid "
+    "WHERE a.attnum > 0 AND NOT a.attisdropped "
+    "AND has_column_privilege(current_user, m.oid, a.attnum, 'UPDATE') "
+    "AND m.relname || '.' || a.attname <> ALL (CAST(:updatable AS text[]))) "
+    "THEN 'update_privileges' END, "
+    "CASE WHEN EXISTS (SELECT 1 FROM managed m WHERE "
+    "has_table_privilege(current_user, m.oid, 'INSERT') "
+    "AND m.relname <> ALL (CAST(:insertable AS text[]))) THEN 'insert_privileges' END, "
+    "CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+    "WHERE n.nspname IN ('business','orchestration') "
+    "AND has_function_privilege(current_user, p.oid, 'EXECUTE')) THEN 'execute' END, "
+    "CASE WHEN has_parameter_privilege(current_user, 'session_replication_role', 'SET') "
+    "THEN 'parameter_privileges' END, "
+    # K5: decision sessions must be members of the decision group, all others must not.
+    "CASE WHEN COALESCE(pg_has_role(current_user, to_regrole('rfq_quote_decision')::oid, "
+    "'MEMBER'), false) <> CAST(:decision AS boolean) THEN 'decision_membership' END"
+    "], NULL) FROM me, pg_database d WHERE d.datname = current_database()"
+)
+
+
+async def runtime_role_violations(
+    session: AsyncSession, *, decision: bool = False
+) -> tuple[str, ...]:
+    """What makes the session's current role unfit to run binding work; () if restricted.
+
+    Reads only catalogs and privilege functions of the live connection: role attributes,
+    ownership or membership of the database or any managed table, CREATE anywhere it
+    matters, table DELETE/TRUNCATE/TRIGGER/REFERENCES, UPDATE on any column outside
+    ``RUNTIME_UPDATABLE``, INSERT on any table outside ``RUNTIME_INSERTABLE``, EXECUTE on
+    the K2/K3 trigger functions, and SET on ``session_replication_role`` (which would
+    silence non-ALWAYS triggers). K5: ``decision=True`` checks the decision role instead
+    (``DECISION_UPDATABLE``/``DECISION_INSERTABLE``, member of ``DECISION_GROUP``); the
+    ordinary runtime role must not be a member (``decision_membership``).
+    """
+    updatable, insertable = (
+        (DECISION_UPDATABLE, DECISION_INSERTABLE)
+        if decision
+        else (RUNTIME_UPDATABLE, RUNTIME_INSERTABLE)
+    )
+    found = await session.scalar(
+        _RUNTIME_ROLE_CHECKS,
+        {"updatable": sorted(updatable), "insertable": sorted(insertable), "decision": decision},
+    )
+    return tuple(found)
+
+
+async def require_restricted_runtime(session: AsyncSession) -> None:
+    """Fail closed before binding work (approval, rejection, release) on a privileged role.
+
+    K2 triggers do not bind the table owner, who can disable them, so a binding workflow
+    must call this first, inside its own transaction. Only a reason code leaves here.
+    """
+    violations = await runtime_role_violations(session)
+    if violations:
+        raise PrivilegedRuntimeRole(
+            "Binding work refused: the database role is not the restricted runtime role ("
+            + ", ".join(violations)
+            + ")."
+        )
+
+
+async def require_decision_runtime(session: AsyncSession) -> None:
+    """K5: fail closed before a human decision unless the session is the restricted decision
+    role (member of ``DECISION_GROUP``, decision privileges only). Only codes leave here."""
+    violations = await runtime_role_violations(session, decision=True)
+    if violations:
+        raise PrivilegedRuntimeRole(
+            "Decision refused: the database role is not the restricted decision role ("
+            + ", ".join(violations)
+            + ")."
+        )
+
+
 @dataclass(frozen=True)
 class ConnectionInfo:
     result: int

@@ -2,7 +2,9 @@
 
 import asyncio
 import io
+import itertools
 import json
+import math
 import re
 from collections import Counter
 from pathlib import Path
@@ -13,8 +15,10 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
+from migration_cleanup import drop_empty_version_table, public_relations
 from sqlalchemy import inspect, text
 from test_orm_models import (
+    K3_RULE_10,
     SCHEMA_TABLES,
     TD012_TABLE,
     expected_shared_checks,
@@ -24,11 +28,11 @@ from test_orm_models import (
 )
 
 from alembic import command
+from rfq_copilot import schema_contract
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database
 from rfq_copilot.migration_safety import (
     MigrationSettings,
-    cleanup_test_tracker,
     ensure_initial_state,
     ensure_test_downgrade,
     include_name,
@@ -38,7 +42,10 @@ from rfq_copilot.migration_safety import (
 from rfq_copilot.models import Base
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = "20261111_06"  # head: initial, TD-005, TD-012, Phase 3.5 02/03/04/06
+# head: initial, TD-005, TD-012, Phase 3.5 02/03/04/06, K2, K3, K4 (Day 54D), K5 (Day 55)
+REVISION = schema_contract.CURRENT.revision  # "20261116_04"
+K4_REVISION = "20261116_03"
+K2_REVISION = "20261115_01"
 TD012_REVISION = "20261110_01"
 TD005_REVISION = "20261109_01"
 INITIAL_REVISION = "20261108_01"
@@ -141,6 +148,32 @@ def literal(value):
     return "'" + value.replace("'", "''") + "'"
 
 
+EXHAUSTIVE_PROBES = 4096  # cartesian probing limit per CHECK (rows in one VALUES list)
+# Deterministic, labelled cases for rules no generic probe can falsify. K3 rule_10 is FALSE
+# only for a complete version expiring before its UTC creation date. Each case:
+# (created_at, expiry_date, snapshot_completeness, expected outcome of the CHECK).
+K3_RULE_10_CASES = (
+    ("'2026-11-02T10:00:00Z'", "'2026-11-01'", "'complete'", False),  # day before: rejected
+    ("'2026-11-02T10:00:00Z'", "'2026-11-02'", "'complete'", True),  # creation date
+    ("'2026-11-02T10:00:00Z'", "'2026-12-01'", "'complete'", True),  # later
+    ("'2026-11-02T10:00:00Z'", "'2026-11-01'", "'priced_partial'", True),  # not complete
+    ("'2026-11-02T10:00:00Z'", "NULL", "'metadata_only'", True),
+    # 23:30 at UTC-5 is 04:30 UTC the next day: the UTC date (11-03) decides, not local.
+    ("'2026-11-02T23:30:00-05:00'", "'2026-11-02'", "'complete'", False),
+    ("'2026-11-02T23:30:00-05:00'", "'2026-11-03'", "'complete'", True),
+    # NULL is not FALSE: such rows pass this CHECK (rule_07 and NOT NULL govern them).
+    ("'2026-11-02T10:00:00Z'", "NULL", "'complete'", None),
+    ("NULL", "'2026-11-01'", "'complete'", None),
+    ("'2026-11-02T10:00:00Z'", "'2026-11-01'", "NULL", None),
+)
+EXPLICIT_PROBES = {
+    K3_RULE_10: [
+        {"created_at": created, "expiry_date": expiry, "snapshot_completeness": status}
+        for created, expiry, status, _ in K3_RULE_10_CASES
+    ],
+}
+
+
 def probe_values(datatype, strings):
     if datatype == "TEXT":
         return [
@@ -192,6 +225,13 @@ def check_behavior(connection, expected, actual, columns):
             samples.append(sparse)
     for position in range(max(map(len, values))):
         samples.append([options[position % len(options)] for options in values])
+    # Small multi-field rules also get every combination: e.g. K3 rule_10 is FALSE only for
+    # 'complete' with expiry_date before the UTC created_at date, which no single-field or
+    # diagonal sample reaches. Only adds probes; nothing above is removed.
+    if len(refs) > 1 and math.prod(map(len, values)) <= EXHAUSTIVE_PROBES:
+        samples.extend(itertools.product(*values))
+    for case in EXPLICIT_PROBES.get(expected, ()):  # labelled cases, in refs' column order
+        samples.append([case[col["name"]] for col in refs])
     samples = list(dict.fromkeys(tuple(sample) for sample in samples))
     rows = []
     for sample in samples:
@@ -274,9 +314,14 @@ def verify_physical(connection, approved, *, expect_empty=True):
     wanted_tables = sorted([*qualified(name).split("."), "r"] for name in approved)
     assert result["shape"]["tables"] == wanted_tables
     counts = Counter(row["kind"] for row in result["constraints"])
-    assert {kind: counts[kind] for kind in "pfuc"} == {"p": 36, "f": 71, "u": 14, "c": 218}
-    assert set(counts) <= set("pfucn"), counts
-    assert sum(len(cols) for cols in result["columns"].values()) == 278
+    # K3: pinned in the contract only after measurement on this database (fail closed).
+    assert {kind: counts[kind] for kind in "pfuc"} == dict(schema_contract.CURRENT.catalog_counts)
+    # Constraint triggers are the only 't' rows: K3's two line checks and K5's two bindings.
+    deferred = [t for t in schema_contract.contract_guards(schema_contract.CURRENT)[1] if t[4] == "deferred"]  # fmt: skip
+    assert counts["t"] == len(deferred) == 4 and set(counts) <= set("pfucnt"), counts
+    assert sum(len(cols) for cols in result["columns"].values()) == sum(
+        len(table.c) for table in Base.metadata.tables.values()
+    )  # the ORM's columns exactly (K2 created_xact, K3 evidence and record columns)
     assert result["revision"] == [REVISION]
     probes = 0
     for name, expected in approved.items():
@@ -345,8 +390,8 @@ def verify_physical(connection, approved, *, expect_empty=True):
     explicit = {index["name"]: index for index in result["indexes"] if index["supporting"] is None}
     expected_indexes = index_expectations()
     assert explicit.keys() == expected_indexes.keys()
-    assert len(result["indexes"]) == 69  # + 2 PK + 3 explicit (Phase 3.5)
-    assert len([i for i in result["indexes"] if i["supporting"]]) == 50
+    assert len(result["indexes"]) == 72  # + 2 PK + 3 explicit (Phase 3.5) + 3 K3 UNIQUE
+    assert len([i for i in result["indexes"] if i["supporting"]]) == 53  # K3: 3 UNIQUE
     for name, expected in expected_indexes.items():
         index = explicit[name]
         assert index["tab"] == expected["table"]
@@ -492,7 +537,7 @@ async def lifecycle(approved):
                 ):
                     await connection.rollback()
                     await run("downgrade", "base")
-                await connection.run_sync(cleanup_test_tracker)
+                await connection.run_sync(drop_empty_version_table)
                 await connection.execute(text(f"DROP SCHEMA {SENTINEL} RESTRICT"))
                 await connection.commit()
                 restored = await connection.run_sync(user_objects)
@@ -514,8 +559,13 @@ def test_configuration_metadata_and_revision():
     assert script.get_heads() == [REVISION]
     revisions = list(script.walk_revisions())
     chain = [(r.revision, r.down_revision) for r in revisions]
+    assert REVISION == "20261116_04"
     assert chain == [
-        (REVISION, "20261111_04"),
+        (REVISION, K4_REVISION),
+        (K4_REVISION, "20261116_01"),
+        ("20261116_01", K2_REVISION),
+        (K2_REVISION, "20261111_06"),
+        ("20261111_06", "20261111_04"),
         ("20261111_04", "20261111_03"),
         ("20261111_03", "20261111_02"),
         ("20261111_02", TD012_REVISION),
@@ -709,7 +759,7 @@ def test_each_physical_table_matches_day4(migration_lifecycle, approved, name):
 @pytest.mark.integration
 def test_independent_checks_indexes_and_empty_data(migration_lifecycle):
     result = migration_lifecycle["first"]
-    assert result["counts"]["c"] == 218  # + 5 token_revocations + 3 rfq_assignments
+    assert result["counts"]["c"] == 227  # + 5 token_revocations + 3 rfq_assignments + 9 K3
     assert result["probes"] > 2000
     assert sum(i["predicate"] is not None for i in result["indexes"]) == 11
     assert sum(i["predicate"] is not None and i["indisunique"] for i in result["indexes"]) == 5
@@ -835,10 +885,84 @@ def test_td012_downgrade_refuses_to_drop_bindings_and_reverses_cleanly():
                             await connection.execute(text(statement))
                         await connection.commit()
                         await run("downgrade", "base")
-                    await connection.run_sync(cleanup_test_tracker)
+                    await connection.run_sync(drop_empty_version_table)
                     await connection.commit()
                     assert (await connection.run_sync(user_objects))["relations"] == []
                     await connection.execute(text("SELECT pg_advisory_unlock(461441,505)"))
                     await connection.rollback()
 
     asyncio.run(scenario())
+
+
+TRACKER_DDL = (
+    "CREATE TABLE public.alembic_version (version_num varchar(32) NOT NULL, "
+    "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+)
+
+
+def test_tracker_cleanup_removes_only_an_empty_tracker_and_refuses_anything_else():
+    """K3 teardown regression: after ``downgrade base`` only Alembic's empty version table
+    may remain, and only it is removed (RESTRICT); a version row, an unexpected public
+    relation or a managed schema is refused with nothing dropped. One transaction, rolled
+    back: the guarded test database is left exactly as found."""
+    settings = MigrationSettings.from_arguments(alembic_config(allow=True).cmd_opts.x)
+
+    async def scenario():
+        async with Database(settings.database) as database:
+            async with database.engine.connect() as connection:
+                identity = await connection.run_sync(verify_identity, settings)
+                assert identity["database"] == "rfq_copilot_test"
+                assert await connection.scalar(text("SELECT pg_try_advisory_lock(461441,505)"))
+                await connection.rollback()
+                assert (await connection.run_sync(user_objects))["relations"] == []
+                try:
+                    await connection.execute(text(TRACKER_DDL))
+                    await connection.run_sync(drop_empty_version_table)
+                    assert (await connection.run_sync(user_objects))["relations"] == []
+                    refusals = (
+                        ("INSERT INTO public.alembic_version VALUES ('x')", CommandError),
+                        ("CREATE TABLE public.k3_probe (id integer)", AssertionError),
+                        ("CREATE SCHEMA business", CommandError),
+                    )
+                    for setup, error in refusals:
+                        savepoint = await connection.begin_nested()
+                        await connection.execute(text(TRACKER_DDL))
+                        await connection.execute(text(setup))
+                        with pytest.raises(error):
+                            await connection.run_sync(drop_empty_version_table)
+                        kept = await connection.run_sync(public_relations)
+                        assert ("alembic_version", "r") in kept  # nothing was removed
+                        await savepoint.rollback()
+                finally:
+                    await connection.rollback()
+                    await connection.execute(text("SELECT pg_advisory_unlock(461441,505)"))
+                    await connection.rollback()
+                assert (await connection.run_sync(user_objects))["relations"] == []
+
+    asyncio.run(scenario())
+
+
+def test_k3_rule_10_rejects_only_complete_versions_expiring_before_their_utc_creation_date():
+    """PostgreSQL evaluates the approved rule_10 exactly as labelled (FALSE = rejected,
+    NULL = not rejected by this CHECK). Read-only SELECT over typed VALUES: no table, no
+    write, guarded test database. The lifecycle's check_behavior also probes these cases
+    against the installed constraint expression (expected == actual on every row)."""
+    config = MigrationSettings.from_arguments(alembic_config().cmd_opts.x).database
+    rows = ",".join(
+        f"({i}, CAST({c} AS timestamptz), CAST({e} AS date), CAST({s} AS text))"
+        for i, (c, e, s, _) in enumerate(K3_RULE_10_CASES)
+    )
+    query = (
+        f"SELECT n, ({K3_RULE_10}) FROM (VALUES {rows}) "
+        "AS probe(n, created_at, expiry_date, snapshot_completeness) ORDER BY n"
+    )
+
+    async def evaluate():
+        async with Database(config, read_only=True) as database:
+            async with database.engine.connect() as connection:
+                assert await connection.scalar(text("SELECT current_database()")) == "rfq_copilot_test"  # fmt: skip
+                return [row[1] for row in (await connection.execute(text(query))).all()]
+
+    outcomes = asyncio.run(evaluate())
+    assert outcomes == [expected for *_, expected in K3_RULE_10_CASES]
+    assert False in outcomes and True in outcomes  # both directions demonstrated

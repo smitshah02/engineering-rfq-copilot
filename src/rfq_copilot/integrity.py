@@ -95,7 +95,8 @@ def verify_definitions(connection):
         .all()
     )
     counts = {kind: sum(d["kind"] == kind for d in definitions) for kind in ["p", "f", "u", "c"]}
-    # Pinned per contract (schema_contract.py): CURRENT is p36 f71 u14 c218 at 20261111_06.
+    # Pinned per contract (schema_contract.py): K2 was p36 f71 u14 c218 (20261115_01); K3's
+    # (20261116_01) is unmeasured until pinned, so this check fails closed until then.
     contract = active()
     check(counts == dict(contract.catalog_counts), "catalog", "constraint counts differ")
     for table in contract.metadata().tables.values():

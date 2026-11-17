@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from history_corruption import corrupted
+from migration_cleanup import drop_empty_version_table
 from sqlalchemy import event, func, insert, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from test_database_migrations import alembic_config, user_objects
@@ -18,12 +20,17 @@ from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database, DatabaseError
 from rfq_copilot.migration_safety import (
     MigrationSettings,
-    cleanup_test_tracker,
     verify_identity,
 )
 from rfq_copilot.seeding import SeedError, loader
 from rfq_copilot.seeding.loader import execute_seed, read_rows, run_seed
-from rfq_copilot.seeding.mapping import EMPTY_TABLES, EXPECTED_COUNTS, TABLES, build_plan
+from rfq_copilot.seeding.mapping import (
+    DATABASE_STAMPED,
+    EMPTY_TABLES,
+    EXPECTED_COUNTS,
+    TABLES,
+    build_plan,
+)
 from rfq_copilot.seeding.sources import load_sources
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
@@ -54,7 +61,7 @@ async def seed_database():
                         assert await lease.scalar(select(func.count()).select_from(table)) == 0
                     await lease.rollback()
                     await asyncio.to_thread(command.downgrade, alembic_config(allow=True), "base")
-                await lease.run_sync(cleanup_test_tracker)
+                await lease.run_sync(drop_empty_version_table)
                 await lease.commit()
                 assert await lease.run_sync(user_objects) == original
                 await lease.execute(text("SELECT pg_advisory_unlock(461441,505)"))
@@ -128,7 +135,10 @@ async def test_full_transactional_import_counts_and_representative_values(
         "quote_line_items",
         "approval_history",
     ]:
-        actual = await read_rows(session, name)
+        # Database-stamped values (K2 created_xact) are never plan data; every other column
+        # is still compared exactly.
+        stored = await read_rows(session, name)
+        actual = [{k: v for k, v in r.items() if k not in DATABASE_STAMPED} for r in stored]
         for record in seed_plan.rows[name]:
             assert record in actual
     await session.rollback()
@@ -329,11 +339,12 @@ async def test_json_type_conflict_is_rejected_without_overwrite(session, seed_da
     )
     document = {**rule["document"], "agent_can_finalize_approval": 0}
     table = TABLES["business_rule_versions"]
-    await session.execute(
-        update(table)
-        .where(table.c.rule_version == rule["rule_version"])
-        .values(document=literal(json_text(document)).cast(JSONB))
-    )
+    async with corrupted(session, "business_rule_versions"):  # K3: rules are append-only
+        await session.execute(
+            update(table)
+            .where(table.c.rule_version == rule["rule_version"])
+            .values(document=literal(json_text(document)).cast(JSONB))
+        )
     before = await read_rows(session, "business_rule_versions")
     with pytest.raises(SeedError, match="stored/source conflict"):
         await apply(session, seed_database, seed_plan)

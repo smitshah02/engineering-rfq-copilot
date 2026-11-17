@@ -29,7 +29,12 @@ from rfq_copilot.seeding.safety import validate_target, verify_live_identity, ve
 
 RULES_DIR = Path(__file__).resolve().parents[1] / "rules"
 # Approved post-baseline rule versions and the baseline rule each one requires.
-REGISTERED = {"approval-v1.2": ("approval-v1.2.json", "approval-v1.1")}
+REGISTERED = {
+    "approval-v1.2": ("approval-v1.2.json", "approval-v1.1"),
+    "workflow-v1.1": ("workflow-v1.1.json", "workflow-v1.0"),
+    # Day 54B (R5): development only until commercial sign-off; never registered by Claude.
+    "workflow-v1.2": ("workflow-v1.2.json", "workflow-v1.1"),
+}
 
 
 def registered_rule_row(rule_version: str) -> dict:

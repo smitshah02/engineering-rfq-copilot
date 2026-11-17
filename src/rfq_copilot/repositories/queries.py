@@ -90,6 +90,9 @@ async def get_customer(session: AsyncSession, customer_id: str) -> CustomerDetai
             selectinload(Customer.contacts),
             raiseload("*"),
         )
+        # Read paths only: refresh an object already in the identity map, so account status
+        # and credit facts are the database's, not a copy loaded earlier in the session.
+        .execution_options(populate_existing=True)
     )
     with session.no_autoflush:
         customer = await session.scalar(statement)
@@ -132,6 +135,7 @@ async def get_rfq(
             selectinload(RFQ.line_items),
             raiseload("*"),
         )
+        .execution_options(populate_existing=True)  # as get_customer: never a stale copy
     )
     if assigned_user is not None:
         statement = statement.where(assigned_to(assigned_user))

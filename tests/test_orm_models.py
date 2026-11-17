@@ -168,6 +168,21 @@ SCHEMA_TABLES = (*APPROVED_TABLES, TD012_TABLE, *PHASE35_SPECS)
 PG = postgresql.dialect()
 
 
+K3_RULE_07_PREFIX = "snapshot_completeness <> 'complete' OR ("
+K3_RULE_10 = (
+    "snapshot_completeness <> 'complete' OR expiry_date >= (created_at AT TIME ZONE 'UTC')::date"
+)
+
+
+def k3_column(name, kind, nullable=True, rule="—"):
+    """A K3 (20261116_01) column in the approved-spec shape."""
+    return dict(name=name, type=kind, nullable=nullable, default="none", rule=rule)
+
+
+def k3_fk(local, target, remote):
+    return dict(local=local, target=target, remote=remote, deferred=False)
+
+
 def normalized(sql):
     """Formatting-only normalization: retain case and operators/literal values."""
     return re.sub(r"\s+", "", str(sql))
@@ -239,6 +254,65 @@ def approved():
     ]
     for name, spec in PHASE35_SPECS.items():
         tables[name] = copy.deepcopy(spec)
+    # Approved Day 54A K2 delta (20261115_01): the trigger-stamped version creation seal.
+    assert tables["quote_versions"]["columns"][-1]["name"] == "snapshot_completeness"
+    tables["quote_versions"]["columns"].append(
+        dict(name="created_xact", type="XID8", nullable=True, default="none", rule="—")
+    )
+    # Approved Day 54B K3 delta (20261116_01), asserted as documented first: calculation
+    # records keyed by their own identity, and version evidence on quote_versions.
+    hex_rule = "64 lowercase hexadecimal characters"
+    calc = tables["pricing_calculations"]
+    assert calc["pk"] == ("calculation_id",) and calc["unique"] == []
+    assert calc["checks"] == ["quote_total_usd >= 0 AND expires_at > created_at"]
+    calc["columns"] = [c for c in calc["columns"] if c["name"] != "expires_at"]
+    calc["columns"] += [
+        k3_column("calculation_record_id", "TEXT", nullable=False),
+        k3_column("content_sha256", "TEXT", nullable=False, rule=hex_rule),
+    ]
+    calc["pk"] = ("calculation_record_id",)
+    calc["unique"] = [
+        ("rfq_id", "requirement_sha256", "content_sha256"),
+        ("calculation_record_id", "rfq_id"),
+    ]
+    calc["checks"] = ["quote_total_usd >= 0"]
+    assert tables["quotes"]["unique"] == [("rfq_id",)]
+    tables["quotes"]["unique"] = [("rfq_id",), ("quote_id", "rfq_id")]
+    versions = tables["quote_versions"]
+    old_fk = k3_fk(("calculation_id",), "pricing_calculations", ("calculation_id",))
+    assert old_fk in versions["fks"]
+    versions["fks"].remove(old_fk)
+    versions["fks"] += [
+        k3_fk(("quote_id", "rfq_id"), "quotes", ("quote_id", "rfq_id")),
+        k3_fk(
+            ("calculation_record_id", "rfq_id"),
+            "pricing_calculations",
+            ("calculation_record_id", "rfq_id"),
+        ),
+    ]
+    evidence = (
+        "rfq_id",
+        "calculation_record_id",
+        "rfq_source_sha256",
+        "evaluation_fingerprint",
+        "rules_sha256",
+        "horizon_start",
+    )
+    rule_07 = next(c for c in versions["checks"] if c.startswith(K3_RULE_07_PREFIX))
+    assert rule_07.endswith("estimated_lead_business_days IS NOT NULL)")
+    extended = rule_07[:-1] + "".join(f" AND {name} IS NOT NULL" for name in evidence) + ")"
+    nulls = " AND ".join(f"{name} IS NULL" for name in (*evidence, "requested_delivery_date"))
+    versions["checks"] = [extended if c == rule_07 else c for c in versions["checks"]]
+    versions["checks"] += [f"snapshot_completeness = 'complete' OR ({nulls})", K3_RULE_10]
+    versions["columns"] += [
+        k3_column("rfq_id", "TEXT"),
+        k3_column("calculation_record_id", "TEXT"),
+        k3_column("rfq_source_sha256", "TEXT", rule=hex_rule),
+        k3_column("evaluation_fingerprint", "TEXT", rule=hex_rule),
+        k3_column("rules_sha256", "TEXT", rule=hex_rule),
+        k3_column("horizon_start", "DATE"),
+        k3_column("requested_delivery_date", "DATE"),
+    ]
     return tables
 
 
@@ -482,6 +556,9 @@ def test_each_fk_has_a_resolved_bidirectional_relationship(approved, name):
         ("quotes", ("quote_id", "approved_version")),
         ("approval_history", ("approval_request_id", "quote_id", "quote_version")),
         ("audit_events", ("quote_id", "quote_version")),
+        # K3 consistency bindings: enforced by the database, written as plain columns.
+        ("quote_versions", ("quote_id", "rfq_id")),
+        ("quote_versions", ("calculation_record_id", "rfq_id")),
     }
     for fk in approved[name]["fks"]:
         matching = [
@@ -517,7 +594,8 @@ def test_each_fk_has_a_resolved_bidirectional_relationship(approved, name):
 
 
 def test_relationship_count_and_core_ownership_paths():
-    assert sum(len(inspect(model).relationships) for model in MODEL_CLASSES) == 128
+    # 128 + K3's QuoteVersion.evidence_quote / Quote.evidenced_versions pair.
+    assert sum(len(inspect(model).relationships) for model in MODEL_CLASSES) == 130
     assert inspect(RFQ).relationships.quote.uselist is False
     assert inspect(Quote).relationships.versions.uselist is True
     assert inspect(QuoteVersion).relationships.line_items.uselist is True

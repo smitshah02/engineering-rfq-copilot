@@ -1,0 +1,52 @@
+{
+  "change_reference": "Day 54B K3 quotation validity (R5), approved for development 2026-11-16; commercial sign-off required before production use",
+  "idempotent_writes": [
+    "create_quote_draft",
+    "request_approval"
+  ],
+  "immutable_approval_version": true,
+  "quote_validity": {
+    "calendar_dates_inclusive": 30,
+    "first_date": "version_created_at_utc_date"
+  },
+  "supersedes": "workflow-v1.1",
+  "transitions": {
+    "approved": [
+      "released",
+      "expired",
+      "revised_draft"
+    ],
+    "blocked": [
+      "revised_draft"
+    ],
+    "clarification_required": [
+      "revised_draft"
+    ],
+    "draft": [
+      "revised_draft",
+      "pending_approval",
+      "clarification_required",
+      "blocked"
+    ],
+    "expired": [],
+    "pending_approval": [
+      "approved",
+      "rejected",
+      "revised_draft"
+    ],
+    "rejected": [
+      "revised_draft"
+    ],
+    "released": [
+      "expired"
+    ],
+    "revised_draft": [
+      "revised_draft",
+      "pending_approval",
+      "clarification_required",
+      "blocked"
+    ]
+  },
+  "version": "workflow-v1.2",
+  "version_bump_requires_approval_reset": true
+}

@@ -1,4 +1,5 @@
-"""Upload idempotency receipts in ``business.idempotency_records`` (revision 20261111_04).
+"""Idempotency receipts in ``business.idempotency_records``: uploads (revision 20261111_04)
+and quote drafts (``create_quote_draft``, approved since the initial schema, Day 51).
 
 Receipts are scoped by (actor, customer, operation, key), the table's unique constraint,
 so one customer's key never replays another's result. Callers own sessions and commits;
@@ -18,7 +19,12 @@ UPLOAD_OPERATION = "attach_rfq_document"
 
 
 async def find_receipt(
-    session: AsyncSession, *, actor_id: str, customer_id: str, key: str
+    session: AsyncSession,
+    *,
+    actor_id: str,
+    customer_id: str,
+    key: str,
+    operation: str = UPLOAD_OPERATION,
 ) -> IdempotencyRecord | None:
     _identifier(actor_id)
     _identifier(customer_id)
@@ -27,7 +33,7 @@ async def find_receipt(
         .where(
             IdempotencyRecord.actor_id == actor_id,
             IdempotencyRecord.customer_id == customer_id,
-            IdempotencyRecord.operation == UPLOAD_OPERATION,
+            IdempotencyRecord.operation == operation,
             IdempotencyRecord.idempotency_key == key,
         )
         .options(raiseload("*"))
@@ -45,12 +51,13 @@ def add_receipt(
     request_sha256: str,
     result: dict,
     correlation_id: str,
+    operation: str = UPLOAD_OPERATION,
 ) -> IdempotencyRecord:
     row = IdempotencyRecord(
         receipt_id=uuid.uuid4(),
         actor_id=actor_id,
         customer_id=customer_id,
-        operation=UPLOAD_OPERATION,
+        operation=operation,
         idempotency_key=key,
         request_sha256=request_sha256,
         result_json=result,

@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from history_corruption import corrupted
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from test_database_queries import populated as populated
@@ -304,14 +305,15 @@ async def tamper(session, rule_version, path, value):
     sha = await session.scalar(
         select(BusinessRuleVersion.sha256).where(BusinessRuleVersion.rule_version == rule_version)
     )
-    await session.execute(
-        text(
-            "UPDATE business.business_rule_versions "
-            "SET document = jsonb_set(document, CAST(:path AS text[]), CAST(:value AS jsonb)) "
-            "WHERE rule_version = :rule_version"
-        ),
-        {"path": list(path), "value": json.dumps(value), "rule_version": rule_version},
-    )
+    async with corrupted(session, "business_rule_versions"):  # K3 refuses rule updates
+        await session.execute(
+            text(
+                "UPDATE business.business_rule_versions "
+                "SET document = jsonb_set(document, CAST(:path AS text[]), CAST(:value AS jsonb)) "
+                "WHERE rule_version = :rule_version"
+            ),
+            {"path": list(path), "value": json.dumps(value), "rule_version": rule_version},
+        )
     session.expunge_all()
     after = await session.scalar(
         select(BusinessRuleVersion.sha256).where(BusinessRuleVersion.rule_version == rule_version)
@@ -365,11 +367,12 @@ async def test_unregistered_rule_version_is_rejected(populated):
 
 
 async def test_changed_stored_sha_is_rejected_even_without_a_pin(populated):
-    await populated.execute(
-        update(BusinessRuleVersion)
-        .where(BusinessRuleVersion.rule_version == "price-v1.0")
-        .values(sha256="e" * 64)
-    )
+    async with corrupted(populated, "business_rule_versions"):  # K3 refuses rule updates
+        await populated.execute(
+            update(BusinessRuleVersion)
+            .where(BusinessRuleVersion.rule_version == "price-v1.0")
+            .values(sha256="e" * 64)
+        )
     with pytest.raises(RuleIntegrityError):
         await get_rule_version(populated, "pricing", "price-v1.0")
 

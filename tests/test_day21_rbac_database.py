@@ -11,6 +11,7 @@ never touched.
 from datetime import UTC, datetime
 
 import pytest
+from history_corruption import corrupted
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from test_attachments import pdf
@@ -76,7 +77,11 @@ async def own_rfq(session, customer):
 
 
 async def release_one(session):
-    """Mark one approved quote released (fixture transaction only; the seed has none)."""
+    """Mark one approved quote released (fixture transaction only; the seed has none).
+
+    No release workflow exists yet and K2 refuses every other quote transition, so the
+    owner stages it with ``history_corruption.corrupted`` (guarded test database).
+    """
     quote_id, owner, approver = (
         await session.execute(
             select(Quote.quote_id, RFQ.customer_id, Quote.approver_id)
@@ -84,10 +89,11 @@ async def release_one(session):
             .where(Quote.status == "approved").order_by(Quote.quote_id).limit(1)
         )
     ).one()  # fmt: skip
-    await session.execute(
-        update(Quote).where(Quote.quote_id == quote_id)
-        .values(status="released", released_by=approver, released_at=datetime.now(UTC))
-    )  # fmt: skip
+    async with corrupted(session, "quotes"):
+        await session.execute(
+            update(Quote).where(Quote.quote_id == quote_id)
+            .values(status="released", released_by=approver, released_at=datetime.now(UTC))
+        )  # fmt: skip
     session.expunge_all()
     return quote_id, owner
 

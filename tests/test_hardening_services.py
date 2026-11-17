@@ -295,7 +295,7 @@ def test_manifest_matches_the_frozen_rule_sources(kind, path, version):
 def test_manifest_registers_the_seeded_rules_and_approved_additions_only():
     baseline = {version or TRUSTED_KEY[kind] for kind, _, version in RULE_SOURCES}
     assert len(baseline) == 9 and set(TRUSTED_RULES) == baseline | set(REGISTERED)
-    assert set(REGISTERED) == {"approval-v1.2"}
+    assert set(REGISTERED) == {"approval-v1.2", "workflow-v1.1", "workflow-v1.2"}
     with pytest.raises(TypeError):
         TRUSTED_RULES["price-v9.9"] = ("pricing", "0" * 64, "0" * 64)
 

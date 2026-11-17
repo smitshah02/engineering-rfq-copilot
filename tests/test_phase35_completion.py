@@ -432,7 +432,13 @@ def test_active_contract_is_the_activated_one():
     from rfq_copilot.seeding import safety
 
     current = schema_contract.CURRENT
-    assert schema_contract.active() is current and current.revision == "20261111_06"
+    assert schema_contract.active() is current and current.revision == "20261116_04"
+    # K5 (Day 55) on K4 (54D) on K3 (54B) on K2 (54A) on 06; each guard file pinned on its own.
+    assert current.guards_revisions == (schema_contract.K2.revision, schema_contract.K3.revision, schema_contract.K4.revision, current.revision)  # fmt: skip
+    assert schema_contract.ACTIVATED_06.revision == "20261111_06"
+    assert dict(schema_contract.K2.catalog_counts) == dict(schema_contract.ACTIVATED_06.catalog_counts)  # fmt: skip
+    # K3's counts are measured on the guarded test DB before they are trusted (fail closed).
+    assert dict(current.catalog_counts) != dict(schema_contract.ACTIVATED_06.catalog_counts)
     assert (safety.REVISION, safety.SHAPE_DIGEST) == (current.revision, current.shape_digest)
     assert current.policy_overlays == frozenset({"rbac-policy-v2"})
     assert schema_contract.PREVIOUS.policy_overlays == frozenset()
@@ -551,7 +557,7 @@ def test_next_contract_drops_only_the_one_active_binding_index():
 
     assert schema_contract.active() is schema_contract.CURRENT  # _05 is not active
     nxt = schema_contract.NEXT
-    assert nxt.revision == "20261111_05" and nxt.multi_customer_bindings
+    assert nxt.revision == "20261116_02" and nxt.multi_customer_bindings  # merge of 05 and K3
     current = {i.name for t in Base.metadata.tables.values() for i in t.indexes}
     following = {i.name for t in nxt.metadata().tables.values() for i in t.indexes}
     assert current - following == {"uq_user_customer_bindings_active_user"} and following <= current

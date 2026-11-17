@@ -22,6 +22,9 @@ from rfq_copilot.seeding.sources import (
 from rfq_copilot.seeding.transform import calendar_date, convert, json_text, json_value, require
 
 TABLES = {t.name: t for t in Base.metadata.tables.values()}
+# Values the database writes itself, never part of a seed plan: rule registration times
+# and the K2 version creation seal (stamped by trigger with the seeding transaction).
+DATABASE_STAMPED = frozenset({"registered_at", "created_xact"})
 EMPTY_TABLES = frozenset(
     {
         "rfq_line_items",
@@ -356,6 +359,8 @@ def build_plan(bundle: SourceBundle, snapshot_dir: Path) -> SeedPlan:
     for name, records in rows.items():
         for record in records:
             for col in TABLES[name].c:
+                if col.name == "created_xact":
+                    continue  # DATABASE_STAMPED: never a plan value, not even NULL
                 if col.name not in record:
                     if col.nullable:
                         record[col.name] = None
@@ -405,7 +410,7 @@ def validate_plan(plan: SeedPlan) -> None:
     require(set(plan.rows) == set(TABLES), "plan", "incomplete table inventory")
     for name, table in TABLES.items():
         require(len(plan.rows[name]) == EXPECTED_COUNTS[name], name, "incomplete baseline plan")
-        columns = {c.name for c in table.c if c.name != "registered_at"}
+        columns = {c.name for c in table.c if c.name not in DATABASE_STAMPED}
         for record in plan.rows[name]:
             require(set(record) == columns, name, "unmapped or unexpected target columns")
             for key, value in record.items():

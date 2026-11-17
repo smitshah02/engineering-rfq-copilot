@@ -21,7 +21,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql.base import ischema_names
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 from rfq_copilot.models.base import Base
 
@@ -33,8 +35,27 @@ if TYPE_CHECKING:
     from rfq_copilot.models.rules import BusinessRuleVersion
 
 
+class Xid8(UserDefinedType):
+    """PostgreSQL ``xid8`` (64-bit transaction id); asyncpg decodes it as ``int``."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw) -> str:
+        return "XID8"
+
+
+# Reflection (Alembic compare, schema preflight) then knows the type instead of NullType.
+ischema_names.setdefault("xid8", Xid8)
+
+
 class PricingCalculation(Base):
-    """Approved Day 4 table pricing_calculations; database constraints are applied by later migrations."""
+    """Approved Day 4 table pricing_calculations, re-keyed by K3 (20261116_01).
+
+    One persisted calculation record per (RFQ, RFQ source digest, calculation content):
+    ``calculation_record_id`` is the record's identity, ``calculation_id`` the unchanged
+    content-derived fingerprint (parts + pricing version; not unique: the same parts priced
+    for another RFQ get another record), ``content_sha256`` the reusable pricing-content
+    fingerprint. Calculations do not expire; quotation versions do."""
 
     __tablename__ = "pricing_calculations"
     __table_args__ = (
@@ -66,11 +87,23 @@ class PricingCalculation(Base):
             onupdate="RESTRICT",
             match="SIMPLE",
         ),
-        CheckConstraint("quote_total_usd >= 0 AND expires_at > created_at", name="rule_01"),
+        UniqueConstraint(
+            "rfq_id",
+            "requirement_sha256",
+            "content_sha256",
+            name="uq_pricing_calculations_reuse_key",
+        ),
+        UniqueConstraint("calculation_record_id", "rfq_id"),
+        CheckConstraint("quote_total_usd >= 0", name="rule_01"),
         CheckConstraint(
             "length(btrim(calculation_id)) > 0 AND length(calculation_id) <= 64",
             name="calculation_id_identity",
         ),
+        CheckConstraint(
+            "length(btrim(calculation_record_id)) > 0 AND length(calculation_record_id) <= 64",
+            name="calculation_record_id_identity",
+        ),
+        CheckConstraint("content_sha256 ~ '^[0-9a-f]{64}$'", name="content_sha256_hex"),
         CheckConstraint(
             "length(btrim(rfq_id)) > 0 AND length(rfq_id) <= 64", name="rfq_id_identity"
         ),
@@ -95,22 +128,27 @@ class PricingCalculation(Base):
         {"schema": "business"},
     )
 
-    calculation_id: Mapped[str] = mapped_column(Text(), primary_key=True, nullable=False)
+    calculation_id: Mapped[str] = mapped_column(Text(), nullable=False)
     rfq_id: Mapped[str] = mapped_column(Text(), nullable=False)
     created_by: Mapped[str] = mapped_column(Text(), nullable=False)
+    # K3: must equal transaction_timestamp() (k3_pricing_calculations_seal).
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # K3: the RFQ source digest (canonical runtime lines with their requirement revisions).
     requirement_sha256: Mapped[str] = mapped_column(Text(), nullable=False)
     parts: Mapped[list[Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     lines: Mapped[list[Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     quote_total_usd: Mapped[Decimal] = mapped_column(Numeric(18, 2, asdecimal=True), nullable=False)
     pricing_rule_version: Mapped[str] = mapped_column(Text(), nullable=False)
     manufacturing_rule_version: Mapped[str] = mapped_column(Text(), nullable=False)
+    # Snapshot pins of the evaluation that first recorded the content (provenance only: the
+    # version-specific pins live on each quote version, never in the content identity).
     source_snapshot_versions: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), nullable=False
     )
+    calculation_record_id: Mapped[str] = mapped_column(Text(), primary_key=True, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(Text(), nullable=False)
 
     rfq: Mapped[RFQ] = relationship(
         "RFQ",
@@ -151,12 +189,11 @@ class PricingCalculation(Base):
     quote_versions: Mapped[list[QuoteVersion]] = relationship(
         "QuoteVersion",
         back_populates="calculation",
-        primaryjoin="QuoteVersion.calculation_id == PricingCalculation.calculation_id",
-        foreign_keys="[QuoteVersion.calculation_id]",
+        primaryjoin="and_(QuoteVersion.calculation_record_id == PricingCalculation.calculation_record_id, QuoteVersion.rfq_id == PricingCalculation.rfq_id)",
+        foreign_keys="[QuoteVersion.calculation_record_id, QuoteVersion.rfq_id]",
         lazy="raise",
         uselist=True,
-        cascade="save-update, merge",
-        passive_deletes="all",
+        viewonly=True,
     )
 
 
@@ -166,6 +203,7 @@ class Quote(Base):
     __tablename__ = "quotes"
     __table_args__ = (
         UniqueConstraint("rfq_id"),
+        UniqueConstraint("quote_id", "rfq_id"),  # K3: target of the version's RFQ binding
         ForeignKeyConstraint(
             ["rfq_id"],
             ["business.rfqs.rfq_id"],
@@ -357,6 +395,15 @@ class Quote(Base):
         cascade="save-update, merge",
         passive_deletes="all",
     )
+    evidenced_versions: Mapped[list[QuoteVersion]] = relationship(
+        "QuoteVersion",
+        back_populates="evidence_quote",
+        primaryjoin="and_(QuoteVersion.quote_id == Quote.quote_id, QuoteVersion.rfq_id == Quote.rfq_id)",
+        foreign_keys="[QuoteVersion.quote_id, QuoteVersion.rfq_id]",
+        lazy="raise",
+        uselist=True,
+        viewonly=True,
+    )
     audit_events: Mapped[list[AuditEvent]] = relationship(
         "AuditEvent",
         back_populates="quote",
@@ -417,9 +464,23 @@ class QuoteVersion(Base):
             onupdate="RESTRICT",
             match="SIMPLE",
         ),
+        # K3: the version's RFQ is its quotation's RFQ, and its calculation record belongs to
+        # that RFQ (no cross-RFQ or cross-customer record). rule_07/rule_09 make the evidence
+        # columns all-or-nothing, so MATCH SIMPLE (the repository convention) suffices.
         ForeignKeyConstraint(
-            ["calculation_id"],
-            ["business.pricing_calculations.calculation_id"],
+            ["quote_id", "rfq_id"],
+            ["business.quotes.quote_id", "business.quotes.rfq_id"],
+            ondelete="RESTRICT",
+            onupdate="RESTRICT",
+            match="SIMPLE",
+        ),
+        ForeignKeyConstraint(
+            ["calculation_record_id", "rfq_id"],
+            [
+                "business.pricing_calculations.calculation_record_id",
+                "business.pricing_calculations.rfq_id",
+            ],
+            name="fk_quote_versions_calculation_record_rfq",  # the convention exceeds 63 chars
             ondelete="RESTRICT",
             onupdate="RESTRICT",
             match="SIMPLE",
@@ -438,8 +499,16 @@ class QuoteVersion(Base):
             name="rule_06",
         ),
         CheckConstraint(
-            "snapshot_completeness <> 'complete' OR (manufacturing_rule_version IS NOT NULL AND approval_rule_version IS NOT NULL AND workflow_rule_version IS NOT NULL AND source_snapshot_versions IS NOT NULL AND calculation_id IS NOT NULL AND expiry_date IS NOT NULL AND estimated_lead_business_days IS NOT NULL)",
+            "snapshot_completeness <> 'complete' OR (manufacturing_rule_version IS NOT NULL AND approval_rule_version IS NOT NULL AND workflow_rule_version IS NOT NULL AND source_snapshot_versions IS NOT NULL AND calculation_id IS NOT NULL AND expiry_date IS NOT NULL AND estimated_lead_business_days IS NOT NULL AND rfq_id IS NOT NULL AND calculation_record_id IS NOT NULL AND rfq_source_sha256 IS NOT NULL AND evaluation_fingerprint IS NOT NULL AND rules_sha256 IS NOT NULL AND horizon_start IS NOT NULL)",
             name="rule_07",
+        ),
+        CheckConstraint(
+            "snapshot_completeness = 'complete' OR (rfq_id IS NULL AND calculation_record_id IS NULL AND rfq_source_sha256 IS NULL AND evaluation_fingerprint IS NULL AND rules_sha256 IS NULL AND horizon_start IS NULL AND requested_delivery_date IS NULL)",
+            name="rule_09",
+        ),
+        CheckConstraint(
+            "snapshot_completeness <> 'complete' OR expiry_date >= (created_at AT TIME ZONE 'UTC')::date",
+            name="rule_10",
         ),
         CheckConstraint("NOT approval_valid OR is_current", name="rule_08"),
         CheckConstraint(
@@ -474,6 +543,18 @@ class QuoteVersion(Base):
             "length(btrim(calculation_id)) > 0 AND length(calculation_id) <= 64",
             name="calculation_id_identity",
         ),
+        CheckConstraint(
+            "length(btrim(rfq_id)) > 0 AND length(rfq_id) <= 64", name="rfq_id_identity"
+        ),
+        CheckConstraint(
+            "length(btrim(calculation_record_id)) > 0 AND length(calculation_record_id) <= 64",
+            name="calculation_record_id_identity",
+        ),
+        CheckConstraint("rfq_source_sha256 ~ '^[0-9a-f]{64}$'", name="rfq_source_sha256_hex"),
+        CheckConstraint(
+            "evaluation_fingerprint ~ '^[0-9a-f]{64}$'", name="evaluation_fingerprint_hex"
+        ),
+        CheckConstraint("rules_sha256 ~ '^[0-9a-f]{64}$'", name="rules_sha256_hex"),
         Index(
             "uq_quote_versions_current",
             "quote_id",
@@ -504,6 +585,20 @@ class QuoteVersion(Base):
     )
     calculation_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     snapshot_completeness: Mapped[str] = mapped_column(Text(), nullable=False)
+    # K2 (20261115_01): stamped by the database trigger with the creating top-level
+    # transaction; never set by the application (a supplied value is overwritten). NULL means
+    # a version created before K2: its transaction is unknown, so it is legacy and sealed.
+    created_xact: Mapped[int | None] = mapped_column(Xid8(), nullable=True)
+    # K3 (20261116_01) version evidence: NULL unless snapshot_completeness = 'complete'
+    # (rule_07/rule_09), written with the version and immutable afterwards (K2). Consistency
+    # evidence only; nothing here authenticates the RFQ source or the evaluation context.
+    rfq_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    calculation_record_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    rfq_source_sha256: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    evaluation_fingerprint: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    rules_sha256: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    horizon_start: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    requested_delivery_date: Mapped[date | None] = mapped_column(Date(), nullable=True)
 
     current_for_quote: Mapped[Quote | None] = relationship(
         "Quote",
@@ -531,6 +626,15 @@ class QuoteVersion(Base):
         lazy="raise",
         uselist=False,
         cascade="save-update, merge",
+    )
+    evidence_quote: Mapped[Quote | None] = relationship(
+        "Quote",
+        back_populates="evidenced_versions",
+        primaryjoin="and_(QuoteVersion.quote_id == Quote.quote_id, QuoteVersion.rfq_id == Quote.rfq_id)",
+        foreign_keys="[QuoteVersion.quote_id, QuoteVersion.rfq_id]",
+        lazy="raise",
+        uselist=False,
+        viewonly=True,
     )
     creator: Mapped[User] = relationship(
         "User",
@@ -580,11 +684,11 @@ class QuoteVersion(Base):
     calculation: Mapped[PricingCalculation | None] = relationship(
         "PricingCalculation",
         back_populates="quote_versions",
-        primaryjoin="QuoteVersion.calculation_id == PricingCalculation.calculation_id",
-        foreign_keys="[QuoteVersion.calculation_id]",
+        primaryjoin="and_(QuoteVersion.calculation_record_id == PricingCalculation.calculation_record_id, QuoteVersion.rfq_id == PricingCalculation.rfq_id)",
+        foreign_keys="[QuoteVersion.calculation_record_id, QuoteVersion.rfq_id]",
         lazy="raise",
         uselist=False,
-        cascade="save-update, merge",
+        viewonly=True,
     )
     line_items: Mapped[list[QuoteLineItem]] = relationship(
         "QuoteLineItem",

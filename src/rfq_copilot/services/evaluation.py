@@ -53,6 +53,13 @@ AGENT_MUST_NOT = frozenset({"approve_quote", "release_quote"})
 GATE_COVERED_CONDITIONS = frozenset({"unsupported_or_unknown_geometry", "unresolved_spec_conflict"})
 THRESHOLD_CONDITIONS = frozenset({"borderline_bend_radius"})
 EVALUATION_FINGERPRINT_VERSION = "rfq-evaluation-v1"
+# Quotation findings that send a priced quotation to engineering review (with borderline
+# bends), in escalation-reason order. Also read by quote_approval_policy.
+ENGINEERING_REVIEW_FINDINGS = (
+    "DELIVERY_DATE_INFEASIBLE",
+    "CAPACITY_OUT_OF_HORIZON",
+    "CAPACITY_DATA_MISSING",
+)
 
 
 @dataclass(frozen=True)
@@ -230,7 +237,7 @@ def evaluate_outcome(
         breach,
     )
     findings = set(quotation.findings) if quotation is not None else set()
-    capacity_problem = bool(findings & {"CAPACITY_OUT_OF_HORIZON", "CAPACITY_DATA_MISSING"})
+    engineering = bool(findings & set(ENGINEERING_REVIEW_FINDINGS))
     late = "DELIVERY_DATE_INFEASIBLE" in findings
     missing = quotation is not None and quotation.result == "needs_clarification"
     unsupported = quotation is not None and quotation.result == "not_manufacturable"
@@ -263,7 +270,7 @@ def evaluate_outcome(
         outcome = "unsupported_declined"
     elif action == "blocked_release":
         outcome = "customer_hold_blocked_release"
-    elif capacity_problem or late or borderline:
+    elif engineering or borderline:
         outcome = "engineering_review_required"
     elif action == "commercial_review" or breach:
         outcome = "commercial_review_required"

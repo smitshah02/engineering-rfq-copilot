@@ -1,8 +1,24 @@
-"""Explicit, credential-safe configuration for the asynchronous database layer."""
+"""Explicit, credential-safe configuration for the asynchronous database layer.
+
+Two credentials per database (K2, Day 54A):
+
+- ``DATABASE_URL`` / ``TEST_DATABASE_URL``: the database and table owner. Migrations,
+  seeding, integrity audits, operator CLIs and test fixtures use it (``migration_safety``
+  requires owner = current_user). It can switch triggers off, so binding work never uses it.
+- ``APP_DATABASE_URL`` / ``TEST_APP_DATABASE_URL`` (``from_env(..., runtime=True)``): the
+  restricted runtime role (``docs/database/k2_runtime_roles.sql``). It must be another role
+  on the same database; nothing falls back to the owner when it is missing.
+  ``database.require_restricted_runtime`` re-checks the live role's privileges.
+- ``DECISION_DATABASE_URL`` / ``TEST_DECISION_DATABASE_URL`` (``from_env(..., decision=True)``,
+  K5): the decision role, a member of ``rfq_quote_decision``
+  (``docs/database/k5_decision_roles.sql``). Read only by the human decision process
+  (``api/decision_app.py``); it must differ from both the owner and the runtime role.
+  ``database.require_decision_runtime`` re-checks it live.
+"""
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -11,6 +27,11 @@ from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
 DatabaseTarget = Literal["development", "test"]
+RUNTIME_VARIABLES = {"development": "APP_DATABASE_URL", "test": "TEST_APP_DATABASE_URL"}
+DECISION_VARIABLES = {
+    "development": "DECISION_DATABASE_URL",
+    "test": "TEST_DECISION_DATABASE_URL",
+}
 
 
 class DatabaseConfigurationError(ValueError):
@@ -59,6 +80,8 @@ class DatabaseConfig:
     target: DatabaseTarget = "development"
     expected_test_database: str | None = field(default=None, repr=False)
     development_database: str | None = field(default=None, repr=False)
+    runtime: bool = False  # True: the restricted runtime role, never the owner
+    decision: bool = False  # True (K5): the decision role, never the owner or runtime role
 
     def __post_init__(self) -> None:
         _validate_url(self.url)
@@ -79,10 +102,20 @@ class DatabaseConfig:
         *,
         env_file: Path | None = None,
         environ: Mapping[str, str] | None = None,
+        runtime: bool = False,
+        decision: bool = False,
     ) -> "DatabaseConfig":
-        """Read only an explicitly supplied dotenv file; process variables take precedence."""
+        """Read only an explicitly supplied dotenv file; process variables take precedence.
+
+        ``runtime=True`` returns the restricted runtime credential for the same target. The
+        owner URL is still required and validated: the runtime URL must name the same host,
+        port and database with a different role. ``decision=True`` (K5) returns the decision
+        credential, which must also differ from the runtime role when that one is set.
+        """
         if target not in ("development", "test"):
             raise DatabaseConfigurationError("Database target must be development or test.")
+        if runtime and decision:
+            raise DatabaseConfigurationError("Choose the runtime or the decision credential.")
         values: dict[str, str | None] = {}
         if env_file is not None:
             if not env_file.is_file():
@@ -96,11 +129,29 @@ class DatabaseConfig:
         values.update(os.environ if environ is None else environ)
         development = _parse_url(values.get("DATABASE_URL"), "DATABASE_URL")
         if target == "development":
-            return cls(url=development, target=target)
-        testing = _parse_url(values.get("TEST_DATABASE_URL"), "TEST_DATABASE_URL")
-        return cls(
-            url=testing,
-            target=target,
-            expected_test_database=values.get("TEST_DATABASE_NAME"),
-            development_database=development.database,
-        )
+            owner = cls(url=development, target=target)
+        else:
+            owner = cls(
+                url=_parse_url(values.get("TEST_DATABASE_URL"), "TEST_DATABASE_URL"),
+                target=target,
+                expected_test_database=values.get("TEST_DATABASE_NAME"),
+                development_database=development.database,
+            )
+        if not (runtime or decision):
+            return owner
+        variable = (DECISION_VARIABLES if decision else RUNTIME_VARIABLES)[target]
+        url = _parse_url(values.get(variable), variable)
+        if url.username == owner.url.username:
+            raise DatabaseConfigurationError(f"{variable} must not use the owner role.")
+        if (url.host, url.port, url.database) != (
+            owner.url.host,
+            owner.url.port,
+            owner.url.database,
+        ):
+            raise DatabaseConfigurationError(f"{variable} must name the owner URL's database.")
+        if decision:
+            app = values.get(RUNTIME_VARIABLES[target])
+            if app and _parse_url(app, RUNTIME_VARIABLES[target]).username == url.username:
+                raise DatabaseConfigurationError(f"{variable} must not use the runtime role.")
+            return replace(owner, url=url, decision=True)
+        return replace(owner, url=url, runtime=True)
