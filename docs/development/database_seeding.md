@@ -1,4 +1,6 @@
-# Day 5, Component 5 — Synthetic dataset seeding
+# Synthetic dataset seeding
+
+The mapping below describes the frozen v1.1.0 baseline. Current schema expectations come from the [active contract](../../src/rfq_copilot/schema_contract.py); runtime identities, operational RFQs and post-baseline rule/policy registration require separate reviewed provisioning. See [local setup](../../README.md#local-setup).
 
 ## Mapping audit — completed before the first import
 
@@ -274,7 +276,7 @@ The `rfq_copilot.seeding` package has eight small modules: `sources` (fixed read
 
 ## Transaction, concurrency and repeatability
 
-Component 8 hardened stored JSON comparison to distinguish booleans from numeric zero/one. The seeder and integrity verifier share this type-aware comparison; a changed JSON type is a conflict even where Python's ordinary equality would consider the values equal. The isolated regression reproduced the previous gap before the fix. See the [Day 5 closure report](day_05_final_verification_report.md).
+Component 8 hardened stored JSON comparison to distinguish booleans from numeric zero/one. The seeder and integrity verifier share this type-aware comparison; a changed JSON type is a conflict even where Python's ordinary equality would consider the values equal. The isolated regression reproduced the previous gap before the fix. The comparison implementation and regression coverage remain in `seeding/validation.py`, `integrity.py`, and `tests/test_database_integrity.py`; historical closure evidence is private.
 
 `run_seed` owns `Database`, a session and one explicit `session.begin()` for the entire baseline. `execute_seed` performs no commit; individual table loaders perform no commit. Inserts use the registered ORM Table metadata in batches of at most 100 rows. Owned sessions/pools close on success, error and cancellation. All parents and descendants roll back together on a source, FK, unique, CHECK or post-insert verification error. Deferred quote pointers are forced IMMEDIATE before the final exact-state check. Success is printed only after the transaction has completed.
 
@@ -340,8 +342,11 @@ Independent actual post-import inspection used fresh read-only SQL queries: per-
 - Partial/conflicting database: stop. Investigate ownership/provenance and preserve operational records. There is no automatic merge, reset or destructive recovery option. A changed runtime baseline requires a separately approved design/migration/import policy.
 - Missing/different snapshot: preserve registry references; recover the exact approved CSV bytes and original configured backend location under explicit operational control. Never silently overwrite an existing file.
 - Interrupt/failure before commit: the owned transaction rolls back and resources close. If an interruption or connection loss occurs at the commit acknowledgement boundary, run verify and independently inspect the database before deciding whether to retry; do not infer rollback from a lost acknowledgement.
-- This importer intentionally supports only frozen v1.1.0, the approved local databases, current initial head and the documented baseline. It is not an incremental loader or deployment/runtime RBAC implementation. Historical pricing/release evidence remains intentionally incomplete. The frozen MFG-001 validator remains unchanged; seeding independently enforces its scalar limits.
+- This importer intentionally supports only frozen v1.1.0, the approved local databases, active schema contract and the documented baseline/allowlisted registrations. It is not an incremental loader or deployment/runtime RBAC implementation. Historical pricing/release evidence remains intentionally incomplete. The frozen MFG-001 validator remains unchanged; seeding independently enforces its scalar limits.
 
-## Executed result
+## Historical evidence
 
-On 2026-11-08 (America/New_York), the real read-only dry run passed, the initial development transaction committed 1,089 rows, verification passed, and the second apply inserted zero rows with all 1,089 already identical. Seven runtime tables remain empty. The focused suite passed 123 tests in 11.67s; the full suite passed 468 tests in 19.73s, with no failures/errors/skips. See the complete [verification report](database_seeding_verification_report.md) and [structured execution evidence](database_seeding_results.json). Component 6 was not started.
+Original dry-run, import, replay and independent parity receipts are retained privately.
+They are not current execution results. The [README](../../README.md#verification) identifies
+the reported Phase 8 baseline and separates it from checks not run during documentation cleanup.
+Do not infer that an operational database can be reseeded safely from a historical empty-runtime report.

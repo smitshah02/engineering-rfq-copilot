@@ -1,4 +1,3 @@
-
 # Python environments
 .venv/
 venv/
@@ -16,13 +15,17 @@ dist/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 # Environment secrets
 .env
 .env.*
 !.env.example
-.env.example
+pass.txt
+/secrets/
+/.secrets/
+/keys/
 
 # macOS
 .DS_Store
@@ -36,10 +39,41 @@ htmlcov/
 *.log
 logs/
 
-/data/rfq_synthetic_data/
-/data/rfq_synthetic_data_v1.1.0.zip
-CLAUDE.md
+# All local datasets, ground truth, archives and customer files stay private.
+# Keep only the existing snapshot-directory ignore policy available to new clones.
+/data/*
+!/data/rfq_seed_snapshots/
+!/data/rfq_seed_snapshots/.gitignore
+/uploads/
+/backups/
+/dumps/
 
+# Local assistant instructions, settings and session state
+/.claude/
+/.codex/
+/.agents/
+/.cursor/
+/CLAUDE.md
+/AGENTS.md
+
+# Private development history and operational evidence
 /docs/dev_log/
+/docs/audits/
+/docs/development/private/
+/day21_review_bundle.zip
+/phase35_reconcile_final.zip
 
-pass.txt
+# Keep public runbooks; exclude only the historical reports proposed for untracking.
+/docs/development/database_components_6_7_results.json
+/docs/development/database_seeding_results.json
+/docs/development/database_seeding_verification_report.md
+/docs/development/day_05_final_verification_report.md
+/docs/development/day_05_final_verification_results.json
+/docs/development/day_22_backend_integration.md
+/docs/development/day_23_architecture_report.md
+/docs/development/day_42_individual_agent_verification.md
+/docs/development/phase_02_5_hardening_report.md
+/docs/development/phase_04_final_verification_report.md
+/docs/development/phase_04_findings_tracker.md
+/docs/development/phase_3_final_backend_report.md
+/docs/development/phase_3_technical_debt_resolution.md
