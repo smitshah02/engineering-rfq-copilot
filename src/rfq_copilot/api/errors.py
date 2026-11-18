@@ -38,6 +38,8 @@ REQUEST_MODELS: tuple[type[BaseModel], ...] = (
 )
 # Path parameter names declared by routers (fixed names, never client-chosen).
 PATH_PARAMETERS = frozenset({"rfq_id", "quote_id"})
+# Header parameters declared by routers (fixed names).
+HEADER_PARAMETERS = frozenset({"Idempotency-Key"})
 
 
 def _declared_field_names(models: tuple[type[BaseModel], ...]) -> frozenset[str]:
@@ -52,6 +54,7 @@ def _declared_field_names(models: tuple[type[BaseModel], ...]) -> frozenset[str]
 TRUSTED_SEGMENTS = (
     frozenset({"body", "query", "path", "header", "cookie"})
     | PATH_PARAMETERS
+    | HEADER_PARAMETERS
     | _declared_field_names(REQUEST_MODELS)
 )
 

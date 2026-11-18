@@ -483,7 +483,8 @@ class FakeDatabase:
             self.closed += 1
 
 
-USERS = {SUBJECT: SimpleNamespace(user_id="U-1", active=True)}
+# business.users.role is NOT NULL; get_principal reads it (customer accounts skip assignments).
+USERS = {SUBJECT: SimpleNamespace(user_id="U-1", active=True, role="sales_representative")}
 
 
 @pytest.fixture
@@ -655,7 +656,7 @@ def test_validation_422_still_needs_identity_first(trust, identity):
 @pytest.mark.asyncio
 async def test_concurrent_requests_resolve_their_own_identities(trust, identity, monkeypatch):
     identity.bindings.update({"U-1": "CUST-1", "U-2": "CUST-2"})
-    USERS_EXTRA = {"auth|s2": SimpleNamespace(user_id="U-2", active=True)}
+    USERS_EXTRA = {"auth|s2": SimpleNamespace(user_id="U-2", active=True, role="estimator")}
     original = repositories.find_active_user
 
     async def slow_find(session, subject):

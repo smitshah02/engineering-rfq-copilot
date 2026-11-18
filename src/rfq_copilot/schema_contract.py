@@ -4,11 +4,20 @@ The seeding preflight (``seeding/safety.py``), the import verifier (``seeding/lo
 the integrity audit (``integrity.py``) and ``migration_safety.include_name`` read the
 active contract from here.
 
-- ``CURRENT`` (Day 55, K5, written 2026-11-16): head ``20261116_04`` (decision-authority
+- ``CURRENT`` (Checkpoint A4, written 2026-11-18): head ``20261118_01``, WORKFLOW plus the
+  quotation-drafting state on ``workflow_runs`` (``drafting``, ``draft_attempt_count``, the
+  ``quote_id`` link, three CHECKs, two indexes). Same overlays as WORKFLOW. Its digest is
+  UNMEASURED (fails closed) until measured on the guarded test database (contract-pins test).
+- ``WORKFLOW`` (Checkpoints A1/A2, 2026-11-17): head ``20261117_02``, the workflow queue
+  columns, CHECKs and active-run index and the ``rfq_workflow_agent`` role value; accepts
+  ``rbac-policy-v2``, ``-v3`` and ``-v4``. Measured; kept as a record.
+- ``CUSTOMER`` (Milestone 2 Step 1): head ``20261117_01``, K5 plus the ``customer`` role
+  value; accepts ``rbac-policy-v2`` and ``rbac-policy-v3``. Kept as a record.
+- ``K5`` (Day 55, measured 2026-11-17): head ``20261116_04`` (decision-authority
   guards: decisions only by the ``rfq_quote_decision`` group, actor entitlement and
   separation, expiry, commit-time history/request binding, rejected-quote resubmission).
-  Its two constraint triggers change the shape digest; the file pin and the digests are
-  UNMEASURED until the user measures them (every comparison fails closed).
+  Its two constraint triggers change the shape digest. Kept as a record; its guards remain
+  the active guard allowlist.
 - ``K4`` (Day 54D, kept as a record): head ``20261116_03`` (human lifecycle
   guards: submit, approve, reject, release) on top of K3. K4 adds no table, column,
   constraint or index, so K3's measured shape digest and catalog counts hold by
@@ -142,16 +151,52 @@ K4 = SchemaContract(
     guards_revisions=(*K3.guards_revisions, "20261116_03"),
 )
 
-CURRENT = SchemaContract(
+K5 = SchemaContract(
     name="k5-20261116_04",
     revision="20261116_04",
     # K4 + the K5 decision-authority triggers and functions. No key/CHECK/index change (the
     # catalog counts hold), but the two deferred constraint triggers are pg_constraint rows
-    # (contype 't') in the shape: re-measured on the guarded test DB before it is trusted.
+    # (contype 't') in the shape: measured on the guarded test DB (K5 preflight, 2026-11-17).
     shape_digest="9f84633742a079c0bc047ce907c4f92ea6a700cffde54dba6d326abf35dcd259",
     catalog_counts=K4.catalog_counts,
     policy_overlays=K4.policy_overlays,
     guards_revisions=(*K4.guards_revisions, "20261116_04"),
+)
+
+CUSTOMER = SchemaContract(
+    name="customer-20261117_01",
+    revision="20261117_01",
+    # K5 + the customer role value: ck_roles_rule_01 keeps its name and type, so the shape
+    # (names/types) and catalog counts hold by construction, as K4 on K3. Re-measured by
+    # tests/test_policy_overlay_lifecycle.py before it is trusted. Accepts rbac-policy-v3
+    # (a superset of v2) as well as v2 itself.
+    shape_digest=K5.shape_digest,
+    catalog_counts=K5.catalog_counts,
+    policy_overlays=frozenset({"rbac-policy-v2", "rbac-policy-v3"}),
+    guards_revisions=K5.guards_revisions,  # no trigger or function: not a guard revision
+)
+
+WORKFLOW = SchemaContract(
+    name="workflow-20261117_02",
+    revision="20261117_02",
+    # CUSTOMER + 6 workflow_runs columns, 6 CHECKs, the active-run unique partial index and
+    # the rfq_workflow_agent role value. Measured on the guarded test DB (2026-11-17).
+    shape_digest="27930009ea9de18c7504bc7dda32f137e23800078bcba110ca7f1b522405208a",
+    catalog_counts=MappingProxyType({"p": 36, "f": 72, "u": 17, "c": 233}),
+    policy_overlays=frozenset({"rbac-policy-v2", "rbac-policy-v3", "rbac-policy-v4"}),
+    guards_revisions=K5.guards_revisions,  # no trigger or function: not a guard revision
+)
+
+CURRENT = SchemaContract(
+    name="drafting-20261118_01",
+    revision="20261118_01",
+    # WORKFLOW + draft_attempt_count, quote_id (one FK), rule_08/09/10 (three CHECKs; rule_01,
+    # 03, 05 and 06 replaced in place) and two indexes (no constraint). Measure on the guarded
+    # test DB with tests/test_policy_overlay_lifecycle.py -k current_contract_pins.
+    shape_digest="ab32fc22717087839254a5a3b894ba2bb93b4d110655b51384e2338a4929bb72",
+    catalog_counts=MappingProxyType({"p": 36, "f": 73, "u": 17, "c": 236}),
+    policy_overlays=WORKFLOW.policy_overlays,
+    guards_revisions=K5.guards_revisions,  # no trigger or function: not a guard revision
 )
 
 # Deferred 20261111_05 (multi-customer staff), integrated and verified by
@@ -165,9 +210,11 @@ NEXT = SchemaContract(
     revision="20261116_02",
     # K4's measurement (3278543607ce…03e3) no longer holds: K5's two constraint triggers are in
     # the shape. Re-measure with tests/test_multi_customer_lifecycle.py (prints the digest).
-    shape_digest="8911472932fce67a9db27e006289f692223ba32d65cbca565033072fa56e1654",
+    # The A1/A2 queue (20261117_02) measured 06da0203…7230d; A4 drafting (20261118_01) changes
+    # the shape again: re-measure with tests/test_multi_customer_lifecycle.py -k next_contract_pins.
+    shape_digest="f2381ec6490cc193aba3e2ed8011bd55ddd4ab56e8c952942924a40556acc41b",
     catalog_counts=CURRENT.catalog_counts,  # 05 drops an index only (verify_definitions checks)
-    policy_overlays=frozenset({"rbac-policy-v2"}),
+    policy_overlays=CURRENT.policy_overlays,
     multi_customer_bindings=True,
     version_locations=(VERSIONS, DEFERRED),
     guards_revisions=CURRENT.guards_revisions,

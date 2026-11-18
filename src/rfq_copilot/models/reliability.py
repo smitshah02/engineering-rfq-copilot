@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
@@ -275,7 +276,10 @@ class WorkflowRun(Base):
             match="SIMPLE",
         ),
         CheckConstraint(
-            "status IN ('running','waiting_human','blocked','failed','completed')", name="rule_01"
+            # queued: Checkpoint A1 durable processing queue (20261117_02); drafting:
+            # Checkpoint A4 quotation drafter (20261118_01).
+            "status IN ('queued','running','drafting','waiting_human','blocked','failed','completed')",
+            name="rule_01",
         ),
         CheckConstraint("updated_at >= created_at", name="rule_02"),
         CheckConstraint(
@@ -298,6 +302,65 @@ class WorkflowRun(Base):
         CheckConstraint(
             "jsonb_typeof(source_snapshot_versions) = 'object'",
             name="source_snapshot_versions_shape",
+        ),
+        # Checkpoint A1 (20261117_02): lease, fencing, attempts and allow-listed outcome;
+        # Checkpoint A4 (20261118_01) widened rule_03/05/06 and added rule_08/09/10.
+        CheckConstraint(
+            "(lease_owner IS NULL) = (lease_expires_at IS NULL) "
+            "AND (status IN ('running','drafting') OR lease_owner IS NULL)",
+            name="rule_03",
+        ),
+        CheckConstraint("attempt_count BETWEEN 0 AND 3", name="rule_04"),
+        CheckConstraint("claim_generation >= attempt_count + draft_attempt_count", name="rule_05"),
+        CheckConstraint(
+            "disposition IS NULL OR (disposition IN ('clarification_required','review_required',"
+            "'not_quotable','not_evaluated','source_mismatch','ready_for_draft',"
+            "'technical_failure','configuration_error','draft_created','draft_refused') "
+            "AND status IN ('waiting_human','blocked','failed','completed'))",
+            name="rule_06",
+        ),
+        CheckConstraint("last_error IS NULL OR last_error ~ '^[a-z_]{1,64}$'", name="rule_07"),
+        CheckConstraint(
+            "length(btrim(lease_owner)) > 0 AND length(lease_owner) <= 128",
+            name="lease_owner_identity",
+        ),
+        CheckConstraint("draft_attempt_count BETWEEN 0 AND 3", name="rule_08"),
+        CheckConstraint("quote_id IS NULL OR status = 'completed'", name="rule_09"),
+        CheckConstraint(
+            "(quote_id IS NOT NULL) = (COALESCE(disposition, '') = 'draft_created')",
+            name="rule_10",
+        ),
+        ForeignKeyConstraint(
+            ["quote_id"],
+            ["business.quotes.quote_id"],
+            ondelete="RESTRICT",
+            onupdate="RESTRICT",
+            match="SIMPLE",
+        ),
+        Index(
+            "uq_workflow_runs_quote_id",
+            "quote_id",
+            unique=True,
+            postgresql_using="btree",
+            postgresql_where=text("quote_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_workflow_runs_claimable",
+            "created_at",
+            "workflow_run_id",
+            unique=False,
+            postgresql_using="btree",
+            postgresql_where=text(
+                "status IN ('queued','running','drafting') "
+                "OR (status = 'completed' AND disposition = 'ready_for_draft')"
+            ),
+        ),
+        Index(
+            "uq_workflow_runs_active_rfq",
+            "rfq_id",
+            unique=True,
+            postgresql_using="btree",
+            postgresql_where=text("status IN ('queued','running')"),
         ),
         Index(
             "ix_workflow_runs_rfq_time",
@@ -332,6 +395,20 @@ class WorkflowRun(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
+    lease_owner: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer(), server_default=text("0"), nullable=False)
+    claim_generation: Mapped[int] = mapped_column(
+        BigInteger(), server_default=text("0"), nullable=False
+    )
+    disposition: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    draft_attempt_count: Mapped[int] = mapped_column(
+        Integer(), server_default=text("0"), nullable=False
+    )
+    quote_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
     customer: Mapped[Customer] = relationship(
         "Customer",
@@ -356,6 +433,15 @@ class WorkflowRun(Base):
         back_populates="workflow_runs",
         primaryjoin="WorkflowRun.initiated_by == User.user_id",
         foreign_keys="[WorkflowRun.initiated_by]",
+        lazy="raise",
+        uselist=False,
+        cascade="save-update, merge",
+    )
+    quote: Mapped[Quote | None] = relationship(
+        "Quote",
+        back_populates="workflow_runs",
+        primaryjoin="WorkflowRun.quote_id == Quote.quote_id",
+        foreign_keys="[WorkflowRun.quote_id]",
         lazy="raise",
         uselist=False,
         cascade="save-update, merge",

@@ -70,8 +70,9 @@ DECISION_UPDATABLE = frozenset(
 )
 DECISION_INSERTABLE = frozenset({"approval_history", "audit_events", "idempotency_records"})
 # The only tables the runtime role may INSERT into: the six K2 tables and, since K3, the
-# calculation records (docs/database/k2_runtime_roles.sql). Rule versions, RFQs, approval
-# rows and everything else are owner-written; an INSERT grant there is a violation.
+# calculation records (docs/database/k2_runtime_roles.sql). Since Milestone 2 Step 2 also
+# customer RFQs and their lines (INSERT only: k2_*_immutable refuses UPDATE and DELETE).
+# Rule versions and everything else are owner-written; an INSERT grant there is a violation.
 RUNTIME_INSERTABLE = frozenset(
     {
         "rfq_attachments",
@@ -84,6 +85,55 @@ RUNTIME_INSERTABLE = frozenset(
         # K4 (Day 54D): one pending request per version and its append-only history.
         "approval_requests",
         "approval_history",
+        # Milestone 2 Step 2: POST /api/v1/rfqs (rfq_submission).
+        "rfqs",
+        "rfq_line_items",
+        # Checkpoint A1: the RFQ's queued processing request, in the same transaction.
+        "workflow_runs",
+    }
+)
+# Checkpoint A1/A3: the dedicated workflow worker role (docs/database/a1_workflow_role.sql).
+# It claims, heartbeats and settles runs, and writes their audit events; nothing else. It
+# cannot create RFQs, enqueue, or touch a quotation (no INSERT/UPDATE there at all).
+WORKFLOW_UPDATABLE = frozenset(
+    {
+        "workflow_runs.status",
+        "workflow_runs.lease_owner",
+        "workflow_runs.lease_expires_at",
+        "workflow_runs.attempt_count",
+        "workflow_runs.claim_generation",
+        "workflow_runs.disposition",
+        "workflow_runs.last_error",
+        "workflow_runs.external_workflow_id",
+        "workflow_runs.updated_at",
+    }
+)
+WORKFLOW_INSERTABLE = frozenset({"audit_events"})
+# Checkpoint A4: the quotation-drafter role (docs/database/a4_drafter_role.sql). It inserts one
+# new draft through quote_drafts.create_quote_draft (the quote, version 1, its lines, the K3
+# calculation record, the receipt and the audit event) and settles the drafting phase of its
+# claimed run. No UPDATE of any quotation, RFQ, approval or identity row; no decision group.
+DRAFTER_UPDATABLE = frozenset(
+    {
+        "workflow_runs.status",
+        "workflow_runs.lease_owner",
+        "workflow_runs.lease_expires_at",
+        "workflow_runs.claim_generation",
+        "workflow_runs.draft_attempt_count",
+        "workflow_runs.disposition",
+        "workflow_runs.last_error",
+        "workflow_runs.quote_id",
+        "workflow_runs.updated_at",
+    }
+)
+DRAFTER_INSERTABLE = frozenset(
+    {
+        "quotes",
+        "quote_versions",
+        "quote_line_items",
+        "pricing_calculations",
+        "idempotency_records",
+        "audit_events",
     }
 )
 _RUNTIME_ROLE_CHECKS = text(
@@ -127,7 +177,7 @@ _RUNTIME_ROLE_CHECKS = text(
 
 
 async def runtime_role_violations(
-    session: AsyncSession, *, decision: bool = False
+    session: AsyncSession, *, decision: bool = False, workflow: bool = False, drafter: bool = False
 ) -> tuple[str, ...]:
     """What makes the session's current role unfit to run binding work; () if restricted.
 
@@ -138,11 +188,19 @@ async def runtime_role_violations(
     the K2/K3 trigger functions, and SET on ``session_replication_role`` (which would
     silence non-ALWAYS triggers). K5: ``decision=True`` checks the decision role instead
     (``DECISION_UPDATABLE``/``DECISION_INSERTABLE``, member of ``DECISION_GROUP``); the
-    ordinary runtime role must not be a member (``decision_membership``).
+    ordinary runtime role must not be a member (``decision_membership``). A1:
+    ``workflow=True`` checks the worker role (``WORKFLOW_UPDATABLE``/``WORKFLOW_INSERTABLE``,
+    never a decision-group member).
     """
+    if decision + workflow + drafter > 1:
+        raise ValueError("Choose one restricted-role check.")
     updatable, insertable = (
         (DECISION_UPDATABLE, DECISION_INSERTABLE)
         if decision
+        else (WORKFLOW_UPDATABLE, WORKFLOW_INSERTABLE)
+        if workflow
+        else (DRAFTER_UPDATABLE, DRAFTER_INSERTABLE)
+        if drafter
         else (RUNTIME_UPDATABLE, RUNTIME_INSERTABLE)
     )
     found = await session.scalar(
@@ -174,6 +232,29 @@ async def require_decision_runtime(session: AsyncSession) -> None:
     if violations:
         raise PrivilegedRuntimeRole(
             "Decision refused: the database role is not the restricted decision role ("
+            + ", ".join(violations)
+            + ")."
+        )
+
+
+async def require_workflow_runtime(session: AsyncSession) -> None:
+    """A1: fail closed unless the session is the restricted workflow worker role."""
+    violations = await runtime_role_violations(session, workflow=True)
+    if violations:
+        raise PrivilegedRuntimeRole(
+            "Workflow refused: the database role is not the restricted workflow role ("
+            + ", ".join(violations)
+            + ")."
+        )
+
+
+async def require_drafter_runtime(session: AsyncSession) -> None:
+    """A4: fail closed unless the session is the restricted quotation-drafter role (not the
+    owner, the API role, the workflow worker or a decision-group member)."""
+    violations = await runtime_role_violations(session, drafter=True)
+    if violations:
+        raise PrivilegedRuntimeRole(
+            "Drafting refused: the database role is not the restricted drafter role ("
             + ", ".join(violations)
             + ")."
         )
@@ -231,9 +312,14 @@ class Database:
                     # A URL/flag cannot prove restricted authority. Check before identity
                     # reads or route work, on every session, without leaving an implicit
                     # transaction that would break caller-owned begin()/snapshot setup.
-                    if self.config.runtime or self.config.decision:
-                        if self.config.decision:
+                    config = self.config
+                    if config.runtime or config.decision or config.workflow or config.drafter:
+                        if config.decision:
                             await require_decision_runtime(session)
+                        elif config.workflow:
+                            await require_workflow_runtime(session)
+                        elif config.drafter:
+                            await require_drafter_runtime(session)
                         else:
                             await require_restricted_runtime(session)
                         await session.rollback()

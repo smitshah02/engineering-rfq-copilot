@@ -174,6 +174,43 @@ K3_RULE_10 = (
 )
 
 
+A1_WORKFLOW_CHECKS = [
+    "(lease_owner IS NULL) = (lease_expires_at IS NULL) AND (status = 'running' OR lease_owner IS NULL)",
+    "attempt_count BETWEEN 0 AND 3",
+    "claim_generation >= attempt_count",
+    "disposition IS NULL OR (disposition IN ('clarification_required','review_required',"
+    "'not_quotable','not_evaluated','source_mismatch','ready_for_draft',"
+    "'technical_failure','configuration_error') "
+    "AND status IN ('waiting_human','blocked','failed','completed'))",
+    "last_error IS NULL OR last_error ~ '^[a-z_]{1,64}$'",
+    "length(btrim(lease_owner)) > 0 AND length(lease_owner) <= 128",
+]
+
+
+# Approved Checkpoint A4 delta (20261118_01): A1 rule -> its widened A4 form, plus new rules.
+A4_REPLACED = {
+    "status IN ('queued','running','waiting_human','blocked','failed','completed')":
+        "status IN ('queued','running','drafting','waiting_human','blocked','failed','completed')",
+    A1_WORKFLOW_CHECKS[0]:
+        "(lease_owner IS NULL) = (lease_expires_at IS NULL) AND (status IN ('running','drafting') OR lease_owner IS NULL)",
+    A1_WORKFLOW_CHECKS[2]: "claim_generation >= attempt_count + draft_attempt_count",
+    A1_WORKFLOW_CHECKS[3]:
+        "disposition IS NULL OR (disposition IN ('clarification_required','review_required',"
+        "'not_quotable','not_evaluated','source_mismatch','ready_for_draft',"
+        "'technical_failure','configuration_error','draft_created','draft_refused') "
+        "AND status IN ('waiting_human','blocked','failed','completed'))",
+}  # fmt: skip
+A4_ADDED_CHECKS = [
+    "draft_attempt_count BETWEEN 0 AND 3",
+    "quote_id IS NULL OR status = 'completed'",
+    "(quote_id IS NOT NULL) = (COALESCE(disposition, '') = 'draft_created')",
+]
+A4_CLAIMABLE = (
+    "status IN ('queued','running','drafting') "
+    "OR (status = 'completed' AND disposition = 'ready_for_draft')"
+)
+
+
 def k3_column(name, kind, nullable=True, rule="—"):
     """A K3 (20261116_01) column in the approved-spec shape."""
     return dict(name=name, type=kind, nullable=nullable, default="none", rule=rule)
@@ -245,7 +282,9 @@ def approved():
     # Approved Phase 3.5 deltas (20261111_04, 20261111_06): asserted as documented first.
     roles_check = "role IN ('sales_representative','estimator','manufacturing_engineer','sales_manager','administrator','auditor')"  # fmt: skip
     assert tables["roles"]["checks"] == [roles_check]
-    tables["roles"]["checks"] = [roles_check[:-1] + ",'identity_operator')"]
+    # ... plus Milestone 2 Step 1 (20261117_01): the external customer role value, and
+    # Checkpoint A2 (20261117_02): the internal rfq_workflow_agent service role value.
+    tables["roles"]["checks"] = [roles_check[:-1] + ",'identity_operator','customer','rfq_workflow_agent')"]  # fmt: skip
     operation = next(c for c in tables["idempotency_records"]["checks"] if c.startswith("operation IN"))  # fmt: skip
     assert operation.endswith("'edit_quote_draft')")
     tables["idempotency_records"]["checks"] = [
@@ -313,6 +352,29 @@ def approved():
         k3_column("horizon_start", "DATE"),
         k3_column("requested_delivery_date", "DATE"),
     ]
+    # Approved Checkpoint A1 delta (20261117_02), asserted as documented first: the durable
+    # queue status, lease/fencing/attempt columns and allow-listed outcome codes.
+    runs = tables["workflow_runs"]
+    status = "status IN ('running','waiting_human','blocked','failed','completed')"
+    assert status in runs["checks"] and runs["columns"][-1]["name"] == "updated_at"
+    runs["checks"] = [c.replace("IN ('running'", "IN ('queued','running'") if c == status else c for c in runs["checks"]]  # fmt: skip
+    runs["checks"] += A1_WORKFLOW_CHECKS
+    runs["columns"] += [
+        k3_column("lease_owner", "TEXT"),
+        k3_column("lease_expires_at", "TIMESTAMPTZ"),
+        dict(name="attempt_count", type="INTEGER", nullable=False, default="0", rule="—"),
+        dict(name="claim_generation", type="BIGINT", nullable=False, default="0", rule="—"),
+        k3_column("disposition", "TEXT"),
+        k3_column("last_error", "TEXT"),
+    ]
+    # Approved Checkpoint A4 delta (20261118_01), asserted on the A1 rules first.
+    assert set(A4_REPLACED) <= set(runs["checks"])
+    runs["checks"] = [A4_REPLACED.get(c, c) for c in runs["checks"]] + A4_ADDED_CHECKS
+    runs["columns"] += [
+        dict(name="draft_attempt_count", type="INTEGER", nullable=False, default="0", rule="—"),
+        k3_column("quote_id", "TEXT"),
+    ]
+    runs["fks"].append(k3_fk(("quote_id",), "quotes", ("quote_id",)))
     return tables
 
 
@@ -485,6 +547,10 @@ def expected_shared_checks(table):
 def test_exact_table_and_common_checks_match_day4(approved, name):
     checks = [key for key in orm_table(name).constraints if isinstance(key, CheckConstraint)]
     wanted = approved[name]["checks"] + expected_shared_checks(approved[name])
+    # A4: workflow_runs.quote_id is nullable and protected by its FK
+    # to business.quotes, which already validates quote ID length.
+    if name == "workflow_runs":
+        wanted.remove("length(btrim(quote_id)) > 0 AND length(quote_id) <= 64")
     assert {normalized(check.sqltext) for check in checks} == {normalized(sql) for sql in wanted}
     assert len(checks) == len(wanted)
     assert all(check.name for check in checks)
@@ -544,7 +610,18 @@ def test_every_documented_index_matches_with_no_redundant_indexes():
     expectations["ix_token_revocations_user_not_before"] = (
         "token_revocations", ("user_id", "not_before"), False, normalized("not_before IS NOT NULL"),
     )  # fmt: skip
-    assert found == expectations and len(found) == 19
+    # Checkpoint A1 (20261117_02): at most one active run per RFQ.
+    expectations["uq_workflow_runs_active_rfq"] = (
+        "workflow_runs", ("rfq_id",), True, normalized("status IN ('queued','running')"),
+    )  # fmt: skip
+    # Checkpoint A4 (20261118_01): one run per linked quote, and the claimable rows.
+    expectations["uq_workflow_runs_quote_id"] = (
+        "workflow_runs", ("quote_id",), True, normalized("quote_id IS NOT NULL"),
+    )  # fmt: skip
+    expectations["ix_workflow_runs_claimable"] = (
+        "workflow_runs", ("created_at", "workflow_run_id"), False, normalized(A4_CLAIMABLE),
+    )  # fmt: skip
+    assert found == expectations and len(found) == 22
 
 
 @pytest.mark.parametrize("name", APPROVED_TABLES)
@@ -595,7 +672,7 @@ def test_each_fk_has_a_resolved_bidirectional_relationship(approved, name):
 
 def test_relationship_count_and_core_ownership_paths():
     # 128 + K3's QuoteVersion.evidence_quote / Quote.evidenced_versions pair.
-    assert sum(len(inspect(model).relationships) for model in MODEL_CLASSES) == 130
+    assert sum(len(inspect(model).relationships) for model in MODEL_CLASSES) == 132
     assert inspect(RFQ).relationships.quote.uselist is False
     assert inspect(Quote).relationships.versions.uselist is True
     assert inspect(QuoteVersion).relationships.line_items.uselist is True

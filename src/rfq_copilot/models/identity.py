@@ -40,7 +40,10 @@ class Role(Base):
         CheckConstraint(
             # identity_operator: approved Phase 3.5 D3 (20261111_06); the role row and its two
             # operator permissions come only from the pinned rbac-policy-v2 overlay.
-            "role IN ('sales_representative','estimator','manufacturing_engineer','sales_manager','administrator','auditor','identity_operator')",
+            # customer: approved Milestone 2 Step 1 (20261117_01); row and grants only from
+            # the pinned rbac-policy-v3 overlay. rfq_workflow_agent: Checkpoint A2 internal
+            # service role (20261117_02); row and grants only from rbac-policy-v4.
+            "role IN ('sales_representative','estimator','manufacturing_engineer','sales_manager','administrator','auditor','identity_operator','customer','rfq_workflow_agent')",
             name="rule_01",
         ),
         CheckConstraint("length(btrim(role)) > 0", name="role_nonblank"),

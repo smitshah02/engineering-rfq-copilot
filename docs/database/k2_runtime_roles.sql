@@ -61,6 +61,13 @@ GRANT UPDATE (is_current) ON business.quote_versions TO :"app";
 -- No semicolon may appear inside this block's comments: the test fixture splits on it.
 GRANT INSERT ON business.approval_requests, business.approval_history TO :"app";
 GRANT UPDATE (submitted_by, rejection_reason) ON business.quotes TO :"app";
+-- Milestone 2 Step 2 customer RFQ creation. INSERT only, and k2_rfqs_immutable and
+-- k2_rfq_line_items_immutable refuse UPDATE and DELETE even for a granted role.
+GRANT INSERT ON business.rfqs, business.rfq_line_items TO :"app";
+-- Checkpoint A1 (20261117_02). The RFQ's queued processing request, in the RFQ's own
+-- transaction. INSERT only: claiming and settling runs belong to the workflow worker role
+-- (docs/database/a1_workflow_role.sql), never to the customer-facing API.
+GRANT INSERT ON orchestration.workflow_runs TO :"app";
 -- END K2 TABLE GRANTS
 --
 -- Not granted, deliberately: DELETE, TRUNCATE, TRIGGER, REFERENCES anywhere; CREATE on any

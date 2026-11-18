@@ -30,7 +30,7 @@ from rfq_copilot.models.base import Base
 if TYPE_CHECKING:
     from rfq_copilot.models.approvals import ApprovalHistory, ApprovalRequest
     from rfq_copilot.models.identity import User
-    from rfq_copilot.models.reliability import AuditEvent
+    from rfq_copilot.models.reliability import AuditEvent, WorkflowRun
     from rfq_copilot.models.rfqs import RFQ
     from rfq_copilot.models.rules import BusinessRuleVersion
 
@@ -409,6 +409,17 @@ class Quote(Base):
         back_populates="quote",
         primaryjoin="AuditEvent.quote_id == Quote.quote_id",
         foreign_keys="[AuditEvent.quote_id]",
+        lazy="raise",
+        uselist=True,
+        cascade="save-update, merge",
+        passive_deletes="all",
+    )
+    # Checkpoint A4 (20261118_01): the workflow run that created this internal draft.
+    workflow_runs: Mapped[list[WorkflowRun]] = relationship(
+        "WorkflowRun",
+        back_populates="quote",
+        primaryjoin="WorkflowRun.quote_id == Quote.quote_id",
+        foreign_keys="[WorkflowRun.quote_id]",
         lazy="raise",
         uselist=True,
         cascade="save-update, merge",

@@ -9,7 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.naming import conv
 
 import rfq_copilot.quote_drafts as quote_drafts
 from rfq_copilot.api.auth import Principal
@@ -348,7 +351,13 @@ def test_only_named_unique_violations_are_classified():
 def test_constraint_names_match_the_approved_migration():
     migration = INITIAL.read_text()
     assert 'name=op.f("uq_quotes_rfq_id")' in migration
-    assert f'op.f("{quote_drafts.RECEIPT_KEY}")' in migration
+    # The historical migration keeps its declared 69-character name; PostgreSQL stores the
+    # name SQLAlchemy's identifier formatting derives from it (63-character limit).
+    declared = "uq_idempotency_records_actor_id_customer_id_operation_idempotency_key"
+    assert f'name=op.f("{declared}")' in migration
+    preparer = postgresql.dialect().identifier_preparer
+    stored = preparer.format_constraint(UniqueConstraint(name=conv(declared)), _alembic_quote=False)
+    assert stored == quote_drafts.RECEIPT_KEY
     # The pointer the service defers is the one created DEFERRABLE INITIALLY DEFERRED.
     schema, name = quote_drafts.CURRENT_VERSION_FK.split(".")
     assert schema == "business" and name == "fk_quotes_quote_id_current_version_quote_versions"

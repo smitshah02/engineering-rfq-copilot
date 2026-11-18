@@ -171,9 +171,16 @@ def verify_definitions(connection):
     }
 
 
-async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
-    """Inspect a caller-owned session without commits, DML or importer counters."""
+async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan, runtime: bool = False):
+    """Inspect a caller-owned session without commits, DML or importer counters.
+
+    ``runtime=True`` (opt-in, ``--runtime``) additionally accepts non-seed rows that
+    ``runtime_integrity`` can explain; seed rows are verified exactly either way.
+    """
+    if runtime:  # the strict default imports nothing new
+        from rfq_copilot.runtime_integrity import RUNTIME_TABLES, verify_runtime
     validate_target(config)
+    runtime_extras, all_users = {}, {}
     connection = await session.connection()
     identity = await connection.run_sync(verify_schema, config)
     definitions = await connection.run_sync(verify_definitions)
@@ -259,6 +266,13 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
         ]
         policy_extras[name] = overlay
         extras = [r for r in stored if is_registered_extra(name, r, baseline)] + overlay
+        if runtime and name in RUNTIME_TABLES:
+            runtime_extras[name] = [
+                r for r in stored if tuple(r[c] for c in key_columns) not in source_keys
+            ]
+            extras += runtime_extras[name]
+            if name == "users":
+                all_users = {r["user_id"]: r for r in stored}
         check(count - len(extras) == len(plan.rows[name]), table.fullname, "source count differs")
         for expected in plan.rows[name]:
             key = tuple(expected[c] for c in key_columns)
@@ -296,10 +310,11 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
         }
     overlay = overlay_state(policy_extras)
     check(overlay is not None, "permission policy overlay", "partial or modified overlay")
+    runtime_report = verify_runtime(runtime_extras, all_users, overlay) if runtime else None
     snapshot_artifacts(plan)
     after = await fingerprint(session)
     check(before == after, "database", "verification changed the snapshot")
-    return {
+    report = {
         "status": "PASS",
         **identity,
         "definitions": definitions,
@@ -319,9 +334,13 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan):
         "preserved": before == after,
         "source_integrity": plan.bundle.integrity,
     }
+    if runtime:  # strict reports keep their exact shape
+        report["mode"] = "runtime"
+        report["runtime_records"] = runtime_report
+    return report
 
 
-async def run_integrity(config, plan):
+async def run_integrity(config, plan, runtime: bool = False):
     started = time.monotonic()
     validate_target(config)
     async with Database(config, read_only=True) as database:
@@ -330,7 +349,7 @@ async def run_integrity(config, plan):
                 await session.execute(
                     text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 )
-                result = await audit_integrity(session, config, plan)
+                result = await audit_integrity(session, config, plan, runtime)
     result["duration_seconds"] = round(time.monotonic() - started, 4)
     return result
 
@@ -344,11 +363,17 @@ def main(argv=None):
     parser.add_argument("--archive", required=True, type=Path)
     parser.add_argument("--snapshot-dir", required=True, type=Path)
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument(
+        "--runtime",
+        action="store_true",
+        help="also accept audited operator/customer-portal records (default: strict seed)",
+    )
     args = parser.parse_args(argv)
     try:
         config = DatabaseConfig.from_env(args.target, env_file=Path(args.env_file))
         plan = build_plan(load_sources(args.source, args.archive), args.snapshot_dir)
-        print(json.dumps(asyncio.run(run_integrity(config, plan)), sort_keys=True))
+        result = asyncio.run(run_integrity(config, plan, args.runtime))
+        print(json.dumps(result, sort_keys=True))
         return 0
     except (
         IntegrityVerificationError,

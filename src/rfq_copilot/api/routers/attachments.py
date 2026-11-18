@@ -233,7 +233,9 @@ async def upload_attachment(
         if key is not None:
             if principal.user_id is None:
                 raise unavailable()  # receipts need the verified actor
-            if not 0 < len(key) <= 256 or not key.isascii() or not key.isprintable() or key != key.strip():  # fmt: skip
+            from rfq_copilot.repositories.idempotency import valid_key
+
+            if not valid_key(key):
                 return rejection("idempotency_key_invalid")
     owned = await rfq_belongs_to(session, rfq_id, customer_id=customer_id, assigned_user=assigned)
     await session.rollback()  # hand the connection back while the body streams in

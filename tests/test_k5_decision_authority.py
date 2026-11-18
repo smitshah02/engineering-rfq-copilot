@@ -47,8 +47,10 @@ def test_the_revision_is_the_head_on_top_of_k4_and_pinned_independently():
     assert (module.revision, module.down_revision) == ("20261116_04", "20261116_03")
     measured = hashlib.sha256(K5_FILE.read_bytes()).hexdigest()
     assert schema_contract.GUARD_FILE_SHA256["20261116_04"] == measured, f"pin {measured}"
-    current, k4 = schema_contract.CURRENT, schema_contract.K4
-    assert current.revision == "20261116_04" and schema_contract.active() is current
+    current, k4 = schema_contract.K5, schema_contract.K4
+    assert current.revision == "20261116_04"
+    # The customer role (20261117_01) on top of K5 adds no guard: K5's allowlist stays active.
+    assert schema_contract.active().guards_revisions == current.guards_revisions
     assert current.guards_revisions == (*k4.guards_revisions, "20261116_04")
     # Keys, CHECKs and indexes unchanged; the constraint triggers change the measured shape.
     assert current.catalog_counts == k4.catalog_counts

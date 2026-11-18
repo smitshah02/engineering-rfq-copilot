@@ -124,6 +124,16 @@ class RfqReceipt(BaseModel):
     status: Literal["draft"]
 
 
+class RfqRejection(BaseModel):
+    """A refused RFQ submission. ``message`` is static text; nothing is echoed back."""
+
+    model_config = _STRICT
+
+    code: Literal["RFQ_REJECTED"]
+    message: str
+    reason: str
+
+
 class QuoteLineAmount(BaseModel):
     model_config = _STRICT
 

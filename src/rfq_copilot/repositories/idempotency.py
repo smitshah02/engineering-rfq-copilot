@@ -18,6 +18,11 @@ from rfq_copilot.repositories.queries import _identifier
 UPLOAD_OPERATION = "attach_rfq_document"
 
 
+def valid_key(key: str) -> bool:
+    """An ``Idempotency-Key`` header value: 1 to 256 visible ASCII characters, unpadded."""
+    return 0 < len(key) <= 256 and key.isascii() and key.isprintable() and key == key.strip()
+
+
 async def find_receipt(
     session: AsyncSession,
     *,

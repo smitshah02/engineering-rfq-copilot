@@ -118,7 +118,7 @@ def grants(rows):
 async def test_current_contract_pins_are_the_measured_schema(proposed_database):
     async with proposed_database.engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM public.alembic_version"))
-        assert revision == schema_contract.CURRENT.revision == "20261116_04"
+        assert revision == schema_contract.CURRENT.revision == "20261118_01"
         # The measurement point: the failure message prints the digest to pin (K3, Day 54B).
         digest = await connection.run_sync(lambda c: shape_digest(owned_shape(c)))
         assert digest == schema_contract.CURRENT.shape_digest, digest
@@ -126,8 +126,10 @@ async def test_current_contract_pins_are_the_measured_schema(proposed_database):
         drift = await connection.run_sync(metadata_drift)
         assert drift == [], drift
         report = await connection.run_sync(verify_schema, proposed_database.config)
-        assert report["alembic_revision"] == "20261116_04"
-        assert digest not in (schema_contract.PREVIOUS.shape_digest, schema_contract.ACTIVATED_06.shape_digest, schema_contract.K2.shape_digest)  # fmt: skip
+        assert report["alembic_revision"] == "20261118_01"
+        # The customer CHECK kept K5's shape; the A1 queue columns and CHECKs change it.
+        assert schema_contract.CUSTOMER.shape_digest == schema_contract.K5.shape_digest
+        assert digest not in (schema_contract.PREVIOUS.shape_digest, schema_contract.ACTIVATED_06.shape_digest, schema_contract.K2.shape_digest, schema_contract.K5.shape_digest, schema_contract.WORKFLOW.shape_digest)  # fmt: skip
 
 
 # --- The lifecycle ---------------------------------------------------------------------------
@@ -224,8 +226,65 @@ async def test_tampered_or_unknown_policy_is_refused(session, proposed_database,
         await register_policy(session, "rbac-policy-v2")
     monkeypatch.undo()
     with pytest.raises(SeedError):
-        await register_policy(session, "rbac-policy-v3")
+        await register_policy(session, "rbac-policy-v9")
     assert await session.scalar(select(func.count()).select_from(Role).where(Role.role == "identity_operator")) == 0  # fmt: skip
+
+
+# --- rbac-policy-v3: the customer role (20261117_01) ----------------------------------------
+
+V3_EXTRA_ROWS = 1 + 4 + 5  # customer, 4 customer_* permissions, 5 customer grants
+CUSTOMER_GRANTS = {"view_customer", "customer_view_rfq", "customer_create_rfq", "customer_view_quote", "customer_attach_rfq_document"}  # fmt: skip
+
+
+async def test_v3_upgrades_a_complete_v2_and_both_verifiers_accept_it(session, proposed_database, seed_plan):  # fmt: skip
+    await seed(session, proposed_database, seed_plan)
+    baseline = await audit_integrity(session, proposed_database.config, seed_plan)
+    assert await register_policy(session, "rbac-policy-v2") == "applied"
+    assert await register_policy(session, "rbac-policy-v3") == "upgraded"
+    assert await register_policy(session, "rbac-policy-v3") == "already present"
+    report = await audit_integrity(session, proposed_database.config, seed_plan)
+    assert report["status"] == "PASS" and report["policy_overlay"] == "applied:rbac-policy-v3"
+    assert report["records"] == baseline["records"] + OVERLAY_ROWS + V3_EXTRA_ROWS
+    verified = await execute_seed(session, proposed_database.config, seed_plan, "verify", confirm_database="rfq_copilot_test")  # fmt: skip
+    assert verified["status"] == "PASS"
+    customer = set((await session.scalars(select(RolePermission.permission).where(RolePermission.role == "customer"))).all())  # fmt: skip
+    assert customer == CUSTOMER_GRANTS
+    # Staff grants are exactly v2's: v3 changes nothing for any other role.
+    assert grants(policy_rows("rbac-policy-v3")) - grants(policy_rows("rbac-policy-v2")) == {("customer", p) for p in CUSTOMER_GRANTS}  # fmt: skip
+
+
+async def test_v3_applies_on_a_fresh_seed_and_refuses_a_damaged_v2(session, proposed_database, seed_plan):  # fmt: skip
+    await seed(session, proposed_database, seed_plan)
+    savepoint = await session.begin_nested()
+    assert await register_policy(session, "rbac-policy-v3") == "applied"
+    await savepoint.rollback()
+    await register_policy(session, "rbac-policy-v2")
+    await session.execute(delete(RolePermission).where((RolePermission.role == "auditor") & (RolePermission.permission == "view_quote")))  # fmt: skip
+    with pytest.raises(SeedError):  # a partial v2 is never "upgraded"
+        await register_policy(session, "rbac-policy-v3")
+
+
+async def test_customer_role_needs_the_schema_revision(session, proposed_database, seed_plan):
+    await seed(session, proposed_database, seed_plan)
+    revision = migration("20261117_01")
+    assert (revision.revision, revision.down_revision) == ("20261117_01", "20261116_04")
+
+    def downgrade(sync_session):
+        with Operations.context(MigrationContext.configure(sync_session.connection())):
+            revision.downgrade()
+
+    await register_policy(session, "rbac-policy-v3")
+    savepoint = await session.begin_nested()
+    with pytest.raises(CommandError):  # refused while the role is in use
+        await session.run_sync(downgrade)
+    await savepoint.rollback()
+    await session.execute(delete(RolePermission).where(RolePermission.role == "customer"))
+    await session.execute(delete(Role).where(Role.role == "customer"))
+    await session.run_sync(downgrade)  # now allowed: the K5 CHECK is restored
+    savepoint = await session.begin_nested()
+    with pytest.raises(Exception):  # noqa: B017 - the restored CHECK refuses the role
+        await session.execute(insert(Role).values(role="customer"))
+    await savepoint.rollback()
 
 
 async def test_identity_operator_needs_the_schema_revision(session, proposed_database, seed_plan):

@@ -85,7 +85,9 @@ REQUEST_VERSION = "create-quote-draft-v1"
 # quote_versions -> quotes is immediate, so the version can never be inserted first.
 CURRENT_VERSION_FK = "business.fk_quotes_quote_id_current_version_quote_versions"
 QUOTE_PER_RFQ = "uq_quotes_rfq_id"
-RECEIPT_KEY = "uq_idempotency_records_actor_id_customer_id_operation_idempotency_key"
+# The declared name (op.f, 69 characters) exceeds PostgreSQL's 63, so SQLAlchemy stored it
+# truncated with an md5 suffix (Day 5 verification evidence); 23505 errors name this one.
+RECEIPT_KEY = "uq_idempotency_records_actor_id_customer_id_operation_i_fd7c"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 Reason = Literal[

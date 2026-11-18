@@ -84,7 +84,8 @@ def test_the_guard_bodies_bind_every_transition_to_a_same_transaction_row():
 
 def test_the_runtime_allowlists_name_the_lifecycle_columns_only():
     assert {"approval_requests", "approval_history"} <= RUNTIME_INSERTABLE  # submission
-    assert "business_rule_versions" not in RUNTIME_INSERTABLE and "rfqs" not in RUNTIME_INSERTABLE
+    assert "business_rule_versions" not in RUNTIME_INSERTABLE
+    assert {"rfqs", "rfq_line_items"} <= RUNTIME_INSERTABLE  # Milestone 2 Step 2, INSERT only
     decisions = {
         "quotes.approved_version", "quotes.approver_id", "quotes.approval_timestamp",
         "quotes.released_by", "quotes.released_at", "quote_versions.approval_valid",
@@ -101,7 +102,7 @@ def test_the_deferred_merge_follows_the_head():
     following = schema_contract.NEXT
     assert following.guards_revisions == schema_contract.CURRENT.guards_revisions
     merge = next(schema_contract.DEFERRED.glob("20261116_02_*.py")).read_text()
-    assert '("20261111_05", "20261116_04")' in merge
+    assert '("20261111_05", "20261118_01")' in merge
 
 
 @pytest.mark.parametrize("name", ["20261115_01", "20261116_01"])  # and K4's, above

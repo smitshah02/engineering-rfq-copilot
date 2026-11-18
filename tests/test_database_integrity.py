@@ -44,7 +44,7 @@ from rfq_copilot.integrity import (
 )
 from rfq_copilot.models import Base
 from rfq_copilot.seeding.loader import execute_seed, insert_table
-from rfq_copilot.seeding.mapping import EXPECTED_COUNTS, TABLES, build_plan
+from rfq_copilot.seeding.mapping import EMPTY_TABLES, EXPECTED_COUNTS, TABLES, build_plan
 from rfq_copilot.seeding.rules import REGISTERED
 from rfq_copilot.seeding.transform import json_text
 
@@ -94,12 +94,19 @@ async def reject(session, name, operation, sqlstate):
 
 
 async def test_current_development_integrity_and_preservation(seed_bundle):
+    from rfq_copilot.runtime_integrity import RUNTIME_TABLES
+
     config = DatabaseConfig.from_env("development", env_file=ROOT / ".env")
     plan = build_plan(seed_bundle, ROOT / "data/rfq_seed_snapshots")
-    result = await run_integrity(config, plan)
+    # The development database holds audited runtime activity (operator and customer
+    # accounts, bindings, portal RFQs), so the strict seed-only audit cannot pass there. The
+    # opt-in runtime audit still verifies every seed value exactly and accepts a non-seed row
+    # only when the audited write paths explain it; anything unexplained fails. It also
+    # verifies the schema first: this fails until the database is at the active contract.
+    result = await run_integrity(config, plan, runtime=True)
+    assert result["mode"] == "runtime"
     assert result["database"] == "rfq_copilot_dev" and result["role"] == "rfq_copilot_dev"
-    # Head 20261116_03 (TD-012 + Phase 3.5 + K2 + K3 + K4). The catalog counts are the K3
-    # contract's, pinned only after measurement on the seeded test DB (fail closed before).
+    # The active contract's catalog counts, measured on the guarded test DB (fail closed).
     counts = dict(schema_contract.CURRENT.catalog_counts)
     assert result["alembic_revision"] == schema_contract.CURRENT.revision
     assert result["definitions"] == {
@@ -109,19 +116,25 @@ async def test_current_development_integrity_and_preservation(seed_bundle):
         "foreign_keys": counts.get("f"),
         "additional_unique_constraints": counts.get("u"),
         "check_constraints": counts.get("c"),
-        "explicit_indexes": 19,
-        "unique_partial_indexes": 5,
+        "explicit_indexes": 22,  # + A1 active run, + A4 quote link and claimable rows
+        "unique_partial_indexes": 7,  # + A1 active run, + A4 quote link
     }
     # The 1089-record baseline, each approved post-baseline rule (approval-v1.2,
-    # workflow-v1.1, workflow-v1.2) and, if applied, exactly one overlay the active contract
-    # accepts (complete; partial fails).
-    assert result["records"] == expected_records(result["policy_overlay"])
+    # workflow-v1.1, workflow-v1.2), if applied exactly one overlay the active contract
+    # accepts (complete; partial fails), plus exactly the runtime rows the audit explained
+    # (only in RUNTIME_TABLES; every other table is seed + rules + overlay exactly).
+    tables = result["tables"]
+    extra = {n: tables[TABLES[n].fullname]["actual"] - tables[TABLES[n].fullname]["expected"] for n in RUNTIME_TABLES}  # fmt: skip
+    assert all(rows >= 0 for rows in extra.values())
+    assert result["records"] == expected_records(result["policy_overlay"]) + sum(extra.values())
     assert result["source_values_checked"] == 10259  # K3: +7 columns x 96 seeded versions
     assert result["decimal_values_checked"] == 1353
     assert result["foreign_key_data_checks"] == counts.get("f")
     assert result["check_data_checks"] == counts.get("c")
-    assert result["unique_data_checks"] == counts.get("u", 0) + 5 and result["violations"] == 0
-    assert result["populated_tables"] == 26 and len(result["empty_runtime_tables"]) == 10
+    assert result["unique_data_checks"] == counts.get("u", 0) + 7 and result["violations"] == 0
+    # 26 seeded tables, plus each never-seeded runtime table that now holds audited rows.
+    filled = sum(tables[TABLES[n].fullname]["actual"] > 0 for n in EMPTY_TABLES)
+    assert result["populated_tables"] == 26 + filled and len(result["empty_runtime_tables"]) == 10
     assert result["preserved"]
 
 

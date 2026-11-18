@@ -36,6 +36,16 @@ DECISION_VARIABLES = {
     "development": "DECISION_DATABASE_URL",
     "test": "TEST_DECISION_DATABASE_URL",
 }
+# Checkpoint A1/A3: the workflow worker role (docs/database/a1_workflow_role.sql).
+WORKFLOW_VARIABLES = {
+    "development": "WORKFLOW_DATABASE_URL",
+    "test": "TEST_WORKFLOW_DATABASE_URL",
+}
+# Checkpoint A4: the quotation-drafter role (docs/database/a4_drafter_role.sql).
+DRAFTER_VARIABLES = {
+    "development": "DRAFTER_DATABASE_URL",
+    "test": "TEST_DRAFTER_DATABASE_URL",
+}
 
 
 class DatabaseConfigurationError(ValueError):
@@ -86,11 +96,13 @@ class DatabaseConfig:
     development_database: str | None = field(default=None, repr=False)
     runtime: bool = False  # True: the restricted runtime role, never the owner
     decision: bool = False  # True (K5): the decision role, never the owner or runtime role
+    workflow: bool = False  # True (A1): the workflow worker role, checked live per session
+    drafter: bool = False  # True (A4): the quotation-drafter role, checked live per session
 
     def __post_init__(self) -> None:
         _validate_url(self.url)
-        if self.runtime and self.decision:
-            raise DatabaseConfigurationError("Choose the runtime or the decision credential.")
+        if self.runtime + self.decision + self.workflow + self.drafter > 1:
+            raise DatabaseConfigurationError("Choose one restricted credential.")
         if self.target not in ("development", "test"):
             raise DatabaseConfigurationError("Database target must be development or test.")
         if self.target == "test":
@@ -108,6 +120,8 @@ class DatabaseConfig:
         *,
         environ: Mapping[str, str] | None = None,
         decision: bool = False,
+        workflow: bool = False,
+        drafter: bool = False,
     ) -> "DatabaseConfig":
         """Select one restricted credential without dotenv discovery or owner access.
 
@@ -118,8 +132,14 @@ class DatabaseConfig:
         """
         if target not in ("development", "test"):
             raise DatabaseConfigurationError("Database target must be development or test.")
+        if decision + workflow + drafter > 1:
+            raise DatabaseConfigurationError("Choose one restricted credential.")
         source = os.environ if environ is None else environ
-        variable = (DECISION_VARIABLES if decision else RUNTIME_VARIABLES)[target]
+        variables = (
+            DECISION_VARIABLES if decision else WORKFLOW_VARIABLES if workflow
+            else DRAFTER_VARIABLES if drafter else RUNTIME_VARIABLES
+        )  # fmt: skip
+        variable = variables[target]
         url = _parse_url(source.get(variable), variable)
         development = source.get("DEVELOPMENT_DATABASE_NAME", "rfq_copilot_dev")
         expected = development if target == "development" else source.get("TEST_DATABASE_NAME")
@@ -139,8 +159,10 @@ class DatabaseConfig:
             target=target,
             expected_test_database=expected if target == "test" else None,
             development_database=development,
-            runtime=not decision,
+            runtime=not (decision or workflow or drafter),
             decision=decision,
+            workflow=workflow,
+            drafter=drafter,
         )
 
     @classmethod

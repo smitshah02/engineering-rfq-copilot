@@ -118,6 +118,9 @@ def create_app(
         app.include_router(module.router, prefix=prefix)
     # Day 29: the MCP-backed route exists only with an explicit integration (a trusted
     # credential provider). Without one it is not mounted at all: fail closed.
+    # Milestone 2 Step 2: customer RFQ creation exists only under rbac-policy-v3.
+    if settings.permission_policy == "v3":
+        app.include_router(rfqs.create_router, prefix=prefix)
     app.state.mcp = mcp
     if mcp is not None:
         app.include_router(materials.mcp_router, prefix=prefix)

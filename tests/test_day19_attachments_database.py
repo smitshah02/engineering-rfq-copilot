@@ -21,6 +21,8 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
+from test_quote_drafts_concurrency import TEST_DATABASE, guarded
+from test_runtime_role_database import grant_block
 
 import rfq_copilot.repositories as repositories
 from rfq_copilot.api.app import create_app
@@ -34,6 +36,7 @@ from rfq_copilot.api.auth import (
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_read_session, get_write_session
 from rfq_copilot.attachments import extract_bom, extract_pdf
+from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.models import RFQ, RFQAttachment
 
 pytestmark = pytest.mark.integration
@@ -244,8 +247,22 @@ async def test_database_check_constraints_back_the_metadata(joined, seed_plan):
 
 @async_test
 async def test_lazily_created_write_database_is_separate_and_writable(seed_database, monkeypatch):
-    url = seed_database.config.url.render_as_string(hide_password=False)
-    monkeypatch.setenv("DATABASE_URL", url)  # never printed
+    # Serving reads only the restricted runtime credential (APP_DATABASE_URL, K2), never
+    # DATABASE_URL. Bind it to the guarded test database's runtime role, never development.
+    runtime = DatabaseConfig.from_env("test", env_file=DATASET.parents[1] / ".env", runtime=True)
+    url = runtime.url
+    monkeypatch.setenv(
+        "APP_DATABASE_URL", url.render_as_string(hide_password=False)
+    )  # never printed
+    monkeypatch.setenv("DEVELOPMENT_DATABASE_NAME", url.database)
+    monkeypatch.setenv("DATABASE_HOST", url.host)
+    monkeypatch.setenv("DATABASE_PORT", str(url.port or 5432))
+    # The guarded upgrade recreated the tables without grants: re-apply the artifact's block.
+    quote = seed_database.engine.dialect.identifier_preparer.quote
+    async with seed_database.session() as s, s.begin():
+        await guarded(s)
+        for statement in grant_block(quote(url.username)):
+            await s.execute(text(statement))
     app = create_app(ApiSettings(environment="development", attachment_dir=Path("/nonexistent")))
     app.dependency_overrides[get_principal] = lambda: Principal(
         "CUST-ANY", UPLOADS | {VIEW_CUSTOMER}
@@ -260,6 +277,7 @@ async def test_lazily_created_write_database_is_separate_and_writable(seed_datab
     try:
         assert app.state.owns_write_database is True
         async with writer.session() as live:
+            assert await live.scalar(text("SELECT current_database()")) == TEST_DATABASE
             assert (await live.scalar(text("SHOW default_transaction_read_only"))) == "off"
         assert (await call(app, "GET", "/api/v1/customers/me")).status_code == 404
         async with app.state.database.session() as live:

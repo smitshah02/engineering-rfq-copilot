@@ -9,6 +9,7 @@ session; the lifecycle tests use a real ``Database`` and the real session depend
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 import httpx2
@@ -21,11 +22,14 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
+from test_quote_drafts_concurrency import guarded
+from test_runtime_role_database import grant_block
 
 from rfq_copilot.api.app import create_app
 from rfq_copilot.api.auth import VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER, Principal, get_principal
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.db import get_read_session
+from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.models import RFQ, Material, Quote
 from rfq_copilot.repositories import find_materials
 from rfq_copilot.seeding.mapping import TABLES
@@ -263,14 +267,38 @@ async def test_real_sessions_are_per_request_and_returned_to_the_pool(
 
 
 async def test_lazily_created_database_is_read_only(seed_database, monkeypatch):
-    url = seed_database.config.url.render_as_string(hide_password=False)
-    monkeypatch.setenv("DATABASE_URL", url)  # never printed
+    config = DatabaseConfig.from_env(
+        "test",
+        env_file=Path(__file__).resolve().parents[1] / ".env",
+        runtime=True,
+    )
+
+    # Test migrations recreate tables, so restore the restricted test role's grants.
+    quote = seed_database.engine.dialect.identifier_preparer.quote
+    async with seed_database.session() as session, session.begin():
+        await guarded(session)
+        for statement in grant_block(quote(config.url.username)):
+            await session.execute(text(statement))
+
+    # Exercise real lazy initialization with the isolated test runtime role.
+    monkeypatch.setattr(
+        DatabaseConfig,
+        "from_serving_env",
+        classmethod(lambda cls, target: config),
+    )
+
     app = app_for("CUST-ANY")
-    assert (await get(app, "/api/v1/customers/me")).status_code == 404
-    database = app.state.database
+    database = None
     try:
+        assert (await get(app, "/api/v1/customers/me")).status_code == 404
+
+        database = app.state.database
+        assert database is not None
         assert app.state.owns_database is True
+        assert database.config.runtime is True
+
         async with database.session() as live:
             assert (await live.scalar(text("SHOW default_transaction_read_only"))) == "on"
     finally:
-        await database.dispose()
+        if database is not None:
+            await database.dispose()

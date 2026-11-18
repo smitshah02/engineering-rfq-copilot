@@ -301,7 +301,7 @@ async def preflight(session, config):
 
 async def test_the_preflight_accepts_exactly_the_k2_and_k3_objects(populated, seed_database):
     report = await preflight(populated, seed_database.config)
-    assert report["alembic_revision"] == CURRENT.revision == "20261116_04"
+    assert report["alembic_revision"] == CURRENT.revision == "20261118_01"
 
 
 @pytest.mark.parametrize(

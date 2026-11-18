@@ -37,7 +37,10 @@ def environment(**changes):
 
 def test_k3_is_the_single_active_head_and_05_is_merged_without_rewriting_history():
     active = ScriptDirectory.from_config(schema_contract.CURRENT.alembic_config())
-    assert active.get_heads() == ["20261116_04"] == [schema_contract.CURRENT.revision]
+    assert active.get_heads() == ["20261118_01"] == [schema_contract.CURRENT.revision]
+    assert active.get_revision("20261118_01").down_revision == "20261117_02"  # A4 drafting
+    assert active.get_revision("20261117_02").down_revision == "20261117_01"  # A1/A2 queue
+    assert active.get_revision("20261117_01").down_revision == "20261116_04"  # customer on K5
     assert active.get_revision("20261116_04").down_revision == "20261116_03"  # K5 on K4
     assert active.get_revision("20261116_03").down_revision == "20261116_01"
     assert active.get_revision("20261116_01").down_revision == "20261115_01"
@@ -46,7 +49,7 @@ def test_k3_is_the_single_active_head_and_05_is_merged_without_rewriting_history
     assert following.get_heads() == ["20261116_02"] == [schema_contract.NEXT.revision]
     # 05 keeps its original parent (Day 54B R4); the schema-free merge joins it with K3.
     assert following.get_revision("20261111_05").down_revision == "20261111_06"
-    assert following.get_revision("20261116_02").down_revision == ("20261111_05", "20261116_04")
+    assert following.get_revision("20261116_02").down_revision == ("20261111_05", "20261118_01")
 
 
 def test_the_allowlist_is_the_revision_itself():
@@ -160,10 +163,12 @@ def test_the_updatable_allowlist_is_the_provisioning_artifact():
     granted = {f"{t}.{column.strip()}" for columns, t in updates for column in columns.split(",")}
     assert granted == RUNTIME_UPDATABLE
     inserts = re.findall(r"^GRANT INSERT ON (.+?) TO ", sql, re.M)
-    insertable = {t.strip().removeprefix("business.") for line in inserts for t in line.split(",")}
+    insertable = {t.strip().removeprefix("business.").removeprefix("orchestration.") for line in inserts for t in line.split(",")}  # fmt: skip
     # K2 tables + K3 pricing_calculations + K4 approval rows
     assert insertable == RUNTIME_INSERTABLE
-    assert "business_rule_versions" not in insertable and "rfqs" not in insertable
+    assert "business_rule_versions" not in insertable and "users" not in insertable
+    assert {"rfqs", "rfq_line_items"} <= insertable  # Milestone 2 Step 2 customer RFQs
+    assert "workflow_runs" in insertable  # A1: enqueue only; claiming is the worker role's
     privileges = re.findall(r"^GRANT (.+?) ON ", sql, re.M)
     assert {p.split(" ")[0] for p in privileges} == {"CONNECT", "USAGE", "SELECT", "INSERT", "UPDATE"}  # fmt: skip
     assert all("(" in p for p in privileges if p.startswith("UPDATE"))  # columns only

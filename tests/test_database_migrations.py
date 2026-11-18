@@ -43,7 +43,8 @@ from rfq_copilot.models import Base
 
 ROOT = Path(__file__).resolve().parents[1]
 # head: initial, TD-005, TD-012, Phase 3.5 02/03/04/06, K2, K3, K4 (Day 54D), K5 (Day 55)
-REVISION = schema_contract.CURRENT.revision  # "20261116_04"
+REVISION = schema_contract.CURRENT.revision  # "20261118_01"
+K5_REVISION = "20261116_04"
 K4_REVISION = "20261116_03"
 K2_REVISION = "20261115_01"
 TD012_REVISION = "20261110_01"
@@ -305,6 +306,20 @@ def index_expectations():
         table="token_revocations", columns=["user_id", "not_before"], method="B-tree", unique=False,
         predicate="not_before IS NOT NULL",
     )  # fmt: skip
+    # Checkpoint A1 (20261117_02): at most one active run per RFQ.
+    result["uq_workflow_runs_active_rfq"] = dict(
+        table="workflow_runs", columns=["rfq_id"], method="B-tree", unique=True,
+        predicate="status IN ('queued','running')",
+    )  # fmt: skip
+    # Checkpoint A4 (20261118_01): one run per linked quote, and the claimable rows.
+    result["uq_workflow_runs_quote_id"] = dict(
+        table="workflow_runs", columns=["quote_id"], method="B-tree", unique=True,
+        predicate="quote_id IS NOT NULL",
+    )  # fmt: skip
+    result["ix_workflow_runs_claimable"] = dict(
+        table="workflow_runs", columns=["created_at", "workflow_run_id"], method="B-tree", unique=False,
+        predicate="status IN ('queued','running','drafting') OR (status = 'completed' AND disposition = 'ready_for_draft')",
+    )  # fmt: skip
     return result
 
 
@@ -375,6 +390,11 @@ def verify_physical(connection, approved, *, expect_empty=True):
         checks = [row for row in constraints if row["kind"] == "c"]
         found = {canonical(connection, row["expression"], name): row for row in checks}
         wanted_checks = expected["checks"] + expected_shared_checks(expected)
+        # A4: workflow_runs.quote_id is protected by its foreign key
+        # to business.quotes, whose quote_id has a length constraint.
+        # No separate length CHECK exists on workflow_runs.quote_id.
+        if name == "workflow_runs":
+            wanted_checks.remove("length(btrim(quote_id)) > 0 AND length(quote_id) <= 64")
         wanted = {canonical(connection, sql, name): sql for sql in wanted_checks}
         assert len(checks) == len(found) == len(wanted) and found.keys() == wanted.keys(), (
             name,
@@ -390,7 +410,9 @@ def verify_physical(connection, approved, *, expect_empty=True):
     explicit = {index["name"]: index for index in result["indexes"] if index["supporting"] is None}
     expected_indexes = index_expectations()
     assert explicit.keys() == expected_indexes.keys()
-    assert len(result["indexes"]) == 72  # + 2 PK + 3 explicit (Phase 3.5) + 3 K3 UNIQUE
+    assert (
+        len(result["indexes"]) == 75
+    )  # + 2 PK + 3 explicit (Phase 3.5) + 3 K3 UNIQUE + 1 A1 + 2 A4
     assert len([i for i in result["indexes"] if i["supporting"]]) == 53  # K3: 3 UNIQUE
     for name, expected in expected_indexes.items():
         index = explicit[name]
@@ -559,9 +581,12 @@ def test_configuration_metadata_and_revision():
     assert script.get_heads() == [REVISION]
     revisions = list(script.walk_revisions())
     chain = [(r.revision, r.down_revision) for r in revisions]
-    assert REVISION == "20261116_04"
+    assert REVISION == "20261118_01"
     assert chain == [
-        (REVISION, K4_REVISION),
+        (REVISION, "20261117_02"),  # A4 workflow drafting
+        ("20261117_02", "20261117_01"),  # A1/A2 workflow queue
+        ("20261117_01", K5_REVISION),  # customer role
+        (K5_REVISION, K4_REVISION),
         (K4_REVISION, "20261116_01"),
         ("20261116_01", K2_REVISION),
         (K2_REVISION, "20261111_06"),
@@ -759,10 +784,14 @@ def test_each_physical_table_matches_day4(migration_lifecycle, approved, name):
 @pytest.mark.integration
 def test_independent_checks_indexes_and_empty_data(migration_lifecycle):
     result = migration_lifecycle["first"]
-    assert result["counts"]["c"] == 227  # + 5 token_revocations + 3 rfq_assignments + 9 K3
+    assert (
+        result["counts"]["c"] == 236
+    )  # + 5 token_revocations + 3 rfq_assignments + 9 K3 + 6 A1 + 3 A4
     assert result["probes"] > 2000
-    assert sum(i["predicate"] is not None for i in result["indexes"]) == 11
-    assert sum(i["predicate"] is not None and i["indisunique"] for i in result["indexes"]) == 5
+    assert (
+        sum(i["predicate"] is not None for i in result["indexes"]) == 14
+    )  # + A1 active run + 2 A4
+    assert sum(i["predicate"] is not None and i["indisunique"] for i in result["indexes"]) == 7
 
 
 @pytest.mark.integration

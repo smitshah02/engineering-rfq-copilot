@@ -19,6 +19,8 @@
 Authorization (Day 21): every protected route depends on ``require_permission(name)``,
 which runs ``get_principal`` and answers 403 unless the permission was granted. It never
 compares role names. Customer scoping stays in each route's queries (cross-customer: 404).
+One scope rule (Milestone 2 Step 1) reads ``users.role``: a ``customer`` account is exempt
+from RFQ assignments (it is scoped by its binding); authorization stays permission-based.
 Tests may still inject a principal with ``app.dependency_overrides[get_principal]``; the
 injected principal's ``permissions`` are then checked the same way.
 """
@@ -125,7 +127,10 @@ async def get_principal(
         customer_id,
         granted,
         user_id=user.user_id,
-        assignment_required=settings.rfq_assignments == "required",
+        # Staff keep assignment enforcement. A customer account (role re-read from
+        # business.users, never from the token) is scoped by its binding alone: it sees its
+        # own customer's RFQs, and holds no staff permission to reach anything else.
+        assignment_required=settings.rfq_assignments == "required" and user.role != CUSTOMER_ROLE,
         subject=token.subject,
     )
 
@@ -190,6 +195,12 @@ CREATE_RFQ = "create_rfq"
 VIEW_CATALOG = "view_catalog"
 VIEW_QUOTE = "view_quote"
 ATTACH_RFQ_DOCUMENT = "attach_rfq_document"
+# Policy overlay rbac-policy-v3 (schema 20261117_01): the external customer role only.
+CUSTOMER_ROLE = "customer"
+CUSTOMER_VIEW_RFQ = "customer_view_rfq"
+CUSTOMER_CREATE_RFQ = "customer_create_rfq"  # POST /rfqs, mounted under v3 only
+CUSTOMER_VIEW_QUOTE = "customer_view_quote"
+CUSTOMER_ATTACH_RFQ_DOCUMENT = "customer_attach_rfq_document"
 
 # The one table of route operation -> required permission, per policy version. v1 is the
 # approved Day 21 matrix; v2 activates only with RFQ_API_PERMISSION_POLICY=v2.
@@ -211,6 +222,23 @@ ROUTE_PERMISSIONS: dict[str, dict[str, str]] = {
         "attachment_upload": ATTACH_RFQ_DOCUMENT,
     },
 }
+# v3: staff routes exactly as v2, plus (v3 only) the dedicated customer permission each
+# customer-facing operation also accepts. Catalog reads have none: customers never see it.
+ROUTE_PERMISSIONS["v3"] = dict(ROUTE_PERMISSIONS["v2"])
+CUSTOMER_ROUTE_PERMISSIONS: dict[str, str] = {
+    "rfq_read": CUSTOMER_VIEW_RFQ,
+    "attachment_list": CUSTOMER_VIEW_RFQ,
+    "quote_read": CUSTOMER_VIEW_QUOTE,
+    "attachment_upload": CUSTOMER_ATTACH_RFQ_DOCUMENT,
+}
+
+
+def accepted_permissions(policy: str, operation: str) -> frozenset[str]:
+    """Every permission that authorizes ``operation`` under ``policy`` (any one suffices)."""
+    accepted = {ROUTE_PERMISSIONS[policy][operation]}
+    if policy == "v3" and operation in CUSTOMER_ROUTE_PERMISSIONS:
+        accepted.add(CUSTOMER_ROUTE_PERMISSIONS[operation])
+    return frozenset(accepted)
 
 
 def require_permission(permission: str):
@@ -242,7 +270,7 @@ def require_route_permission(operation: str):
         request: Request, principal: Annotated[Principal, Depends(get_principal)]
     ) -> Principal:
         policy = request.app.state.settings.permission_policy
-        if ROUTE_PERMISSIONS[policy][operation] not in principal.permissions:
+        if not accepted_permissions(policy, operation) & principal.permissions:
             raise HTTPException(status_code=403, detail="Forbidden.")
         return principal
 

@@ -55,7 +55,8 @@ class ApiSettings(BaseModel):
     # rbac-policy-v2 overlay) and fails closed (403/401/503) without it.
     # v1: catalog, quotes and uploads use view_assigned_rfqs / create_rfq (current grants).
     # v2: they use view_catalog / view_quote / attach_rfq_document (rbac-policy-v2 overlay).
-    permission_policy: Literal["v1", "v2"] = "v1"
+    # v3: v2 for staff plus the customer_* permissions (rbac-policy-v3, head 20261117_01).
+    permission_policy: Literal["v1", "v2", "v3"] = "v1"
     # required: RFQ-scoped reads and uploads also need an active row in
     # business.rfq_assignments for the caller (revision 20261111_02).
     rfq_assignments: Literal["off", "required"] = "off"
@@ -68,6 +69,10 @@ class ApiSettings(BaseModel):
     # enabled: uploads accept an Idempotency-Key header recorded in
     # business.idempotency_records (revision 20261111_04).
     upload_idempotency: Literal["off", "enabled"] = "off"
+    # Checkpoint A1: enabled = each new customer RFQ is stored with one queued workflow run
+    # (head 20261117_02 and ``python -m rfq_copilot.workflow_queue activate`` required;
+    # without the activation, submissions answer 503). off = the pre-A1 behaviour.
+    workflow_queue: Literal["off", "enabled"] = "off"
     # Day 28 (F1/F2): "hardened" is the deployment profile. It refuses to start unless the
     # secure Phase 3.5 controls are selected; "standard" keeps the approved defaults.
     deployment_profile: Literal["standard", "hardened"] = "standard"

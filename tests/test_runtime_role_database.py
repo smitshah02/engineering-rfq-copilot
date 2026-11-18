@@ -7,12 +7,13 @@ re-applies exactly the artifact's marked grant block as the owner. The committed
 is truncated by the owner in teardown. The development database is never opened.
 """
 
+import asyncio
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
@@ -21,6 +22,9 @@ from test_quote_drafts_concurrency import world as world
 from test_quote_drafts_database import RFQ_ID, args
 from test_quote_versions_database import rargs
 
+import rfq_copilot.rfq_submission as rfq_submission
+from rfq_copilot.api.auth import Principal
+from rfq_copilot.api.schemas.rfq import RfqSubmissionRequest
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import (
     Database,
@@ -28,8 +32,18 @@ from rfq_copilot.database import (
     require_restricted_runtime,
     runtime_role_violations,
 )
-from rfq_copilot.quote_drafts import create_quote_draft
+from rfq_copilot.models import (
+    RFQ,
+    AuditEvent,
+    Customer,
+    IdempotencyRecord,
+    RFQLineItem,
+    User,
+    UserCustomerBinding,
+)
+from rfq_copilot.quote_drafts import RECEIPT_KEY, create_quote_draft, violated_unique
 from rfq_copilot.quote_versions import revise_quote
+from rfq_copilot.seeding.policy import register_policy
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
@@ -135,7 +149,9 @@ RULE_ROW = (
      (RULE_ROW, DENIED),  # INSERT is not in RUNTIME_INSERTABLE: never granted
      ("UPDATE business.business_rule_versions SET source_path = 'x'", DENIED),
      ("DELETE FROM business.business_rule_versions", DENIED),
-     ("INSERT INTO business.rfqs (rfq_id, customer_id, source_type) VALUES ('K3-X', 'K3-Y', 'mcp_shell')", DENIED),
+     ("UPDATE business.rfqs SET status = 'closed'", DENIED),  # INSERT only (Milestone 2 Step 2)
+     ("DELETE FROM business.rfq_line_items", DENIED),
+     ("INSERT INTO business.users (user_id, display_name, role, email, active, assigned_region, authentication_subject) VALUES ('U-X', 'X', 'customer', 'x@x.invalid', true, 'NA', 'auth|x')", DENIED),
      ("ALTER TABLE business.quote_versions DISABLE TRIGGER k3_quote_versions_evidence", DENIED),
      ("SET CONSTRAINTS business.k3_quote_version_lines_complete DEFERRED", None)],
 )  # fmt: skip
@@ -156,7 +172,7 @@ async def test_an_extra_insert_grant_is_a_runtime_violation(runtime, seed_databa
     role = seed_database.engine.dialect.identifier_preparer.quote(runtime.config.url.username)
     async with seed_database.session() as s, s.begin():
         await guarded(s)
-        await s.execute(text(f"GRANT INSERT ON business.rfqs TO {role}"))
+        await s.execute(text(f"GRANT INSERT ON business.customers TO {role}"))
     try:
         with pytest.raises(PrivilegedRuntimeRole, match="insert_privileges"):
             async with runtime.session():
@@ -164,7 +180,7 @@ async def test_an_extra_insert_grant_is_a_runtime_violation(runtime, seed_databa
     finally:
         async with seed_database.session() as s, s.begin():
             await guarded(s)
-            await s.execute(text(f"REVOKE INSERT ON business.rfqs FROM {role}"))
+            await s.execute(text(f"REVOKE INSERT ON business.customers FROM {role}"))
     async with runtime.session() as s:
         assert await runtime_role_violations(s) == ()
 
@@ -214,3 +230,62 @@ async def test_the_runtime_role_cannot_become_the_owner(runtime, seed_database):
         with pytest.raises(DBAPIError) as caught:
             await s.execute(text(f"SET ROLE {owner}"))
         assert caught.value.orig.sqlstate == DENIED
+
+
+# --- Milestone 2 Step 2: customer RFQ creation under the restricted runtime role ----------
+
+
+async def runtime_customer(seed_database, world, user_id="U-CUST-RT"):
+    """A committed customer account bound to the world's customer (truncated in teardown)."""
+    async with seed_database.session() as s, s.begin():
+        await guarded(s)
+        await register_policy(s, "rbac-policy-v3")
+        s.add(User(user_id=user_id, display_name="Buyer", role="customer", email=f"{user_id}@customer.invalid",
+                   active=True, assigned_region="NA", authentication_subject=f"auth|{user_id}"))  # fmt: skip
+        await s.flush()
+        await s.execute(update(Customer).where(Customer.customer_id == world.customer_id).values(account_status="active"))  # fmt: skip
+        s.add(UserCustomerBinding(user_id=user_id, customer_id=world.customer_id))
+    return Principal(world.customer_id, frozenset(), user_id=user_id)
+
+
+async def test_the_receipt_constraint_name_is_the_stored_one(runtime, seed_database):
+    async with seed_database.session() as s:
+        await guarded(s)
+        names = (await s.scalars(text(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = 'business.idempotency_records'::regclass AND contype = 'u'"
+        ))).all()  # fmt: skip
+    assert names == [RECEIPT_KEY]  # replay paths match 23505 errors by this name
+
+
+async def test_concurrent_first_attempts_create_exactly_one_rfq(runtime, seed_database, world, monkeypatch):  # fmt: skip
+    principal = await runtime_customer(seed_database, world)
+    barrier = asyncio.Barrier(2)
+    real = rfq_submission._check_references
+
+    async def held(*args):  # both requests pass every pre-check before either writes
+        await barrier.wait()
+        return await real(*args)
+
+    monkeypatch.setattr(rfq_submission, "_check_references", held)
+    request = RfqSubmissionRequest.model_validate({"parts": [{"part_id": "P-RACE", "quantity": 5}]})
+
+    async def attempt():
+        async with runtime.session() as s, s.begin():
+            await guarded(s)
+            try:
+                return await rfq_submission.create_customer_rfq(s, principal, request, "race-key")
+            except IntegrityError as error:  # Database.session would hide it: code + name only
+                pytest.fail(f"unhandled {getattr(error.orig, 'sqlstate', None)} on {violated_unique(error)}")  # fmt: skip
+
+    (a, a_replayed), (b, b_replayed) = await asyncio.wait_for(asyncio.gather(attempt(), attempt()), 30)  # fmt: skip
+    assert a == b and sorted([a_replayed, b_replayed]) == [False, True]
+    async with runtime.session() as s:
+        made = (
+            await s.scalars(select(RFQ.rfq_id).where(RFQ.created_by == principal.user_id))
+        ).all()
+        assert made == [a.rfq_id]
+        assert await s.scalar(select(func.count()).select_from(RFQLineItem).where(RFQLineItem.rfq_id == a.rfq_id)) == 1  # fmt: skip
+        assert await s.scalar(select(func.count()).select_from(IdempotencyRecord).where(IdempotencyRecord.operation == "create_rfq")) == 1  # fmt: skip
+        assert await s.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.rfq_id == a.rfq_id)) == 1  # fmt: skip
+        assert await runtime_role_violations(s) == ()  # the grant stays within the allowlist

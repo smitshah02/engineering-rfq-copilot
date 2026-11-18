@@ -1,0 +1,34 @@
+{
+  "version": "rbac-policy-v3",
+  "builds_on": "rbac-policy-v2",
+  "roles": ["identity_operator", "customer"],
+  "permissions": [
+    "view_catalog",
+    "view_quote",
+    "attach_rfq_document",
+    "manage_customer_bindings",
+    "revoke_tokens",
+    "customer_view_rfq",
+    "customer_create_rfq",
+    "customer_view_quote",
+    "customer_attach_rfq_document"
+  ],
+  "grants": [
+    ["sales_representative", "view_catalog"],
+    ["estimator", "view_catalog"],
+    ["manufacturing_engineer", "view_catalog"],
+    ["estimator", "view_quote"],
+    ["sales_representative", "view_quote"],
+    ["sales_manager", "view_quote"],
+    ["auditor", "view_quote"],
+    ["sales_representative", "attach_rfq_document"],
+    ["estimator", "attach_rfq_document"],
+    ["identity_operator", "manage_customer_bindings"],
+    ["identity_operator", "revoke_tokens"],
+    ["customer", "view_customer"],
+    ["customer", "customer_view_rfq"],
+    ["customer", "customer_create_rfq"],
+    ["customer", "customer_view_quote"],
+    ["customer", "customer_attach_rfq_document"]
+  ]
+}

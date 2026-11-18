@@ -111,8 +111,8 @@ async def test_active_chain_ends_at_06_and_05_stays_deferred():
     deferred = migration("20261111_05")
     assert deferred.down_revision == "20261111_06"  # its original parent (restored, Day 54B)
     assert not list(VERSIONS.glob("20261111_05_*")) and list(DEFERRED.glob("20261111_05_*"))
-    merge = migration("20261116_02")  # schema-free join of 05 and the active head (K5)
-    assert merge.down_revision == ("20261111_05", "20261116_04")
+    merge = migration("20261116_02")  # schema-free join of 05 and the active head
+    assert merge.down_revision == ("20261111_05", "20261118_01")
     assert not list(VERSIONS.glob("20261116_02_*")) and list(DEFERRED.glob("20261116_02_*"))
     assert not list((DEFERRED.parent / "approved").glob("*.py"))
 

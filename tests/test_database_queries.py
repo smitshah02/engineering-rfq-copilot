@@ -485,8 +485,13 @@ async def test_all_development_reads_preserve_records_and_close_sessions(
                 assert all(s.lstrip().upper().startswith("SELECT") for s in captured)
                 assert await fingerprint(session) == before
                 # Baseline, each approved post-baseline rule and the stored overlay, whose
-                # state comes from the contract's all-or-nothing check (partial fails).
+                # state comes from the contract's all-or-nothing check (partial fails). The
+                # development database may also hold audited runtime activity (customer
+                # accounts, bindings, portal RFQs): a lower bound, never "every row is seed".
+                # Provenance of those rows is the runtime integrity audit's job, not this one.
                 state = await stored_overlay_state(session)
-                assert sum(t["rows"] for t in before["tables"].values()) == expected_records(state)
+                stored = {name: before["tables"][t.fullname]["rows"] for name, t in TABLES.items()}
+                assert all(stored[name] >= len(rows) for name, rows in seed_plan.rows.items())
+                assert sum(stored.values()) >= expected_records(state)
                 assert await session.scalar(text("SHOW transaction_read_only")) == "on"
         assert database.engine.pool.checkedout() == 0

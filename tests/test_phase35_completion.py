@@ -66,11 +66,12 @@ def granted(identity, *permissions, user="U-1", customer="CUST-A"):
 
 def test_policy_tables_cover_every_operation_and_v1_is_the_day21_matrix():
     assert set(OPERATION) == set(MATRIX) == set(V2)
-    assert set(ROUTE_PERMISSIONS) == {"v1", "v2"}
+    assert set(ROUTE_PERMISSIONS) == {"v1", "v2", "v3"}
     for policy in ROUTE_PERMISSIONS.values():
         assert set(policy) == set(OPERATION.values())
     assert {key: ROUTE_PERMISSIONS["v1"][op] for key, op in OPERATION.items()} == MATRIX
     assert {key: ROUTE_PERMISSIONS["v2"][op] for key, op in OPERATION.items()} == V2
+    assert ROUTE_PERMISSIONS["v3"] == ROUTE_PERMISSIONS["v2"]  # staff unchanged under v3
     approval = {"request_approval", "approve_quote", "reject_quote", "release_quote"}
     assert not approval & {p for table in ROUTE_PERMISSIONS.values() for p in table.values()}
 
@@ -112,10 +113,12 @@ def test_unknown_route_operation_fails_at_registration():
 def test_policy_setting_is_validated():
     from rfq_copilot.api.config import ApiSettings
 
-    for field, value in (("permission_policy", "v3"), ("rfq_assignments", "on"), ("token_revocation", "yes"),
+    for field, value in (("permission_policy", "v4"), ("rfq_assignments", "on"), ("token_revocation", "yes"),
                          ("customer_context", "any"), ("upload_idempotency", "true")):  # fmt: skip
         with pytest.raises(ValidationError):
             ApiSettings(**{field: value})
+    for policy in ("v1", "v2", "v3"):
+        assert ApiSettings(permission_policy=policy).permission_policy == policy
     defaults = ApiSettings()
     assert (defaults.permission_policy, defaults.rfq_assignments, defaults.token_revocation,
             defaults.customer_context, defaults.upload_idempotency) == ("v1", "off", "off", "single", "off")  # fmt: skip
@@ -432,18 +435,22 @@ def test_active_contract_is_the_activated_one():
     from rfq_copilot.seeding import safety
 
     current = schema_contract.CURRENT
-    assert schema_contract.active() is current and current.revision == "20261116_04"
-    # K5 (Day 55) on K4 (54D) on K3 (54B) on K2 (54A) on 06; each guard file pinned on its own.
-    assert current.guards_revisions == (schema_contract.K2.revision, schema_contract.K3.revision, schema_contract.K4.revision, current.revision)  # fmt: skip
+    assert schema_contract.active() is current and current.revision == "20261118_01"
+    # A1/A2 queue on the customer role on K5 (Day 55) on K4 (54D) on K3 (54B) on K2 (54A) on
+    # 06; each guard file pinned on its own (neither later revision adds a guard).
+    assert current.guards_revisions == (schema_contract.K2.revision, schema_contract.K3.revision, schema_contract.K4.revision, schema_contract.K5.revision)  # fmt: skip
     assert schema_contract.ACTIVATED_06.revision == "20261111_06"
     assert dict(schema_contract.K2.catalog_counts) == dict(schema_contract.ACTIVATED_06.catalog_counts)  # fmt: skip
     # K3's counts are measured on the guarded test DB before they are trusted (fail closed).
     assert dict(current.catalog_counts) != dict(schema_contract.ACTIVATED_06.catalog_counts)
     assert (safety.REVISION, safety.SHAPE_DIGEST) == (current.revision, current.shape_digest)
-    assert current.policy_overlays == frozenset({"rbac-policy-v2"})
+    assert current.policy_overlays == frozenset(
+        {"rbac-policy-v2", "rbac-policy-v3", "rbac-policy-v4"}
+    )
+    assert schema_contract.K5.policy_overlays == frozenset({"rbac-policy-v2"})
     assert schema_contract.PREVIOUS.policy_overlays == frozenset()
     role_check = next(str(c.sqltext) for c in Role.__table__.constraints if "role IN" in str(getattr(c, "sqltext", "")))  # fmt: skip
-    assert "'identity_operator'" in role_check
+    assert "'identity_operator'" in role_check and "'customer'" in role_check
 
 
 def test_tampered_policy_file_is_refused(tmp_path, monkeypatch):

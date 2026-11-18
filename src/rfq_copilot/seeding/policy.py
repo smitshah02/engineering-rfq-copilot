@@ -16,6 +16,18 @@ modified overlay, or an overlay row under a contract that does not accept it, fa
 ``rbac-policy-v2`` adds the ``identity_operator`` role (schema revision 20261111_06),
 the dedicated route permissions of policy v2 and the two operator permissions, granted
 only to ``identity_operator``. It assigns no user to any role.
+
+``rbac-policy-v3`` (schema revision 20261117_01) is v2 plus the external ``customer`` role:
+``view_customer`` and four dedicated ``customer_*`` permissions, none of which any staff
+route, MCP tool or quotation service accepts. Applied over a complete v2 it adds only the
+missing rows ("upgraded"). No user is given the role here.
+
+``rbac-policy-v4`` (schema revision 20261117_02) is v3 plus the internal
+``rfq_workflow_agent`` service role: the three MCP tool permissions of policy v2
+(``view_catalog``, ``view_assigned_rfqs``, ``view_quote``) and ``create_quote_draft`` for the
+deterministic drafting of Checkpoint A4. Never approve, reject, release, request approval,
+edit, engineering review or any ``customer_*`` permission. v3 rows are unchanged, so
+customer access is exactly v3's. Applied over a complete v3 it adds only the missing rows.
 """
 
 import argparse
@@ -37,6 +49,14 @@ TRUSTED_POLICIES = {
     "rbac-policy-v2": (
         "rbac-policy-v2.json",
         "3e2ac34cfbe47d4cf4ff0dcdc58fb0c95d29cfce97673d3b7c366addbfa1b74d",
+    ),
+    "rbac-policy-v3": (
+        "rbac-policy-v3.json",
+        "ca540535d2ae364fcf3d4ef4b0abc3a583d0f8f35f0a893fa58205b53beb00ac",
+    ),
+    "rbac-policy-v4": (
+        "rbac-policy-v4.json",
+        "31ad49c251cc3905c684a06cb246015f18bfb17d52dd6b83fe015b14ee19f2a0",
     ),
 }
 OVERLAY_TABLES = ("roles", "permissions", "role_permissions")
@@ -130,11 +150,16 @@ async def register_policy(session, version: str) -> str:
     if state == f"applied:{version}":
         return "already present"
     if state != "absent":
-        raise SeedError("A partial or modified policy overlay is stored; repair it manually.")
-    await session.execute(insert(Role), list(rows["roles"]))
-    await session.execute(insert(Permission), list(rows["permissions"]))
-    await session.execute(insert(RolePermission), list(rows["role_permissions"]))
-    return "applied"
+        # Upgrade: a complete accepted overlay whose rows are all part of this one (v2 -> v3)
+        # gets only the missing rows. Anything partial or foreign is refused as before.
+        base = policy_rows(state.removeprefix("applied:")) if state else None
+        if base is None or not all(r in rows[t] for t in OVERLAY_TABLES for r in base[t]):
+            raise SeedError("A partial or modified policy overlay is stored; repair it manually.")
+        rows = {t: tuple(r for r in rows[t] if r not in base[t]) for t in OVERLAY_TABLES}
+    for model, table in ((Role, "roles"), (Permission, "permissions"), (RolePermission, "role_permissions")):  # fmt: skip
+        if rows[table]:
+            await session.execute(insert(model), list(rows[table]))
+    return "applied" if state == "absent" else "upgraded"
 
 
 def main(argv=None) -> int:
