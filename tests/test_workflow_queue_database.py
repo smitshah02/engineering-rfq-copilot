@@ -12,6 +12,8 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import call
+from test_auth_database import database as database
 from test_customer_access_database import v3
 from test_customer_rfq_create_database import body
 from test_database_queries import populated as populated
@@ -19,8 +21,6 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import call
-from test_day20_auth_database import database as database
 from test_operator_assignment_admin_database import admin, first_operator, staff
 from test_runtime_integrity_database import eligible, fails, runtime_audit
 

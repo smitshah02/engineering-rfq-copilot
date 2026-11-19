@@ -1,4 +1,4 @@
-"""Day 24 MCP tool contracts: shapes, precision, forged-field rejection, errors, SDK schemas."""
+"""tool contract MCP tool contracts: shapes, precision, forged-field rejection, errors, SDK schemas."""
 
 import json
 from decimal import Decimal

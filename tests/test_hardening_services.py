@@ -1,4 +1,4 @@
-"""Phase 2.5 hardening, without a database: release invariant, review conditions,
+"""service hardening hardening, without a database: release invariant, review conditions,
 evaluation fingerprints, snapshot guards, planning dates and the Intake boundary.
 
 Uses the frozen v1.1.0 rule documents through the existing unit fixtures (read only).

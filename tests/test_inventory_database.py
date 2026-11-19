@@ -18,9 +18,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day07_materials import MATERIALS, reference_module, rules
-from test_day08_manufacturing import base_parts
 from test_entities import PARITY_SPLITS
+from test_manufacturing_database import base_parts
+from test_materials_database import MATERIALS, reference_module, rules
 
 from rfq_copilot.entities import Part
 from rfq_copilot.models import MaterialInventory
@@ -226,14 +226,19 @@ async def test_multiple_stock_records_are_summed(populated):
     rule_set = await pinned(populated)
     row = dict(await stock_row(populated, "MAT-002", "2.0"))
     del row["available_kg"]  # computed by PostgreSQL
-    extra = {**row, "inventory_id": "TEST-DAY9-INV", "warehouse": "WH-Z", "quantity_kg": D("12.5")}
+    extra = {
+        **row,
+        "inventory_id": "TEST-INVENTORY-INV",
+        "warehouse": "WH-Z",
+        "quantity_kg": D("12.5"),
+    }
     extra["reserved_kg"] = D("2.5")
     await populated.execute(MaterialInventory.__table__.insert().values(**extra))
     populated.expunge_all()
     (line,) = (await check_inventory(populated, [Part.from_mapping(PANEL)], **rule_set)).lines
     first_free = row["quantity_kg"] - row["reserved_kg"]
     assert line.available_kg == first_free + D(10)
-    assert line.inventory_ids == tuple(sorted((row["inventory_id"], "TEST-DAY9-INV")))
+    assert line.inventory_ids == tuple(sorted((row["inventory_id"], "TEST-INVENTORY-INV")))
     assert len(line.supplier_lead_business_days) == 2
 
 

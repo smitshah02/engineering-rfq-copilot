@@ -1,4 +1,4 @@
-"""Day 54D on the guarded test database (K5 on K4 on K3 on K2).
+"""integrity on the guarded test database (K5 on K4 on K3 on K2).
 
 Drafts and submissions run on the restricted runtime role (``TEST_APP_DATABASE_URL``; the
 ``runtime`` fixture applies the K2 marked grant block); approvals, rejections and releases
@@ -20,10 +20,10 @@ from test_database_queries import customer_id
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
-from test_day21_rbac_database import bound, one_active_user_per_role
 from test_quote_drafts_concurrency import RACE_TIMEOUT, guarded
 from test_quote_drafts_concurrency import world as world
 from test_quote_drafts_database import RFQ_ID, args, refused
+from test_rbac_database import bound, one_active_user_per_role
 from test_runtime_role_database import runtime as runtime
 
 from rfq_copilot.api.auth import Principal
@@ -114,7 +114,7 @@ async def manager(runtime, decision, world, seed_database, seed_plan):
 
 @pytest_asyncio.fixture(loop_scope="module")
 async def releaser(manager, seed_database, seed_plan):
-    """Another sales_manager: K5 (Day 55 policy) refuses a release by the approver."""
+    """Another sales_manager: K5 (human decision policy) refuses a release by the approver."""
     return await sales_manager(seed_database, seed_plan, other_than=manager.user_id)
 
 
@@ -226,7 +226,7 @@ async def test_submit_then_approve_records_one_bound_decision(runtime, world, ma
     assert pending["requests"] == [("pending", None)] and pending["approval_valid"] is False
     assert [h[:2] for h in pending["history"]] == [("submitted", world.user_id)]
     assert pending["audits"] == ["quote_draft.create", "quote_approval.submit"]
-    # Day 53 never assesses a submitted version (a pending request exists).
+    # approval policy never assesses a submitted version (a pending request exists).
     async with runtime.session() as s:
         await refused("not_assessable", assess_quote_approval(s, manager, quote_id, expected_version=1))  # fmt: skip
 

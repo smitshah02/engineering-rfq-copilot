@@ -1,4 +1,4 @@
-"""Day 31 LLM foundation: mocked chat models only, no provider calls, no database."""
+"""model interface LLM foundation: mocked chat models only, no provider calls, no database."""
 
 from typing import Any, Literal
 
@@ -233,7 +233,7 @@ async def test_structured_output_model_failure_and_unsupported():
     assert err.value.code == "unsupported"
 
 
-# --- D31-1 / D31-2 hardening -------------------------------------------------------------
+# --- model interface control / model interface control hardening -------------------------------------------------------------
 
 SECRET = "Bearer sk-live-abcdefghijklmnop api_key=hunter2 host=10.0.0.5"
 
@@ -306,7 +306,7 @@ def test_well_formed_raw_tool_calls_still_accepted():
     assert proposal.arguments == GetMaterialInput(material_id="MAT-1")
 
 
-# --- D36-08: raw response checks in invoke_structured ------------------------------------
+# --- intake extraction control: raw response checks in invoke_structured ------------------------------------
 
 
 class RawModel(GenericFakeChatModel):

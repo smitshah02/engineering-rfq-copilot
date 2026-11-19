@@ -1,6 +1,6 @@
-"""Day 38 opt-in live check: A2 through the real MCP host and seeded manufacturing services.
+"""manufacturing evidence opt-in live check: A2 through the real MCP host and seeded manufacturing services.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the Day 37 live Intake test:
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the intake validation live Intake test:
 a separate uvicorn MCP host on loopback TCP over the guarded, seeded test database. No model.
 """
 

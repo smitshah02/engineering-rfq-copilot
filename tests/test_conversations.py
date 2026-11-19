@@ -1,4 +1,4 @@
-"""Day 33 memory and checkpointing: mocked chat models, in-memory saver, no MCP or database."""
+"""checkpoint memory and checkpointing: mocked chat models, in-memory saver, no MCP or database."""
 
 import asyncio
 import pickle
@@ -19,7 +19,7 @@ from rfq_copilot.mcp.client import McpToolClient
 pytestmark = pytest.mark.asyncio
 ALICE = Principal(customer_id="CUST-A", user_id="U-1")
 SECRET = "Bearer abcdefghijklmnopqrstuvwx"
-# Phase 5: tool-free turns answer with fixed guidance; turns are told apart by history/inputs.
+# conversational graph: tool-free turns answer with fixed guidance; turns are told apart by history/inputs.
 GUIDED = g.GraphResult("answered", g.GUIDANCE, (), None, grounding="guidance")
 
 
@@ -72,7 +72,7 @@ def stored_bytes(saver: InMemorySaver) -> str:
 @pytest.fixture(autouse=True)
 def no_mcp(monkeypatch):
     async def forbidden(*args, **kwargs):
-        raise AssertionError("MCP must not be called on Day 33")
+        raise AssertionError("MCP must not be called during checkpoint-only operations")
 
     monkeypatch.setattr(McpToolClient, "call", forbidden)
 
@@ -300,7 +300,7 @@ async def test_default_saver_is_safe_in_memory():
     assert convo._graph.checkpointer.serde is g.SAFE_SERDE
 
 
-# --- Day 32 compatibility ----------------------------------------------------------------
+# --- graph execution compatibility ----------------------------------------------------------------
 
 
 async def test_memoryless_path_unchanged():

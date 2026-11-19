@@ -1,4 +1,4 @@
-"""Phase 3.5 features against the guarded PostgreSQL test database at head 20261115_01 (K2 on top of 06).
+"""authorization hardening features against the guarded PostgreSQL test database at head 20261115_01 (K2 on top of 06).
 
 The seeded fixture database already has the activated schema (02, 03, 04, 06). The
 pinned rbac-policy-v2 overlay and the deferred 20261111_05 are applied inside the
@@ -20,16 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from test_attachments import pdf
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import app_with, bind, call
+from test_auth_database import database as database
+from test_backend_policy_contracts import V2
 from test_database_queries import customer_id, other_customer, statements
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import app_with, bind, call
-from test_day20_auth_database import database as database
-from test_day21_rbac_database import bound, grants, one_active_user_per_role, own_rfq, release_one
-from test_phase35_completion import V2
+from test_rbac_database import bound, grants, one_active_user_per_role, own_rfq, release_one
 
 from rfq_copilot import identity_admin
 from rfq_copilot.api.auth import ROUTE_PERMISSIONS
@@ -53,7 +53,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 VERSIONS = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 DEFERRED = Path(__file__).resolve().parents[1] / "alembic" / "proposed" / "deferred"
-PHASE35 = ["20261111_02", "20261111_03", "20261111_04", "20261111_06"]
+AUTHORIZATION_REVISIONS = ["20261111_02", "20261111_03", "20261111_04", "20261111_06"]
 REFERENCE_V2_GRANTS = {  # derived from the dataset's reference tool policy (rbac-policy-v2)
     ("sales_representative", "view_catalog"),
     ("estimator", "view_catalog"),
@@ -103,13 +103,13 @@ async def policy_v2(populated):
 
 async def test_active_chain_ends_at_06_and_05_stays_deferred():
     previous = "20261110_01"
-    for revision in PHASE35:
+    for revision in AUTHORIZATION_REVISIONS:
         module = migration(revision)
         assert (module.revision, module.down_revision) == (revision, previous)
         assert list(VERSIONS.glob(f"{revision}_*.py"))  # activated
         previous = revision
     deferred = migration("20261111_05")
-    assert deferred.down_revision == "20261111_06"  # its original parent (restored, Day 54B)
+    assert deferred.down_revision == "20261111_06"  # its original parent (restored, integrity)
     assert not list(VERSIONS.glob("20261111_05_*")) and list(DEFERRED.glob("20261111_05_*"))
     merge = migration("20261116_02")  # schema-free join of 05 and the active head
     assert merge.down_revision == ("20261111_05", "20261118_01")
@@ -117,12 +117,12 @@ async def test_active_chain_ends_at_06_and_05_stays_deferred():
     assert not list((DEFERRED.parent / "approved").glob("*.py"))
 
 
-async def test_phase35_revisions_downgrade_and_reupgrade_cleanly(populated):
+async def test_authorization_revisions_downgrade_and_reupgrade_cleanly(populated):
     tables = "SELECT tablename FROM pg_tables WHERE schemaname='business'"
     assert {"rfq_assignments", "token_revocations"} <= set((await populated.scalars(text(tables))).all())  # fmt: skip
-    await migrate(populated, *reversed(PHASE35), direction="downgrade")
+    await migrate(populated, *reversed(AUTHORIZATION_REVISIONS), direction="downgrade")
     assert not {"rfq_assignments", "token_revocations"} & set((await populated.scalars(text(tables))).all())  # fmt: skip
-    await migrate(populated, *PHASE35)
+    await migrate(populated, *AUTHORIZATION_REVISIONS)
     assert {"rfq_assignments", "token_revocations"} <= set((await populated.scalars(text(tables))).all())  # fmt: skip
     await migrate(populated, "20261111_05")
     await migrate(populated, "20261111_05", direction="downgrade")  # deferred: clean both ways

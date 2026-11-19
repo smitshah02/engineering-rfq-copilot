@@ -1,7 +1,7 @@
-"""Day 49 checkpointing and recovery (L05): stage-boundary pause, in-process continuation from
+"""recovery checkpointing and recovery (L05): stage-boundary pause, in-process continuation from
 the original evidence, explicit restart as a new attempt, retrieval, cancellation, refusal.
 
-Offline: the Phase 6 harness through the Day 46 runner. No network, database or model.
+Offline: the specialist workflow harness through the delegation runner. No network, database or model.
 
 Sections (-k): test_schema_, test_pause_, test_identity_, test_stale_, test_replay_,
 test_failure_, test_security_, test_compat_."""
@@ -50,7 +50,7 @@ CAROL = Principal("CUST-008", frozenset({"view_quote"}), user_id="U-2", subject=
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -532,7 +532,7 @@ def test_security_recovery_results_never_approve_or_release():
 
 
 @A
-async def test_security_completed_result_keeps_day48_semantics(recovery):
+async def test_security_completed_result_keeps_escalation_semantics(recovery):
     done = await recovery.start(context())
     d = done.result.disposition
     assert (d.category, d.approved, d.released, d.customer_status) == ("draft_ready_for_approval", False, False, "not_verified")  # fmt: skip
@@ -567,7 +567,7 @@ def test_compat_supervisor_graphs_still_refuse_checkpointers():
     assert sv.build_routing_graph().checkpointer is None
 
 
-# --- D49-01. cancellation lifecycle ---------------------------------------------------------
+# --- recovery control. cancellation lifecycle ---------------------------------------------------------
 
 
 def swallowing(monkeypatch) -> asyncio.Event:
@@ -714,7 +714,7 @@ async def test_cancel_from_another_thread_runs_on_the_tasks_loop(recovery):
     assert_cancelled(recovery, rid)
 
 
-# --- D49-02. retention ----------------------------------------------------------------------
+# --- recovery control. retention ----------------------------------------------------------------------
 
 
 @A
@@ -757,10 +757,10 @@ async def test_retention_close_releases_everything_and_cancels_running_work(reco
     assert_cancelled(recovery, running)
 
 
-# --- D49-03. shared ownership, no graph dependency ------------------------------------------
+# --- recovery control. shared ownership, no graph dependency ------------------------------------------
 
 
-def test_ownership_owner_key_is_the_phase5_derivation_unchanged():
+def test_ownership_owner_key_is_the_conversation_derivation_unchanged():
     expected = hashlib.sha256(b"CUST-008\x00U-1").hexdigest()
     assert ownership.principal_owner(ALICE) == expected
     assert ownership.principal_owner(CAROL) != expected  # same customer, another user
@@ -794,7 +794,9 @@ UNOWNED = [
 def test_ownership_unverified_principals_are_refused(make):
     with pytest.raises(ownership.ThreadAccessError) as error:
         ownership.principal_owner(make())
-    assert str(error.value) == "thread_unavailable"  # the same opaque answer as Phase 5
+    assert (
+        str(error.value) == "thread_unavailable"
+    )  # the same opaque answer as conversational graph
 
 
 # fmt: off

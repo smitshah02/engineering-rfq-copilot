@@ -1,7 +1,7 @@
-"""Day 41 opt-in live check: A1 -> A2 -> A3 -> A4 -> A5 through the real MCP host and seeded
+"""quotation evidence opt-in live check: A1 -> A2 -> A3 -> A4 -> A5 through the real MCP host and seeded
 services.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the Day 39/40 fixtures: a separate uvicorn MCP
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the supply evidence/40 fixtures: a separate uvicorn MCP
 host on loopback TCP over the guarded, seeded test database. No model. The pricing and approval
 rules are the ones ``pinned_rules`` loads and verifies against the manifest; ``approval-v1.2``
 (post-baseline, TD-004) is registered on the test database first with the existing idempotent

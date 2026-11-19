@@ -1,6 +1,6 @@
-"""Day 53 assessments racing revisions: independent sessions, connections, transactions.
+"""approval policy assessments racing revisions: independent sessions, connections, transactions.
 
-Reuses the Day 51/52 committed ``world`` (guarded ``rfq_copilot_test``, TRUNCATE in
+Reuses the draft persistence/52 committed ``world`` (guarded ``rfq_copilot_test``, TRUNCATE in
 teardown). Isolation is the application's READ COMMITTED. The assessment locks the quote
 row FOR SHARE; a revision needs FOR NO KEY UPDATE, which conflicts. So a revision waits
 until an open assessment's transaction ends, and an assessment that waits behind a

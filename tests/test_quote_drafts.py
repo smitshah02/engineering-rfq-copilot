@@ -1,4 +1,4 @@
-"""Day 51 quote-draft persistence: offline checks (no database, network or model)."""
+"""draft persistence quote-draft persistence: offline checks (no database, network or model)."""
 
 import ast
 import inspect
@@ -177,7 +177,7 @@ def test_receipt_carries_no_internal_cost_or_margin():
 
 
 def test_idempotency_repository_defaults_stay_the_upload_operation():
-    # Day 51 added an operation parameter; existing upload callers are unchanged.
+    # draft persistence added an operation parameter; existing upload callers are unchanged.
     for function in (find_receipt, add_receipt):
         assert inspect.signature(function).parameters["operation"].default == UPLOAD_OPERATION
     assert quote_drafts.OPERATION == "create_quote_draft"

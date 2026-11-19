@@ -1,9 +1,9 @@
-"""Day 51 quote drafts under real concurrency: independent sessions, connections, transactions.
+"""draft persistence quote drafts under real concurrency: independent sessions, connections, transactions.
 
 Data: other connections cannot see a rolled-back fixture transaction, so ``world`` COMMITS
 the seeded dataset, ``approval-v1.2``, ``workflow-v1.1``, ``workflow-v1.2``, one drafter binding and one runtime RFQ to the
 guarded ``rfq_copilot_test`` database, and truncates every application table in teardown
-(the Day 30 ``test_mcp_live_e2e`` pattern). ``seed_database`` verifies the database identity
+(the MCP verification ``test_mcp_live_e2e`` pattern). ``seed_database`` verifies the database identity
 first and, at module end, asserts the tables empty, downgrades and checks nothing is left.
 The development database is never opened.
 
@@ -27,8 +27,8 @@ from test_database_queries import customer_id
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
-from test_day21_rbac_database import bound
 from test_quote_drafts_database import RFQ_ID, args, drafters, runtime_rfq
+from test_rbac_database import bound
 
 import rfq_copilot.quote_drafts as quote_drafts
 from rfq_copilot.api.auth import Principal

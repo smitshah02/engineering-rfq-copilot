@@ -1,4 +1,4 @@
-"""Day 17 API contract tests. Public smoke suite: no PostgreSQL, credentials or dataset.
+"""request validation API contract tests. Public smoke suite: no PostgreSQL, credentials or dataset.
 
 Payloads are small synthetic examples, not dataset records.
 """
@@ -528,14 +528,14 @@ def test_error_contract_is_documented_in_openapi_for_routers_that_opt_in():
     assert {"RfqSubmissionRequest", "PartSpecification"} <= set(components)
 
 
-# --- Day 16 behaviour preserved ----------------------------------------------------------
+# --- API foundation behaviour preserved ----------------------------------------------------------
 
 
 def test_production_application_registers_no_rfq_route_or_schema():
     for settings in (DEV, ApiSettings(environment="production")):
         schema = create_app(settings).openapi()
-        # Day 18 added protected GET routes; still no RFQ submission route or request body.
-        # Day 19's attachment upload is the only other operation.
+        # protected reads added protected GET routes; still no RFQ submission route or request body.
+        # attachment's attachment upload is the only other operation.
         upload = "/api/v1/rfqs/{rfq_id}/attachments"
         assert all(
             set(ops) == ({"get", "post"} if path == upload else {"get"})
@@ -721,7 +721,7 @@ def test_every_detail_uses_a_predefined_message():
         assert detail["message"] in {*MESSAGES.values(), GENERIC_MESSAGE}
 
 
-def test_day16_endpoints_are_unchanged_by_the_handler():
+def test_api_foundation_endpoints_are_unchanged_by_the_handler():
     with TestClient(create_app(DEV)) as client:
         assert client.get("/health/live").json() == {"status": "alive"}
         assert client.get("/api/v1/system/info").json()["api_version"] == "v1"

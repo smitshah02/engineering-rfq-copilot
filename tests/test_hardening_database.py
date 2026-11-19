@@ -1,4 +1,4 @@
-"""Phase 2.5 hardening against the guarded, seeded, rolled-back test database.
+"""service hardening hardening against the guarded, seeded, rolled-back test database.
 
 Snapshot selection with two stored snapshots, planning-date checks, rule-document
 tampering under an unchanged stored sha256, the release invariant on the seeded policy,
@@ -15,16 +15,16 @@ import pytest
 from history_corruption import corrupted
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import IntegrityError
+from test_capacity_database import MONDAY
 from test_database_queries import populated as populated
 from test_database_queries import statements
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import PANEL, pinned, truth_files
-from test_day10_capacity import MONDAY
-from test_day11_lead_time import snapshots
-from test_day15_evaluation import rules as evaluation_rules
+from test_evaluation_database import rules as evaluation_rules
+from test_inventory_database import PANEL, pinned, truth_files
+from test_lead_time_database import snapshots
 
 from rfq_copilot.database import DatabaseError
 from rfq_copilot.entities import Part

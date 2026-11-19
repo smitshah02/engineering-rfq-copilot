@@ -23,13 +23,13 @@ from test_database_queries import other_customer
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
-from test_day21_rbac_database import bound
 from test_quote_approval_database import attestation, decide, drafted, state, submitted
 from test_quote_approval_database import decision as decision
 from test_quote_approval_database import manager as manager
 from test_quote_approval_database import releaser as releaser
 from test_quote_drafts_concurrency import RACE_TIMEOUT, guarded
 from test_quote_drafts_concurrency import world as world
+from test_rbac_database import bound
 from test_runtime_role_database import runtime as runtime
 
 from rfq_copilot import quote_approval, quote_drafts

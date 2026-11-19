@@ -1,9 +1,9 @@
-"""Day 51 quote-draft persistence against the guarded, seeded PostgreSQL test database.
+"""draft persistence quote-draft persistence against the guarded, seeded PostgreSQL test database.
 
 Every test runs in the seeded fixture transaction, which is rolled back: the service only
 flushes inside its own SAVEPOINT, and nothing is committed. The seed loader leaves that
 transaction in ``SET CONSTRAINTS ALL IMMEDIATE``, so every test here also proves the draft
-insert order works when the deferrable quote -> version pointer is immediate (the Day 51
+insert order works when the deferrable quote -> version pointer is immediate (the draft persistence
 review defect). The stale-check tests let a winning request run, in the same transaction,
 between the loser's checks and its inserts; real cross-transaction races are in
 ``test_quote_drafts_concurrency.py``. The development database is never touched.
@@ -17,15 +17,15 @@ import pytest
 from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from test_capacity_database import MONDAY
 from test_database_queries import customer_id, other_customer
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day10_capacity import MONDAY
-from test_day14_quotation import RFQ_0041
-from test_day21_rbac_database import bound, grants, one_active_user_per_role
+from test_quotation_database import RFQ_0041
+from test_rbac_database import bound, grants, one_active_user_per_role
 
 import rfq_copilot.quote_drafts as quote_drafts
 from rfq_copilot.api.auth import Principal
@@ -49,12 +49,12 @@ from rfq_copilot.services.evaluation import evaluate_stored_rfq
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
-RFQ_ID = "TEST-DAY51-RFQ"
+RFQ_ID = "TEST-DRAFT_PERSISTENCE-RFQ"
 EXPECTED = RFQ_0041["expected_pricing"]
 
 
 async def runtime_rfq(session, rfq_id, customer):
-    """RFQ-0041's two lines stored as runtime lines 10 and 20 (as Day 14's helper)."""
+    """RFQ-0041's two lines stored as runtime lines 10 and 20 (as quotation's helper)."""
     await session.execute(
         insert(TABLES["rfqs"]).values(rfq_id=rfq_id, customer_id=customer, source_type="mcp_shell")
     )
@@ -368,8 +368,8 @@ async def test_a_reused_key_for_another_request_conflicts(populated, seed_plan):
     await refused("quote_exists", create_quote_draft(populated, principal, RFQ_ID, **other_key))
     assert await count(populated, Quote, Quote.rfq_id == RFQ_ID) == 1
     # The same key for another of this customer's RFQs is a different request.
-    await runtime_rfq(populated, "TEST-DAY51-RFQ-2", principal.customer_id)
-    await refused("idempotency_key_conflict", create_quote_draft(populated, principal, "TEST-DAY51-RFQ-2", **args()))  # fmt: skip
+    await runtime_rfq(populated, "TEST-DRAFT_PERSISTENCE-RFQ-2", principal.customer_id)
+    await refused("idempotency_key_conflict", create_quote_draft(populated, principal, "TEST-DRAFT_PERSISTENCE-RFQ-2", **args()))  # fmt: skip
     assert await count(populated, IdempotencyRecord) == 1
 
 
@@ -409,10 +409,10 @@ async def test_keys_are_isolated_per_tenant(populated, seed_plan):
     other = (await drafters(populated))[1]
     theirs = other_customer(seed_plan)
     await bound(populated, other, theirs)
-    await runtime_rfq(populated, "TEST-DAY51-RFQ-B", theirs)
+    await runtime_rfq(populated, "TEST-DRAFT_PERSISTENCE-RFQ-B", theirs)
     tenant_b = Principal(theirs, frozenset(), user_id=other.user_id)
     one = await create_quote_draft(populated, principal, RFQ_ID, **args())
-    two = await create_quote_draft(populated, tenant_b, "TEST-DAY51-RFQ-B", **args())
+    two = await create_quote_draft(populated, tenant_b, "TEST-DRAFT_PERSISTENCE-RFQ-B", **args())
     assert not two.replayed and one.quote_id != two.quote_id
     assert (one.customer_id, two.customer_id) == (principal.customer_id, theirs)
     assert await count(populated, IdempotencyRecord) == 2

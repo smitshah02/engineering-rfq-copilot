@@ -1,7 +1,7 @@
-"""Day 47 safe parallel execution (L01): A2's per-part feasibility checks run as bounded,
+"""parallel execution safe parallel execution (L01): A2's per-part feasibility checks run as bounded,
 independent work items inside one RFQ; the six A1 -> A5 stages stay a strict chain.
 
-Overlap is proven with asyncio.Event barriers, never timing. Offline: the Phase 6 harness
+Overlap is proven with asyncio.Event barriers, never timing. Offline: the specialist workflow harness
 (fake intake model, fake MCP executor running the real pure services), no network, no DB.
 
 Sections (-k): test_dependency_, test_concurrency_, test_fanin_, test_parity_, test_security_,
@@ -32,7 +32,7 @@ DOWNSTREAM = {*a3.TOOLS, "estimate_costs", "calculate_price", "evaluate_quotatio
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -411,9 +411,11 @@ class FailOne:
 
 MIXED = [
     spec(part_id="P-1"),
-    spec(part_id="P-2", thickness_mm=Decimal("5")),  # the Day 45/46 unsupported thickness
-    spec(part_id="P-3", part_type="l_bracket"),  # mfg-v1.0 needs height_mm (Day 38 test)
-    spec(part_id="P-4", material_id="MAT-999"),  # not in the catalog (Day 38 test)
+    spec(part_id="P-2", thickness_mm=Decimal("5")),  # the routing/46 unsupported thickness
+    spec(
+        part_id="P-3", part_type="l_bracket"
+    ),  # mfg-v1.0 needs height_mm (manufacturing evidence test)
+    spec(part_id="P-4", material_id="MAT-999"),  # not in the catalog (manufacturing evidence test)
 ]
 
 
@@ -442,7 +444,7 @@ def with_part(args, i, **fields):
     return args
 
 
-# name -> (text, intake args, router factory): two-part variants of the Day 45 scenarios
+# name -> (text, intake args, router factory): two-part variants of the routing scenarios
 # fmt: off
 MULTI = {
     "two_part_baseline": (TWO, two_args(), Router),
@@ -459,9 +461,9 @@ MULTI = {
 
 @A
 @pytest.mark.parametrize("name", sorted(MULTI))
-async def test_parity_parallel_supervisor_matches_sequential_supervisor_and_phase6(monkeypatch, name):  # fmt: skip
+async def test_parity_parallel_supervisor_matches_sequential_supervisor_and_specialist_workflow(monkeypatch, name):  # fmt: skip
     text, args, router = MULTI[name]
-    a, baseline_router = await run(text, args, router())  # Phase 6: A2 sequential
+    a, baseline_router = await run(text, args, router())  # specialist workflow: A2 sequential
     made = track_custody(monkeypatch)
     runs = []
     for limit in (1, 2):
@@ -474,7 +476,7 @@ async def test_parity_parallel_supervisor_matches_sequential_supervisor_and_phas
         assert (result.route.clarifications, result.route.review_reasons) == (a.clarifications, a.review_reasons)  # fmt: skip
         assert result.customer_view() == a.customer_view()
     assert business(parallel) == business(serial)
-    # Full typed stage results (amounts, evidence, explanations) equal Phase 6's, stage by stage.
+    # Full typed stage results (amounts, evidence, explanations) equal specialist workflow's, stage by stage.
     reference = results_of(a)
     assert len(made) == 2
     for custody in made:
@@ -485,8 +487,8 @@ async def test_parity_parallel_supervisor_matches_sequential_supervisor_and_phas
 
 @A
 async def test_parity_documented_two_part_outcomes_in_parallel_mode():
-    """Outcomes the fixtures document: BRK-201 at ±0.1 mm is TOLERANCE_UNSUPPORTED (D43-01);
-    constrained supply is priced and goes to review at A5 (Day 45 EXPECTED)."""
+    """Outcomes the fixtures document: BRK-201 at ±0.1 mm is TOLERANCE_UNSUPPORTED (specialist integration control);
+    constrained supply is priced and goes to review at A5 (routing EXPECTED)."""
     text, args, router = MULTI["two_part_unsupported_tolerance"]
     a, _ = await run(text, args, router())
     assert [p.status for p in a.manufacturing.parts] == ["feasible", "infeasible"]
@@ -668,7 +670,9 @@ async def test_safety_unexpected_worker_fault_is_a_sanitized_stage_failure(monke
 # --- G. compatibility -----------------------------------------------------------------------
 
 
-def test_compat_defaults_keep_phase6_sequential_and_supervisor_bounded():
+def test_compat_defaults_keep_specialist_workflow_sequential_and_supervisor_bounded():
     signature = inspect.signature(a2.evaluate_manufacturing_feasibility)
-    assert signature.parameters["max_concurrency"].default == 1  # Phase 6 and direct callers
+    assert (
+        signature.parameters["max_concurrency"].default == 1
+    )  # specialist workflow and direct callers
     assert context().part_concurrency == 2 <= a2.MAX_CONCURRENCY == 4

@@ -12,6 +12,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import select, update
+from test_capacity_database import MONDAY
 from test_database_queries import other_customer, statements
 from test_database_queries import populated as populated
 from test_database_seeding import SOURCE
@@ -19,10 +20,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import PANEL, pinned, truth_files
-from test_day10_capacity import MONDAY
-from test_day11_lead_time import snapshots
-from test_day14_quotation import RFQ_0041, insert_valid_runtime_rfq
+from test_inventory_database import PANEL, pinned, truth_files
+from test_lead_time_database import snapshots
+from test_quotation_database import RFQ_0041, insert_valid_runtime_rfq
 
 from rfq_copilot.entities import Part
 from rfq_copilot.models import Customer
@@ -130,7 +130,7 @@ async def test_stored_rfq_and_customer_scope(populated, seed_plan):
     customer = seed_plan.rows["rfqs"][0]["customer_id"]
     await insert_valid_runtime_rfq(populated, customer)
     e = await evaluate_stored_rfq(
-        populated, "TEST-DAY14-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
+        populated, "TEST-QUOTATION-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
     )
     assert e.quotation.calculation_id == RFQ_0041["expected_pricing"]["calculation_id"]
     assert [o.line_number for o in e.quotation.lines] == [10, 20]
@@ -138,7 +138,7 @@ async def test_stored_rfq_and_customer_scope(populated, seed_plan):
     other = other_customer(seed_plan)
     assert (
         await evaluate_stored_rfq(
-            populated, "TEST-DAY14-RFQ", customer_id=other, **rule_set, horizon_start=MONDAY
+            populated, "TEST-QUOTATION-RFQ", customer_id=other, **rule_set, horizon_start=MONDAY
         )
         is None
     )

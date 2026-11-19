@@ -16,8 +16,8 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day07_materials import FINISHES, MATERIALS, reference_business_rules, rules
 from test_entities import PARITY_SPLITS
+from test_materials_database import FINISHES, MATERIALS, reference_business_rules, rules
 
 from rfq_copilot.entities import Part
 from rfq_copilot.repositories import list_part_routing

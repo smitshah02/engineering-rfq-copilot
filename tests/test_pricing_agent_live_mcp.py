@@ -1,6 +1,6 @@
-"""Day 40 opt-in live check: A1 -> A2 -> A3 -> A4 through the real MCP host and seeded services.
+"""pricing evidence opt-in live check: A1 -> A2 -> A3 -> A4 through the real MCP host and seeded services.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the Day 39 fixtures: a separate uvicorn MCP
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the supply evidence fixtures: a separate uvicorn MCP
 host on loopback TCP over the guarded, seeded test database. No model. The pricing rule is
 the one ``pinned_rules`` loads and verifies against the manifest.
 """

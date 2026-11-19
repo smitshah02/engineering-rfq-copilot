@@ -1,4 +1,4 @@
-"""Day 19 attachments against the guarded PostgreSQL test database and dataset parity.
+"""attachment attachments against the guarded PostgreSQL test database and dataset parity.
 
 The upload route commits. Each test joins the seeded fixture transaction through a
 SAVEPOINT session, so a route commit only releases the savepoint and the fixture still
@@ -42,7 +42,7 @@ from rfq_copilot.models import RFQ, RFQAttachment
 pytestmark = pytest.mark.integration
 async_test = pytest.mark.asyncio(loop_scope="module")
 
-# Day 21: an injected principal is permission-checked like a real one; upload needs
+# authorization: an injected principal is permission-checked like a real one; upload needs
 # create_rfq and the metadata list view_assigned_rfqs.
 UPLOADS = frozenset({CREATE_RFQ, VIEW_ASSIGNED_RFQS})
 

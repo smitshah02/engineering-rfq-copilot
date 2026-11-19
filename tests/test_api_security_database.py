@@ -1,6 +1,6 @@
-"""Phase 3.5 hardening against the guarded PostgreSQL test database.
+"""authorization hardening hardening against the guarded PostgreSQL test database.
 
-Real ES256 tokens and seeded grants (Day 20/21 helpers). Every change happens inside the
+Real ES256 tokens and seeded grants (authentication/21 helpers). Every change happens inside the
 seeded fixture transaction and is rolled back. The injected ``JoinedDatabase`` is
 deliberately writable: it stands in for an accidentally writable injected Database.
 """
@@ -14,15 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from test_attachments import pdf
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import app_with, call
+from test_auth_database import database as database
 from test_database_queries import customer_id, statements
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import app_with, call
-from test_day20_auth_database import database as database
-from test_day21_rbac_database import bound, own_rfq, release_one, user_holding
+from test_rbac_database import bound, own_rfq, release_one, user_holding
 
 from rfq_copilot.api.auth import CREATE_RFQ, VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER
 from rfq_copilot.api.db import get_read_session

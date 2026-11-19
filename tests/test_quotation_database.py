@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import insert
+from test_capacity_database import MONDAY
 from test_database_queries import other_customer, statements
 from test_database_queries import populated as populated
 from test_database_seeding import SOURCE
@@ -18,10 +19,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day06_repositories import insert_runtime_rfq
-from test_day09_inventory import pinned, truth_files
-from test_day10_capacity import MONDAY
-from test_day11_lead_time import snapshots
+from test_inventory_database import pinned, truth_files
+from test_lead_time_database import snapshots
+from test_repositories_database import insert_runtime_rfq
 
 from rfq_copilot.entities import Part
 from rfq_copilot.seeding.mapping import TABLES
@@ -106,7 +106,7 @@ async def insert_valid_runtime_rfq(session, customer):
     """RFQ-0041's two lines stored as runtime lines numbered 10 and 20."""
     await session.execute(
         insert(TABLES["rfqs"]).values(
-            rfq_id="TEST-DAY14-RFQ", customer_id=customer, source_type="mcp_shell"
+            rfq_id="TEST-QUOTATION-RFQ", customer_id=customer, source_type="mcp_shell"
         )
     )
     columns = [c.name for c in TABLES["rfq_line_items"].columns]
@@ -115,7 +115,7 @@ async def insert_valid_runtime_rfq(session, customer):
         row = {k: v for k, v in vars(part).items() if k in columns}
         await session.execute(
             insert(TABLES["rfq_line_items"]).values(
-                rfq_line_id=uuid4(), rfq_id="TEST-DAY14-RFQ", line_number=number, **row
+                rfq_line_id=uuid4(), rfq_id="TEST-QUOTATION-RFQ", line_number=number, **row
             )
         )
 
@@ -125,7 +125,7 @@ async def test_quote_stored_rfq_lines_with_customer_scope(populated, seed_plan):
     customer = seed_plan.rows["rfqs"][0]["customer_id"]
     await insert_valid_runtime_rfq(populated, customer)
     q = await quote_rfq(
-        populated, "TEST-DAY14-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
+        populated, "TEST-QUOTATION-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
     )
     # Stored Numeric(12,3) values; same quotation and ID as the labelled RFQ-0041.
     assert [o.line_number for o in q.lines] == [10, 20]
@@ -137,7 +137,7 @@ async def test_quote_stored_rfq_lines_with_customer_scope(populated, seed_plan):
     other = other_customer(seed_plan)
     assert (
         await quote_rfq(
-            populated, "TEST-DAY14-RFQ", customer_id=other, **rule_set, horizon_start=MONDAY
+            populated, "TEST-QUOTATION-RFQ", customer_id=other, **rule_set, horizon_start=MONDAY
         )
         is None
     )
@@ -154,7 +154,7 @@ async def test_stored_rfq_with_an_incomplete_line_and_historical_rfq(populated, 
     customer = seed_plan.rows["rfqs"][0]["customer_id"]
     await insert_runtime_rfq(populated, customer)  # PART-A valid, PART-B quantity only
     q = await quote_rfq(
-        populated, "TEST-DAY6-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
+        populated, "TEST-REPOSITORY-RFQ", customer_id=customer, **rule_set, horizon_start=MONDAY
     )
     assert (q.result, q.blocking_lines) == ("needs_clarification", (2,))
     assert q.lines[1].manufacturing.findings[:2] == ("MISSING_FINISH_ID", "MISSING_LENGTH_MM")

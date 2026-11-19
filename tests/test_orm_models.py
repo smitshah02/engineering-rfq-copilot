@@ -1,4 +1,4 @@
-"""Independent expectations come from approved Day 4 documents, never model-generated fixtures."""
+"""Independent expectations come from approved schema baseline documents, never model-generated fixtures."""
 
 import copy
 import html
@@ -73,8 +73,8 @@ APPROVED_TABLES = (
     "audit_events",
     "workflow_runs",
 )
-# Approved after Day 4: TD-012, revision 20261110_01. Specified here, as TD-005 is below;
-# the Day 4 documents stay as written. It deliberately has no ORM relationships.
+# Approved after schema baseline: TD-012, revision 20261110_01. Specified here, as TD-005 is below;
+# the schema baseline documents stay as written. It deliberately has no ORM relationships.
 TD012_TABLE = "user_customer_bindings"
 TD012_SPEC = dict(
     columns=[
@@ -97,9 +97,9 @@ TD012_SPEC = dict(
     ],
     checks=["revoked_at IS NULL OR revoked_at >= created_at"],
 )
-# Approved Phase 3.5 tables (revisions 20261111_02/03), specified here like TD-012; no
-# ORM relationships. Identity and hex checks come from the shared Day 4 conventions.
-PHASE35_SPECS = {
+# Approved authorization hardening tables (revisions 20261111_02/03), specified here like TD-012; no
+# ORM relationships. Identity and hex checks come from the shared schema baseline conventions.
+AUTHORIZATION_SPECS = {
     "rfq_assignments": dict(
         columns=[
             dict(name="rfq_id", type="TEXT", nullable=False, default="none", rule="—"),
@@ -164,7 +164,7 @@ PHASE35_SPECS = {
         ],
     ),
 }
-SCHEMA_TABLES = (*APPROVED_TABLES, TD012_TABLE, *PHASE35_SPECS)
+SCHEMA_TABLES = (*APPROVED_TABLES, TD012_TABLE, *AUTHORIZATION_SPECS)
 PG = postgresql.dialect()
 
 
@@ -272,14 +272,14 @@ def approved():
             checks=re.findall(r"`([^`]+)`", check_line),
         )
     assert set(tables) == set(APPROVED_TABLES)
-    # Approved after Day 4: TD-005, revision 20261109_01. The Day 4 document stays as
+    # Approved after schema baseline: TD-005, revision 20261109_01. The schema baseline document stays as
     # written; this is the only delta, and the original key is asserted before replacing it.
     assert tables["production_capacity"]["unique"] == [("workcentre_id", "week_start")]
     tables["production_capacity"]["unique"] = [("workcentre_id", "week_start", "snapshot_id")]
     assert sum(len(table["columns"]) for table in tables.values()) == 261
     assert sum(len(table["fks"]) for table in tables.values()) == 64
     tables[TD012_TABLE] = copy.deepcopy(TD012_SPEC)
-    # Approved Phase 3.5 deltas (20261111_04, 20261111_06): asserted as documented first.
+    # Approved authorization hardening deltas (20261111_04, 20261111_06): asserted as documented first.
     roles_check = "role IN ('sales_representative','estimator','manufacturing_engineer','sales_manager','administrator','auditor')"  # fmt: skip
     assert tables["roles"]["checks"] == [roles_check]
     # ... plus Milestone 2 Step 1 (20261117_01): the external customer role value, and
@@ -291,14 +291,14 @@ def approved():
         operation[:-1] + ",'attach_rfq_document')" if c == operation else c
         for c in tables["idempotency_records"]["checks"]
     ]
-    for name, spec in PHASE35_SPECS.items():
+    for name, spec in AUTHORIZATION_SPECS.items():
         tables[name] = copy.deepcopy(spec)
-    # Approved Day 54A K2 delta (20261115_01): the trigger-stamped version creation seal.
+    # Approved integrity K2 delta (20261115_01): the trigger-stamped version creation seal.
     assert tables["quote_versions"]["columns"][-1]["name"] == "snapshot_completeness"
     tables["quote_versions"]["columns"].append(
         dict(name="created_xact", type="XID8", nullable=True, default="none", rule="—")
     )
-    # Approved Day 54B K3 delta (20261116_01), asserted as documented first: calculation
+    # Approved integrity K3 delta (20261116_01), asserted as documented first: calculation
     # records keyed by their own identity, and version evidence on quote_versions.
     hex_rule = "64 lowercase hexadecimal characters"
     calc = tables["pricing_calculations"]
@@ -411,7 +411,7 @@ def test_exact_registry_and_single_base():
 
 
 @pytest.mark.parametrize("name", SCHEMA_TABLES)
-def test_all_columns_types_nullability_and_primary_keys_match_day4(approved, name):
+def test_all_columns_types_nullability_and_primary_keys_match_schema_baseline(approved, name):
     expectation = approved[name]
     table = orm_table(name)
     assert tuple(table.c.keys()) == tuple(col["name"] for col in expectation["columns"])
@@ -436,7 +436,7 @@ def test_all_columns_types_nullability_and_primary_keys_match_day4(approved, nam
 
 
 @pytest.mark.parametrize("name", SCHEMA_TABLES)
-def test_foreign_and_unique_keys_match_day4(approved, name):
+def test_foreign_and_unique_keys_match_schema_baseline(approved, name):
     table = orm_table(name)
     expected = approved[name]
     found = {
@@ -472,7 +472,7 @@ def test_foreign_and_unique_keys_match_day4(approved, name):
 
 
 @pytest.mark.parametrize("name", SCHEMA_TABLES)
-def test_insert_defaults_and_computed_values_match_day4(approved, name):
+def test_insert_defaults_and_computed_values_match_schema_baseline(approved, name):
     for expected in approved[name]["columns"]:
         column = orm_table(name).c[expected["name"]]
         default = expected["default"]
@@ -501,7 +501,7 @@ def test_insert_defaults_and_computed_values_match_day4(approved, name):
 
 
 def expected_shared_checks(table):
-    """Concrete applications of Day 4 common conventions, not model introspection."""
+    """Concrete applications of schema baseline common conventions, not model introspection."""
     checks = []
     aliases = {
         "created_by",
@@ -544,7 +544,7 @@ def expected_shared_checks(table):
 
 
 @pytest.mark.parametrize("name", SCHEMA_TABLES)
-def test_exact_table_and_common_checks_match_day4(approved, name):
+def test_exact_table_and_common_checks_match_schema_baseline(approved, name):
     checks = [key for key in orm_table(name).constraints if isinstance(key, CheckConstraint)]
     wanted = approved[name]["checks"] + expected_shared_checks(approved[name])
     # A4: workflow_runs.quote_id is nullable and protected by its FK
@@ -587,7 +587,7 @@ def test_every_documented_index_matches_with_no_redundant_indexes():
                 None if where is None else normalized(where),
             )
             assert index.dialect_options["postgresql"]["using"] == "btree"
-    # TD-012 indexes (revision 20261110_01), not in the Day 4 document.
+    # TD-012 indexes (revision 20261110_01), not in the schema baseline document.
     expectations["ix_user_customer_bindings_customer_id"] = (
         TD012_TABLE,
         ("customer_id",),
@@ -600,7 +600,7 @@ def test_every_documented_index_matches_with_no_redundant_indexes():
         True,
         normalized("revoked_at IS NULL"),
     )
-    # Phase 3.5 indexes (20261111_02/03).
+    # authorization hardening indexes (20261111_02/03).
     expectations["ix_rfq_assignments_active_user"] = (
         "rfq_assignments", ("user_id", "rfq_id"), False, normalized("revoked_at IS NULL"),
     )  # fmt: skip

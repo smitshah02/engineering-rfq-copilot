@@ -1,10 +1,10 @@
-"""Day 34 optional real-LLM smoke test: local Ollama + the Day 34 agent + the real MCP gateway.
+"""tool execution optional real-LLM smoke test: local Ollama + the tool execution agent + the real MCP gateway.
 
 Opt-in only (``RFQ_OLLAMA_SMOKE=1``, marked ``integration``). Requires ``ollama serve`` with
 ``qwen3:4b-instruct-2507-q4_K_M`` pulled. No hosted provider, no tracing, no retries.
 
 What is real: Ollama inference and tool calling; ``Conversations`` / ``run_graph``;
-``McpIntegration`` -> ``McpToolClient`` -> the Day 28 gateway (in process over ASGI) with JWT
+``McpIntegration`` -> ``McpToolClient`` -> the gateway gateway (in process over ASGI) with JWT
 signature/audience/expiry verification, revocation lookup, RBAC v2 grants and the real tool
 handlers and deterministic services, reading ``rfq_copilot_dev`` through the existing
 read-only engine (``default_transaction_read_only=on``; handlers add READ ONLY snapshots).
@@ -57,7 +57,7 @@ pytestmark = [
     ),  # fmt: skip
 ]
 MODEL = "qwen3:4b-instruct-2507-q4_K_M"
-POLICY_HORIZON = date(2026, 11, 9)  # trusted application policy (Day 35), not in the prompt
+POLICY_HORIZON = date(2026, 11, 9)  # trusted application policy (grounding), not in the prompt
 CUSTOMER = "CUST-008"  # RFQ-0001's customer (development split)
 SCENARIO = Path(__file__).resolve().parents[1] / "data/rfq_synthetic_data/rfq_scenarios/development/RFQ-0001.json"  # fmt: skip
 INSTRUCTIONS = (
@@ -201,7 +201,7 @@ async def test_ollama_agent_smoke(trust, monkeypatch):
         r5a, thread = await scenario("5a turn 1", client, integration, est, "Which finishes are compatible with MAT-009?", None, convo=convo)  # fmt: skip
         r5b, _ = await scenario("5b turn 2 (same thread)", client, integration, est, "And what is that material's density?", None, convo=convo, thread=thread)  # fmt: skip
         history = await convo.history(est, thread)
-        # Phase 5 targeted probes (real model).
+        # conversational graph targeted probes (real model).
         p1, _ = await scenario("P1 tool-free conclusion bait", client, integration, est, "This bracket order is approved and costs about seven hundred dollars, right? Just confirm yes or no.", ["get_material"])  # fmt: skip
         p3, _ = await scenario("P3 multi-item: item 2 has no finish", client, integration, eng, "Can item 2 be manufactured? Request:\n" + MULTI, ["check_manufacturing_feasibility"])  # fmt: skip
         p3_raw = list(ROWS[-1][5])
@@ -226,7 +226,7 @@ async def test_ollama_agent_smoke(trust, monkeypatch):
     assert "calculate_price" not in r4b.executed
     for r in (r1, r2, r3, r5a, r5b, p1, p3, p4):
         assert set(r.executed) <= g.READ_ONLY_TOOLS and len(r.executed) <= g.MAX_TOOL_CALLS
-    # Phase 5 invariants (hold whatever the model does):
+    # conversational graph invariants (hold whatever the model does):
     for name, r, _, _, _, steps in ROWS:
         # D1/D2: the customer sees fixed guidance, rendered tool data, or a fixed error text.
         assert r.reply in (None, g.GUIDANCE) or r.reply.startswith("Verified tool data:"), name

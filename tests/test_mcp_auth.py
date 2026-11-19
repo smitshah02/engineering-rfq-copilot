@@ -1,4 +1,4 @@
-"""Day 27 MCP authentication and authorization (F1-F4).
+"""MCP authentication MCP authentication and authorization (F1-F4).
 
 The real bearer path is exercised over the SDK's Streamable HTTP ASGI app with an
 in-memory httpx2 transport (no listener): JWT signed by the test trust key ->
@@ -24,18 +24,18 @@ from sqlalchemy import func, insert, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import ISSUER
 from test_auth import trust as trust
+from test_auth_database import bind
 from test_database_queries import customer_id, other_customer
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import pinned
-from test_day14_quotation import insert_valid_runtime_rfq
-from test_day20_auth_database import bind
-from test_day21_rbac_database import grants, one_active_user_per_role
+from test_inventory_database import pinned
 from test_mcp_manufacturing import ALL_PERMISSIONS, acting_as, text
 from test_mcp_supply import FACTORY, PLAN, spy
+from test_quotation_database import insert_valid_runtime_rfq
+from test_rbac_database import grants, one_active_user_per_role
 
 from rfq_copilot.api.auth import CREATE_RFQ, VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER
 from rfq_copilot.api.schemas.reads import MaterialPage, MaterialSummary
@@ -333,8 +333,8 @@ async def test_bearer_token_checks(populated, seed_plan, trust, case):
 @pytest.mark.asyncio(loop_scope="module")
 async def test_stored_rfq_is_customer_scoped_and_matches_quote_rfq(populated, seed_plan, trust):
     a, b, user_a, user_b = await world(populated, seed_plan)
-    await insert_valid_runtime_rfq(populated, a)  # TEST-DAY14-RFQ, lines 10 and 20
-    request = {"rfq_id": "TEST-DAY14-RFQ", "horizon_start": "2026-11-09"}
+    await insert_valid_runtime_rfq(populated, a)  # TEST-QUOTATION-RFQ, lines 10 and 20
+    request = {"rfq_id": "TEST-QUOTATION-RFQ", "horizon_start": "2026-11-09"}
     token_a = trust.mint(sub=user_a.authentication_subject, aud=MCP_AUDIENCE)
     token_b = trust.mint(sub=user_b.authentication_subject, aud=MCP_AUDIENCE)
     server = create_pricing_server(business(populated, []), verifier_for(populated, trust))
@@ -347,7 +347,7 @@ async def test_stored_rfq_is_customer_scoped_and_matches_quote_rfq(populated, se
     assert not own.is_error, text(own)
     direct = await quote_rfq(
         populated,
-        "TEST-DAY14-RFQ",
+        "TEST-QUOTATION-RFQ",
         customer_id=a,
         **await pinned(populated),
         horizon_start=PLAN_MONDAY,
@@ -368,7 +368,7 @@ async def test_stored_rfq_is_customer_scoped_and_matches_quote_rfq(populated, se
 async def test_assignment_enforcement_for_stored_rfqs(populated, seed_plan, trust):
     a, _, user_a, user_b = await world(populated, seed_plan)
     await insert_valid_runtime_rfq(populated, a)
-    mine = "TEST-DAY14-RFQ"
+    mine = "TEST-QUOTATION-RFQ"
     token = trust.mint(sub=user_a.authentication_subject, aud=MCP_AUDIENCE)
     request = {"rfq_id": mine, "horizon_start": "2026-11-09"}
     server = create_pricing_server(

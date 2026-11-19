@@ -1,4 +1,4 @@
-"""Day 53 approval-policy assessment: offline checks (no database, network or model).
+"""approval policy approval-policy assessment: offline checks (no database, network or model).
 
 The policy mapping is exercised on real evaluations from ``evaluate_outcome`` under the
 registered approval-v1.2 document (and approval-v1.1 for an unevaluable condition), using

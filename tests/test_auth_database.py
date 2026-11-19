@@ -1,4 +1,4 @@
-"""Day 20 bearer authentication end to end against the guarded PostgreSQL test database.
+"""authentication bearer authentication end to end against the guarded PostgreSQL test database.
 
 No dependency override touches identity here: requests carry real ES256-signed JWTs
 (test-generated key; no stored credentials), get_principal verifies them and looks the

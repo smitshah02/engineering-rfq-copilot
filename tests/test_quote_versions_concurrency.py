@@ -1,6 +1,6 @@
-"""Day 52 revisions under real concurrency: independent sessions, connections, transactions.
+"""versioning revisions under real concurrency: independent sessions, connections, transactions.
 
-Reuses the Day 51 committed ``world`` (guarded ``rfq_copilot_test``, ``current_database()``
+Reuses the draft persistence committed ``world`` (guarded ``rfq_copilot_test``, ``current_database()``
 asserted on the committing and truncating connections, TRUNCATE in teardown). Version 1 is
 committed first. A barrier then holds both revision requests after authorization and before
 the quote row lock, so both race for the lock: the winner commits, the loser wakes on the

@@ -1,4 +1,4 @@
-"""Real Alembic lifecycle and read-only catalog parity against independent Day 4 rules."""
+"""Real Alembic lifecycle and read-only catalog parity against independent schema baseline rules."""
 
 import asyncio
 import io
@@ -42,7 +42,7 @@ from rfq_copilot.migration_safety import (
 from rfq_copilot.models import Base
 
 ROOT = Path(__file__).resolve().parents[1]
-# head: initial, TD-005, TD-012, Phase 3.5 02/03/04/06, K2, K3, K4 (Day 54D), K5 (Day 55)
+# head: initial, TD-005, TD-012, authorization hardening 02/03/04/06, K2, K3, K4 (integrity), K5 (human decision)
 REVISION = schema_contract.CURRENT.revision  # "20261118_01"
 K5_REVISION = "20261116_04"
 K4_REVISION = "20261116_03"
@@ -282,7 +282,7 @@ def index_expectations():
             predicate=None if predicate == "—" else predicate,
         )
     assert len(result) == 14
-    # TD-012 indexes (revision 20261110_01), not in the Day 4 document.
+    # TD-012 indexes (revision 20261110_01), not in the schema baseline document.
     result["ix_user_customer_bindings_customer_id"] = dict(
         table=TD012_TABLE, columns=["customer_id"], method="B-tree", unique=False, predicate=None
     )
@@ -293,7 +293,7 @@ def index_expectations():
         unique=True,
         predicate="revoked_at IS NULL",
     )
-    # Phase 3.5 indexes (20261111_02/03), not in the Day 4 document.
+    # authorization hardening indexes (20261111_02/03), not in the schema baseline document.
     result["ix_rfq_assignments_active_user"] = dict(
         table="rfq_assignments", columns=["user_id", "rfq_id"], method="B-tree", unique=False,
         predicate="revoked_at IS NULL",
@@ -412,7 +412,7 @@ def verify_physical(connection, approved, *, expect_empty=True):
     assert explicit.keys() == expected_indexes.keys()
     assert (
         len(result["indexes"]) == 75
-    )  # + 2 PK + 3 explicit (Phase 3.5) + 3 K3 UNIQUE + 1 A1 + 2 A4
+    )  # + 2 PK + 3 explicit (authorization hardening) + 3 K3 UNIQUE + 1 A1 + 2 A4
     assert len([i for i in result["indexes"] if i["supporting"]]) == 53  # K3: 3 UNIQUE
     for name, expected in expected_indexes.items():
         index = explicit[name]
@@ -777,7 +777,7 @@ def test_real_upgrade_downgrade_reupgrade_and_cleanup(migration_lifecycle):
 
 @pytest.mark.integration
 @pytest.mark.parametrize("name", SCHEMA_TABLES)
-def test_each_physical_table_matches_day4(migration_lifecycle, approved, name):
+def test_each_physical_table_matches_schema_baseline(migration_lifecycle, approved, name):
     assert len(migration_lifecycle["first"]["columns"][name]) == len(approved[name]["columns"])
 
 
@@ -929,6 +929,7 @@ TRACKER_DDL = (
 )
 
 
+@pytest.mark.integration
 def test_tracker_cleanup_removes_only_an_empty_tracker_and_refuses_anything_else():
     """K3 teardown regression: after ``downgrade base`` only Alembic's empty version table
     may remain, and only it is removed (RESTRICT); a version row, an unexpected public
@@ -971,6 +972,7 @@ def test_tracker_cleanup_removes_only_an_empty_tracker_and_refuses_anything_else
     asyncio.run(scenario())
 
 
+@pytest.mark.integration
 def test_k3_rule_10_rejects_only_complete_versions_expiring_before_their_utc_creation_date():
     """PostgreSQL evaluates the approved rule_10 exactly as labelled (FALSE = rejected,
     NULL = not rejected by this CHECK). Read-only SELECT over typed VALUES: no table, no

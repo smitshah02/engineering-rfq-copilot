@@ -1,4 +1,4 @@
-"""Day 25 Manufacturing MCP server: registration, schemas, error safety, seeded behaviour."""
+"""manufacturing tool Manufacturing MCP server: registration, schemas, error safety, seeded behaviour."""
 
 import json
 from contextlib import asynccontextmanager, contextmanager
@@ -12,7 +12,7 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day08_manufacturing import base_parts
+from test_manufacturing_database import base_parts
 
 from rfq_copilot.database import DatabaseError
 from rfq_copilot.mcp import contracts as c
@@ -70,7 +70,7 @@ def acting_as(permissions=ALL_PERMISSIONS, customer="CUST-TEST", user="U-TEST", 
 
 @pytest.fixture(autouse=True)
 def authenticated():
-    """Day 27: every tool needs a verified principal; these tests act as a fully granted one."""
+    """MCP authentication: every tool needs a verified principal; these tests act as a fully granted one."""
     with acting_as():
         yield
 
@@ -153,7 +153,7 @@ async def test_invalid_input_is_rejected_before_services_and_never_echoed(
         (RuleIntegrityError(f"Rule {SECRET} differs"), "SNAPSHOT_CONFLICT"),
         (DatabaseError(f"host=db password={SECRET}"), "INTERNAL"),
         (RuntimeError(f"SELECT * FROM business.users -- {SECRET}"), "INTERNAL"),
-        # Day 26 A1: a service ValueError after contract validation is a defect, not input.
+        # supply and pricing tool A1: a service ValueError after contract validation is a defect, not input.
         (ValueError(f"part.thickness_mm {SECRET}"), "INTERNAL"),
     ],
 )

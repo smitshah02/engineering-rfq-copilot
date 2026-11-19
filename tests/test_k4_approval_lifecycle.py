@@ -1,4 +1,4 @@
-"""K4 (Day 54D): the lifecycle-guard revision, its contract pins and the runtime allowlists.
+"""K4 (integrity): the lifecycle-guard revision, its contract pins and the runtime allowlists.
 
 Offline: the revision file is read and imported through the contract's SHA-256 gate; no
 database. The physical behaviour of the triggers is covered by
@@ -33,7 +33,7 @@ def test_the_revision_sits_on_k3_and_is_pinned_independently():
     assert (module.revision, module.down_revision) == ("20261116_03", "20261116_01")
     measured = hashlib.sha256(K4_FILE.read_bytes()).hexdigest()
     assert schema_contract.GUARD_FILE_SHA256["20261116_03"] == measured, f"pin {measured}"
-    assert schema_contract.K4.revision == "20261116_03"  # K5 (Day 55) is the head now
+    assert schema_contract.K4.revision == "20261116_03"  # K5 (human decision) is the head now
     assert schema_contract.K4.guards_revisions == ("20261115_01", "20261116_01", "20261116_03")  # fmt: skip
     assert schema_contract.CURRENT.guards_revisions[:3] == schema_contract.K4.guards_revisions
     # No table, column, constraint or index changes: K3's measured shape stays the contract.
@@ -91,7 +91,7 @@ def test_the_runtime_allowlists_name_the_lifecycle_columns_only():
         "quotes.released_by", "quotes.released_at", "quote_versions.approval_valid",
         "approval_requests.status", "approval_requests.resolved_by", "approval_requests.resolved_at",
     }  # fmt: skip
-    # K5 (Day 55): decisions left the runtime role for the decision role.
+    # K5 (human decision): decisions left the runtime role for the decision role.
     assert not decisions & RUNTIME_UPDATABLE and decisions <= DECISION_UPDATABLE
     assert {"quotes.submitted_by", "quotes.rejection_reason"} <= RUNTIME_UPDATABLE
     assert not {c for c in RUNTIME_UPDATABLE if c.startswith(("quote_line_items", "audit", "pricing", "rfq", "users", "role"))}  # fmt: skip

@@ -204,7 +204,7 @@ def test_issue_refuses_a_readable_private_key_and_a_mismatched_pair(dev_keys, tm
 
 
 def test_no_token_issuing_http_route_exists(dev_keys):
-    from test_day22_integration import DOCS, _walk
+    from test_backend_integration import DOCS, _walk
 
     from rfq_copilot.api.app import create_app
 

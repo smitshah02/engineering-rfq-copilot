@@ -1,5 +1,5 @@
-"""Day 35: grounding guard and flat planning-tool schema. Deterministic: scripted models,
-mocked executors; the model outputs below are the ones Qwen3 4B produced on Day 34."""
+"""grounding: grounding guard and flat planning-tool schema. Deterministic: scripted models,
+mocked executors; the model outputs below are the ones Qwen3 4B produced on tool execution."""
 
 import json
 from datetime import date
@@ -35,7 +35,7 @@ MAT_009 = {
     "supported_thickness_mm": ["1.000", "1.500", "2.000", "3.000", "4.000", "6.000"],
     "compatible_finishes": ["brushed", "none", "passivated"],
     "supported_operations": ["bend", "finish", "inspect", "laser", "pack", "weld"],
-}  # authoritative get_material(MAT-009) output from the Day 34 dev smoke run
+}  # authoritative get_material(MAT-009) output from the tool execution dev smoke run
 FEASIBILITY = {
     "result": "needs_clarification",
     "findings": ["MISSING_FINISH_ID"],
@@ -52,7 +52,7 @@ FEASIBILITY = {
     "rule_fingerprint": "f" * 16,
 }
 PART = {"part_id": "1", "part_type": "l_bracket", "material_id": "MAT-009", "length_mm": "450", "width_mm": "490", "height_mm": "170", "thickness_mm": "1.0", "tolerance_mm": "0.5", "bend_radius_mm": "1.50", "quantity": 85, "hole_count": 11}  # fmt: skip
-# Exactly what Qwen3 4B sent to estimate_costs on Day 34 (twice, deterministically).
+# Exactly what Qwen3 4B sent to estimate_costs on tool execution (twice, deterministically).
 QWEN_COST_ARGS = {"horizon_start": "2026-11-09", "rfq_id": {}, "parts": {**PART, "finish_id": None}}  # fmt: skip
 
 
@@ -84,7 +84,7 @@ async def test_follow_up_density_without_a_tool_is_refused_and_not_remembered(mo
     model = fake(
         AIMessage("", tool_calls=[tool("get_material", {"material_id": "MAT-009"})]),
         AIMessage("The finishes compatible with MAT-009 are: brushed, none, and passivated."),
-        AIMessage("The density of MAT-009 is 7.85 g/cm³."),  # Day 34 hallucination
+        AIMessage("The density of MAT-009 is 7.85 g/cm³."),  # tool execution hallucination
         AIMessage("Its density is 7750 kg/m³."),  # copied from history: still no evidence
     )
     integration = McpIntegration(McpToolClient(BASE), Fixed("unused"), MCP_AUDIENCE, REST_AUDIENCE)  # fmt: skip
@@ -96,7 +96,7 @@ async def test_follow_up_density_without_a_tool_is_refused_and_not_remembered(mo
     assert "The finishes compatible" not in first.result.reply  # facts never from prose
     for question in ("And what is that material's density?", "And its density?"):
         turn = await convo.ask(alice, question, first.thread_id, rest_credential="r")
-        # Phase 5: the model's density (fabricated or copied from history) is never shown.
+        # conversational graph: the model's density (fabricated or copied from history) is never shown.
         assert (turn.result.reply, turn.result.grounding) == (g.GUIDANCE, "guidance")
         assert "7.85" not in turn.result.message and "7750 kg" not in turn.result.message
     history = await convo.history(alice, first.thread_id)
@@ -107,7 +107,9 @@ async def test_follow_up_density_without_a_tool_is_refused_and_not_remembered(mo
 
 
 async def test_needs_clarification_misread_as_infeasible_falls_back_to_rendered_status():
-    qwen = "No, item 1 cannot be manufactured as the finish is not specified."  # Day 34 reply
+    qwen = (
+        "No, item 1 cannot be manufactured as the finish is not specified."  # tool execution reply
+    )
     result = await run(
         [
             AIMessage("", tool_calls=[tool("check_manufacturing_feasibility", {"part": PART})]),
@@ -124,7 +126,7 @@ async def test_needs_clarification_misread_as_infeasible_falls_back_to_rendered_
 # --- invalid cost-tool arguments and the flat schema --------------------------------------
 
 
-async def test_day34_qwen_cost_arguments_are_rejected_before_execution():
+async def test_tool_execution_qwen_cost_arguments_are_rejected_before_execution():
     seen = []
 
     async def execute(name, arguments):
@@ -186,12 +188,12 @@ def test_the_model_is_shown_the_flat_schema():
 def test_flat_decimals_are_plain_decimal_strings():
     props = llm.model_facing("estimate_costs").model_json_schema()["properties"]
     assert props["length_mm"]["type"] == "string" and "anyOf" not in props["length_mm"]
-    for bad in ({"$numberDecimal": "450"}, 450.5, "4.5e2"):  # Day 35 Qwen output; floats
+    for bad in ({"$numberDecimal": "450"}, 450.5, "4.5e2"):  # grounding Qwen output; floats
         with pytest.raises(Exception):
             llm.contract_arguments("estimate_costs", {**PART, "horizon_start": "2026-11-09", "length_mm": bad})  # fmt: skip
 
 
-# --- Day 35 final: facts only from the rendering ------------------------------------------
+# --- grounding final: facts only from the rendering ------------------------------------------
 
 
 def test_flat_cost_schema_has_no_nesting_null_branches_or_required_dates():
@@ -204,7 +206,7 @@ def test_flat_cost_schema_has_no_nesting_null_branches_or_required_dates():
     assert llm.model_facing("get_material") is c.GetMaterialInput
 
 
-# --- Day 35 final: scheduling horizon provenance ------------------------------------------
+# --- grounding final: scheduling horizon provenance ------------------------------------------
 
 POLICY = date(2026, 11, 9)
 COST_OK = c.CostOutput.model_validate({"result": "needs_clarification", "lines": [], "total_manufacturing_cost": None, "pricing_rule_version": "price-v1.0", "pricing_rule_fingerprint": "f"})  # fmt: skip
@@ -237,7 +239,7 @@ LEAD = c.LeadTimeOutput.model_construct()
             {**PART, "horizon_start": "2026-09-06"},
             "Estimate the cost of item 1.",
             POLICY,
-        ),  # Day 35 Qwen (Sunday)
+        ),  # grounding Qwen (Sunday)
         (
             {**PART, "horizon_start": "2026-11-09"},
             "Estimate the cost of item 1.",
@@ -258,13 +260,17 @@ async def test_delivery_date_must_be_user_stated():
     assert seen[0].requested_delivery_date == date(2026, 12, 22)
 
 
-# --- Day 35 final: "finish none" normalization ---------------------------------------------
+# --- grounding final: "finish none" normalization ---------------------------------------------
 
 
 @pytest.mark.parametrize(
     "question, model_finish, expected",
     [
-        ("Item 1: l bracket; material MAT-009; finish none; holes 11", None, "none"),  # Day 34 Qwen
+        (
+            "Item 1: l bracket; material MAT-009; finish none; holes 11",
+            None,
+            "none",
+        ),  # tool execution Qwen
         ("Item 1: l bracket, no finish required", None, "none"),
         ("Item 1: finish none. Item 2: finish brushed", None, None),  # ambiguous: untouched
         ("Item 1: l bracket; material MAT-009", None, None),  # not stated: not invented
@@ -296,7 +302,7 @@ def test_none_is_a_master_data_finish():
     assert "none" in finishes
 
 
-# === Phase 5 final remediation =============================================================
+# === conversational graph final remediation =============================================================
 
 from types import SimpleNamespace  # noqa: E402
 
@@ -345,7 +351,7 @@ COSTED = {
         "Approved.",  # approval assertion
         "Yes, MAT-009 works fine for this and it is in stock.",
         "The quote comes to roughly two thousand USD.",
-        "The density of MAT-009 is 7.85 g/cm³.",  # Day 34 hallucination
+        "The density of MAT-009 is 7.85 g/cm³.",  # tool execution hallucination
         "It needs clarification: the finish is missing.",
         "Hello! Happy to help.",  # even harmless text is not shown: deterministic guidance
     ],

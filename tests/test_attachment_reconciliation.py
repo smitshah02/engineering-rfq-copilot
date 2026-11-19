@@ -1,7 +1,7 @@
-"""Phase 3.5 reconciler corrections: inode reuse and database/storage pairing.
+"""authorization hardening reconciler corrections: inode reuse and database/storage pairing.
 
 Public (no PostgreSQL): the database side of the command is a fake ``_Catalog``. The
-real fingerprint query runs in test_phase3_hardening_database.py.
+real fingerprint query runs in test_api_security_database.py.
 """
 
 import json
@@ -9,7 +9,7 @@ import os
 import time
 
 import pytest
-from test_phase3_hardening import storage, stored_file, unreferenced
+from test_api_security import storage, stored_file, unreferenced
 
 import rfq_copilot.reconcile_attachments as command
 from rfq_copilot.reconcile_attachments import (
@@ -303,7 +303,7 @@ def test_bind_refused_for_test_target_or_wrong_directory(tmp_path, monkeypatch, 
         command.main(["--storage-dir", str(folder), "--bind", "--delete"])
 
 
-# --- Marker version and database identity (Phase 3.5 completion) -------------------------
+# --- Marker version and database identity (authorization hardening completion) -------------------------
 
 
 def write_marker(folder, content, mode=0o600):

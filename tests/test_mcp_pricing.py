@@ -1,4 +1,4 @@
-"""Day 26 Pricing MCP server against the real deterministic services (seeded test DB).
+"""supply and pricing tool Pricing MCP server against the real deterministic services (seeded test DB).
 
 Registration, fail-closed rfq_id, forged-field and sanitizing checks for every planning
 tool, pricing included, are parametrized in test_mcp_supply.py.
@@ -10,7 +10,7 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import PANEL, pinned
+from test_inventory_database import PANEL, pinned
 from test_mcp_manufacturing import authenticated as authenticated
 from test_mcp_manufacturing import text
 from test_mcp_supply import MONDAY, PLAN, call, seeded

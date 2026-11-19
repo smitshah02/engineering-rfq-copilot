@@ -1,6 +1,6 @@
-"""Day 50 live Langfuse smoke test: opt-in only (``RFQ_LANGFUSE_SMOKE=1`` AND
+"""telemetry live Langfuse smoke test: opt-in only (``RFQ_LANGFUSE_SMOKE=1`` AND
 ``RFQ_LANGFUSE_ENABLED=true`` with the Langfuse variables exported). Sends two synthetic
-traces (one success, one controlled tool failure) from the offline Phase 6 harness: no
+traces (one success, one controlled tool failure) from the offline specialist workflow harness: no
 database, no MCP server, no model, no customer data. Prints each run id and the exact metadata
 sent so the payload can be compared with what Langfuse shows. Never part of the default run.
 

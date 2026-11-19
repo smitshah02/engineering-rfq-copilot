@@ -1,8 +1,8 @@
-"""Day 50 end-to-end Supervisor verification: A1 -> A5 over every offline business scenario,
-compared with the Phase 6 sequential baseline, plus the business, security and evidence
-invariants a complete run must keep. Offline: the Phase 6 harness (fake intake model, fake
+"""telemetry end-to-end Supervisor verification: A1 -> A5 over every offline business scenario,
+compared with the specialist workflow sequential baseline, plus the business, security and evidence
+invariants a complete run must keep. Offline: the specialist workflow harness (fake intake model, fake
 MCP services), no network, database or model. Expected outcomes are never hand-written for
-new scenarios: they are the Phase 6 baseline's, plus invariants that follow from the rules.
+new scenarios: they are the specialist workflow baseline's, plus invariants that follow from the rules.
 
 Sections (-k): test_e2e_parity_, test_e2e_invariant_, test_e2e_security_, test_e2e_evidence_,
 test_e2e_failure_."""
@@ -33,7 +33,7 @@ FINANCIAL = ("cost", "margin", "evidence", "wholesale", "fingerprint")
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -44,7 +44,7 @@ def offline_harness(monkeypatch):
 
 
 class Failing(Router):
-    """The Phase 6 router, except one tool raises a fixed MCP failure code."""
+    """The specialist workflow router, except one tool raises a fixed MCP failure code."""
 
     def __init__(self, tool: str, code: str, **kwargs):
         super().__init__(**kwargs)
@@ -64,7 +64,7 @@ def fails(tool, code):
 Q7075 = ev("25", "25 aluminum 7075-T6 flat panels")
 QTI = ev("25", "25 titanium flat panels")
 # fmt: off
-# name -> (text, intake model arguments, router factory): scenarios beyond Day 45's eleven
+# name -> (text, intake model arguments, router factory): scenarios beyond routing's eleven
 NEW = {
     "missing_material": (COMPLETE, complete_args(material=None, material_grade=None), Router),
     "missing_length": (COMPLETE.replace("300 mm long, ", ""), complete_args(length=None), Router),
@@ -90,7 +90,7 @@ async def prepare(name, monkeypatch):
 
 
 async def both(name, monkeypatch):
-    """(Phase 6 assessment, its router, Supervisor result, its router, Spy of the Supervisor)."""
+    """(specialist workflow assessment, its router, Supervisor result, its router, Spy of the Supervisor)."""
     text, args, router = await prepare(name, monkeypatch)
     baseline_router, supervisor_router = router(), router()
     a, _ = await run(text, args, baseline_router)
@@ -99,7 +99,7 @@ async def both(name, monkeypatch):
     return a, baseline_router, result, supervisor_router, spy
 
 
-# --- parity with the Phase 6 sequential baseline -------------------------------------------
+# --- parity with the specialist workflow sequential baseline -------------------------------------------
 
 
 @A
@@ -156,10 +156,10 @@ async def test_e2e_invariant_every_scenario_keeps_the_business_contract(monkeypa
     for flagged in (result, route, result.disposition):
         assert (flagged.approved, flagged.released, flagged.human_approval_required) == (False, False, True)  # fmt: skip
     assert result.disposition.automatic_continuation is False
-    # Draft contract (Phase 6 wf._DRAFT, Day 48 disposition): a non-binding draft comes only
+    # Draft contract (specialist workflow wf._DRAFT, escalation disposition): a non-binding draft comes only
     # from A5's own accepted result with a draft status. A completed route always has one; an
-    # A5 review route may carry a conditional one (D50-V02); nothing stopping earlier, and no
-    # clarification, blocked or failed route, ever does. Same as the Phase 6 baseline.
+    # A5 review route may carry a conditional one (telemetry control); nothing stopping earlier, and no
+    # clarification, blocked or failed route, ever does. Same as the specialist workflow baseline.
     assert result.draft_available == a.draft_available
     assert result.customer_view() == a.customer_view()
     if route.action == "complete":
@@ -186,7 +186,7 @@ async def test_e2e_invariant_every_scenario_keeps_the_business_contract(monkeypa
     # Not quotable only from A2's verified infeasibility.
     if route.outcome == "not_quotable":
         assert route.stopped_at == "manufacturing" and kept["manufacturing"].status == "infeasible"
-    # Constrained supply continues to pricing (Phase 6 _NEXT); it is never a reservation.
+    # Constrained supply continues to pricing (specialist workflow _NEXT); it is never a reservation.
     if "supply" in kept and kept["supply"].status == "constrained":
         assert "pricing" in spy.stages()
     customer = result.customer_outcome().model_dump_json().lower()
@@ -203,7 +203,7 @@ async def test_e2e_invariant_constrained_supply_is_priced_then_reviewed(monkeypa
     assert supply.status == "constrained"  # a shortage, reported as such, never a reservation
     assert spy.stages() == STAGES and result.route.stopped_at == "quotation"  # A3 -> A4 -> A5
     assert (result.route.action, result.disposition.category) == ("review", "review_required")
-    # A conditional advisory draft may accompany the review, exactly when Phase 6 has one.
+    # A conditional advisory draft may accompany the review, exactly when specialist workflow has one.
     assert (result.draft_available, result.customer_view()) == (a.draft_available, a.customer_view())  # fmt: skip
     if result.draft_available:
         assert result.customer_view().conditional is True

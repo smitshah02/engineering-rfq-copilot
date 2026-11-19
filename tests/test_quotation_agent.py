@@ -1,4 +1,4 @@
-"""Day 41 Quotation and Review Agent A5: offline tests.
+"""quotation evidence Quotation and Review Agent A5: offline tests.
 
 The fake ``evaluate_quotation`` executor runs the real pure services (inventory, capacity, lead
 time, costs, pricing) through the real ``services.quotation.assemble_quotation`` and maps the
@@ -495,7 +495,9 @@ async def test_internal_cost_never_reaches_the_result_or_the_customer_view():
     text = view.model_dump_json()
     for secret in ("cost", "margin", "fingerprint", "calculation", "evidence", "snapshot"):
         assert secret not in text
-    assert view.notice == a5.NOTICE  # conditional semantics: see the D41-02 tests
+    assert (
+        view.notice == a5.NOTICE
+    )  # conditional semantics: see the quotation evidence control tests
 
 
 async def test_no_tax_freight_shipping_or_discount_is_added():
@@ -645,7 +647,7 @@ async def test_constrained_handoff_keeps_supply_limitation_visible():
     assert "supply_constrained" in a.review_reasons and "Review required" in a.explanation
 
 
-# --- D41-01: per-line procurement delay -------------------------------------------------
+# --- quotation evidence control: per-line procurement delay -------------------------------------------------
 # The service's line delay is procurement_business_days of the stock line covering the part
 # (0 when sufficient, else the longest positive supplier lead: 7 in these stock fixtures);
 # the RFQ delay is the longest line delay.
@@ -719,7 +721,7 @@ async def test_sufficient_line_reporting_a_delay_is_refused():
     assert (a.status, a.error) == ("error", "invalid_evidence")
 
 
-# --- D41-02: customer-view conditional ----------------------------------------------------
+# --- quotation evidence control: customer-view conditional ----------------------------------------------------
 # conditional is False only when nothing but ordinary approval by the approver role remains.
 
 

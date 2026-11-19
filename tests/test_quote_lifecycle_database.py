@@ -1,9 +1,9 @@
-"""Day 55 lifecycle on the guarded test database (K5).
+"""human decision lifecycle on the guarded test database (K5).
 
 Draft, revision and submission on the restricted runtime role; approval, rejection and
 release on the K5 decision role (``test_quote_approval_database.database_for``). Release
 needs a second sales manager (releaser != approver). The owner credential inspects state
-and is shown to be refused. Reuses the Day 54D fixtures; ``world`` truncates everything.
+and is shown to be refused. Reuses the integrity fixtures; ``world`` truncates everything.
 """
 
 import asyncio
@@ -91,7 +91,7 @@ async def test_draft_submit_approve_release_and_customer_visibility(runtime, wor
     assert not any(w in repr(eligibility) for w in (*SECRET_WORDS, "total"))
     before = await state(seed_database, quote_id)
 
-    # Day 55 policy (service and k5_quotes_guard): the approver never releases.
+    # human decision policy (service and k5_quotes_guard): the approver never releases.
     assert await decide(runtime, manager, release_quote, quote_id, "self") == "separation_of_duties"  # fmt: skip
     assert await state(seed_database, quote_id) == before
 

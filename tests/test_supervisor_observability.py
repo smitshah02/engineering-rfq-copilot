@@ -1,5 +1,5 @@
-"""Day 50 Supervisor observability: the opt-in telemetry contract, its Langfuse adapter and the
-events real A1 -> A5 runs emit. Offline: the Phase 6 harness, an in-memory sink and a fake
+"""telemetry Supervisor observability: the opt-in telemetry contract, its Langfuse adapter and the
+events real A1 -> A5 runs emit. Offline: the specialist workflow harness, an in-memory sink and a fake
 Langfuse SDK injected into ``sys.modules``. No network, credentials, database or model.
 
 Sections (-k): test_config_, test_contract_, test_trace_, test_privacy_, test_failure_,
@@ -24,7 +24,7 @@ from test_supervisor_parallel import FailOne, Gate, business, until
 from test_supervisor_recovery import Clock, swallowing
 from test_supervisor_routing import EXPECTED, SCENARIOS
 
-from rfq_copilot import graph as phase5_graph
+from rfq_copilot import graph as conversation_graph
 from rfq_copilot import manufacturing_agent as a2
 from rfq_copilot import observability as obs
 from rfq_copilot import ownership
@@ -40,7 +40,7 @@ KEYS = {"LANGFUSE_PUBLIC_KEY": "pk-lf-test-0000", "LANGFUSE_SECRET_KEY": "sk-lf-
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -243,7 +243,7 @@ RUN = "a" * 32
 
 
 def test_contract_tool_and_stage_allow_lists_match_the_system():
-    assert obs.TOOL_NAMES == phase5_graph.READ_ONLY_TOOLS
+    assert obs.TOOL_NAMES == conversation_graph.READ_ONLY_TOOLS
     for stage in STAGES:  # every planned stage is expressible
         assert obs.Event(name="stage_started", run=RUN, stage=stage).stage == stage
 
@@ -520,7 +520,7 @@ class Raising:
 @A
 @pytest.mark.parametrize("name", ["baseline", "insufficient_stock", "unsupported_thickness", "manufacturing_error"])  # fmt: skip
 async def test_failure_telemetry_never_changes_the_business_result(monkeypatch, name):
-    """D50-V01: each run gets its own intake graph (the fake model's replies are a one-shot
+    """telemetry control: each run gets its own intake graph (the fake model's replies are a one-shot
     iterator) and its own executor; text, model arguments, rules, identity and horizon are
     the same. Scenario patches are applied once, by ``prepared``, and hold for every run."""
     await prepared(name, monkeypatch)  # scenario monkeypatches only; its context is not reused

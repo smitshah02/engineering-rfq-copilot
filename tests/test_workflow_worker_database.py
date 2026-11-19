@@ -12,7 +12,7 @@ block to the existing ``rfq_copilot_app_test`` role and connects with ``workflow
 ``runtime_db`` re-applies the K2 block for the API role. Both checks are live catalogue
 checks (``require_workflow_runtime`` / ``require_restricted_runtime``).
 
-Agents are offline: the Phase 6 fake intake model and fake MCP router, with the harness rule
+Agents are offline: the specialist workflow fake intake model and fake MCP router, with the harness rule
 fixtures served by ``pinned_rules`` (as every offline Supervisor test does). One test runs the
 worker against the real in-memory MCP host and real services instead of the fake router.
 """
@@ -184,7 +184,7 @@ async def trail(seed_database, rfq_id) -> list[dict]:
 
 
 def intake(args=None):
-    """The Phase 6 fake intake model, with enough identical replies for retries and batches."""
+    """The specialist workflow fake intake model, with enough identical replies for retries and batches."""
     return build_intake_graph(model(*[reply(args or complete_args())] * 20))
 
 
@@ -515,7 +515,7 @@ async def test_supervisor_deadline_is_a_technical_retry(worker_db, committed, se
 
 
 async def test_worker_through_the_real_mcp_host_and_services(worker_db, committed, seed_database, trust, tmp_path):  # fmt: skip
-    """No fake router: the service identity's minted credential, the Day 28 host's verifier and
+    """No fake router: the service identity's minted credential, the gateway host's verifier and
     per-tool v2 permission checks, and the real read-only services on the committed data."""
     private, public = dev_token.keygen(tmp_path / "keys")
     auth = settings(trust, jwt_algorithm="EdDSA", jwt_public_key_file=public)

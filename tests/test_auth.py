@@ -1,8 +1,8 @@
-"""Day 20 bearer authentication: token verification, trust configuration, get_principal.
+"""authentication bearer authentication: token verification, trust configuration, get_principal.
 
 Public smoke tests: no PostgreSQL, no dataset, no stored credentials. Every key pair is
 generated per test session and lives only in a temporary directory. The database user
-lookup is replaced by an in-memory fake here; test_day20_auth_database.py runs it
+lookup is replaced by an in-memory fake here; test_auth_database.py runs it
 against the guarded PostgreSQL test database.
 """
 

@@ -17,10 +17,10 @@ from migration_cleanup import drop_empty_version_table
 from sqlalchemy import func, insert, select, text, update
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import JoinedDatabase, app_with, call
 from test_database_migrations import alembic_config, user_objects
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_plan as seed_plan
-from test_day20_auth_database import JoinedDatabase, app_with, call
 
 from alembic import command
 from rfq_copilot import identity_admin, schema_contract

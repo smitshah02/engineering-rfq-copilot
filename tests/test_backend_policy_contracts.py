@@ -1,8 +1,8 @@
-"""Phase 3.5 completion: public tests (no PostgreSQL, no dataset).
+"""authorization hardening completion: public tests (no PostgreSQL, no dataset).
 
 Policy versions, explicit customer context, token revocation wiring, upload idempotency
 key handling, deep immutability (TD-026), missing-file listing and the operator CLI's
-argument contract. The PostgreSQL side is test_phase35_completion_database.py.
+argument contract. The PostgreSQL side is test_backend_policy_contracts_database.py.
 """
 
 import json
@@ -10,12 +10,12 @@ import os
 
 import pytest
 from pydantic import ValidationError
+from test_api_security import storage, stored_file
 from test_attachments import fakes as fakes
 from test_attachments import make_app, pdf_file, stored, upload
 from test_auth import PROTECTED, SUBJECT, FakeDatabase, api, bearer, call
 from test_auth import identity as identity
 from test_auth import trust as trust
-from test_phase3_hardening import storage, stored_file
 from test_rbac import MATRIX, UNRELATED, concrete
 
 import rfq_copilot.repositories as repositories
@@ -64,7 +64,7 @@ def granted(identity, *permissions, user="U-1", customer="CUST-A"):
 # --- Decision A: policy versions -----------------------------------------------------------
 
 
-def test_policy_tables_cover_every_operation_and_v1_is_the_day21_matrix():
+def test_policy_tables_cover_every_operation_and_v1_is_the_authorization_matrix():
     assert set(OPERATION) == set(MATRIX) == set(V2)
     assert set(ROUTE_PERMISSIONS) == {"v1", "v2", "v3"}
     for policy in ROUTE_PERMISSIONS.values():
@@ -286,9 +286,9 @@ async def test_idempotency_header_is_ignored_when_off(tmp_path, fakes):
 
 
 def test_validated_request_cannot_be_mutated_after_validation():
-    from test_api_schemas import submission as day17_submission
+    from test_api_schemas import submission as submission_schema
 
-    request = RfqSubmissionRequest.model_validate(day17_submission())
+    request = RfqSubmissionRequest.model_validate(submission_schema())
     assert isinstance(request.parts, tuple)
     with pytest.raises(AttributeError):
         request.parts.append(request.parts[0])  # would bypass max_length and uniqueness
@@ -302,9 +302,9 @@ def test_validated_request_cannot_be_mutated_after_validation():
 
 
 def test_request_lists_still_report_list_errors():
-    from test_api_schemas import submission as day17_submission
+    from test_api_schemas import submission as submission_schema
 
-    bad = {**day17_submission(), "parts": "not-a-list"}
+    bad = {**submission_schema(), "parts": "not-a-list"}
     with pytest.raises(ValidationError) as caught:
         RfqSubmissionRequest.model_validate(bad)
     assert caught.value.errors()[0]["type"] == "list_type"
@@ -436,7 +436,7 @@ def test_active_contract_is_the_activated_one():
 
     current = schema_contract.CURRENT
     assert schema_contract.active() is current and current.revision == "20261118_01"
-    # A1/A2 queue on the customer role on K5 (Day 55) on K4 (54D) on K3 (54B) on K2 (54A) on
+    # A1/A2 queue on the customer role on K5 (human decision) on K4 (54D) on K3 (54B) on K2 (54A) on
     # 06; each guard file pinned on its own (neither later revision adds a guard).
     assert current.guards_revisions == (schema_contract.K2.revision, schema_contract.K3.revision, schema_contract.K4.revision, schema_contract.K5.revision)  # fmt: skip
     assert schema_contract.ACTIVATED_06.revision == "20261111_06"
@@ -467,7 +467,7 @@ def test_tampered_policy_file_is_refused(tmp_path, monkeypatch):
         policy.policy_rows("rbac-policy-v2")
 
 
-# --- Final Phase 3.5 tasks: CLI contracts and the NEXT contract ------------------------------
+# --- Final authorization hardening tasks: CLI contracts and the NEXT contract ------------------------------
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-"""Day 21 authorization end to end against the guarded PostgreSQL test database.
+"""authorization authorization end to end against the guarded PostgreSQL test database.
 
 Real ES256-signed JWTs; no dependency override touches identity or permissions.
 get_principal reads the user, the binding and the role's grants from the seeded
@@ -17,14 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from test_attachments import pdf
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import app_with, bind, call
+from test_auth_database import database as database
 from test_database_queries import customer_id, other_customer, statements
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import app_with, bind, call
-from test_day20_auth_database import database as database
 from test_rbac import APPROVAL, MATRIX, concrete
 
 from rfq_copilot.api.auth import CREATE_RFQ, VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER

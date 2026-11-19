@@ -1,8 +1,8 @@
-"""Day 39 opt-in live check: A1 -> A2 -> A3 through the real MCP host and seeded services.
+"""supply evidence opt-in live check: A1 -> A2 -> A3 through the real MCP host and seeded services.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the Day 37/38 live tests:
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the intake validation/38 live tests:
 a separate uvicorn MCP host on loopback TCP over the guarded, seeded test database. No model.
-The planning horizon is the Monday the Day 34 live tests use as trusted policy.
+The planning horizon is the Monday the tool execution live tests use as trusted policy.
 """
 
 import os

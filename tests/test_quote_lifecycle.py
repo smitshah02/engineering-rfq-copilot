@@ -1,4 +1,4 @@
-"""Day 55 offline: release request validation, release blockers, lifecycle contracts and
+"""human decision offline: release request validation, release blockers, lifecycle contracts and
 isolation of the binding paths from agents, the Supervisor and MCP. No database."""
 
 import inspect

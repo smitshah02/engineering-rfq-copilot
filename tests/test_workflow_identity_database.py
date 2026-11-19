@@ -3,7 +3,7 @@
 Rolled-back seeded fixture transaction on the guarded test database. Service identities are
 provisioned only through ``operator_admin.provision_service`` (operator requests,
 administrator approves, one binding in the same transaction). MCP calls go through the real
-Day 28 host (in memory, ASGI), the real ``McpTokenVerifier`` (signature, issuer, MCP
+gateway host (in memory, ASGI), the real ``McpTokenVerifier`` (signature, issuer, MCP
 audience, lifetime, revocation, binding, v2 grants) and the per-tool permission wrapper;
 credentials come from the development ``DevMcpCredentialProvider`` with a throwaway key.
 """
@@ -17,12 +17,12 @@ import pytest
 from sqlalchemy import delete, func, select, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import trust as trust
+from test_auth_database import database as database
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import database as database
 from test_mcp_auth import BASE, MCP_AUDIENCE, settings
 from test_mcp_host import Factories, host_settings, running
 from test_operator_assignment_admin_database import admin

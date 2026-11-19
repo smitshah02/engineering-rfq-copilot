@@ -1,7 +1,7 @@
-"""Day 52 quotation versioning against the guarded, seeded PostgreSQL test database.
+"""versioning quotation versioning against the guarded, seeded PostgreSQL test database.
 
 Every test runs in the seeded fixture transaction, which is rolled back; the service only
-flushes inside its SAVEPOINT. Version 1 comes from the Day 51 draft service. A revision
+flushes inside its SAVEPOINT. Version 1 comes from the draft persistence draft service. A revision
 needs a changed evaluation context, here the customer's requested delivery date (RFQ-0041's
 labelled date keeps it draftable). Real cross-transaction races are in
 ``test_quote_versions_concurrency.py``. The development database is never touched. States
@@ -15,15 +15,15 @@ import pytest
 from history_corruption import corrupted
 from sqlalchemy import delete, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
+from test_capacity_database import MONDAY
 from test_database_queries import customer_id, other_customer
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day10_capacity import MONDAY
-from test_day21_rbac_database import bound, grants, one_active_user_per_role, release_one
 from test_quote_drafts_database import EXPECTED, RFQ_ID, args, count, drafters, refused, setup
+from test_rbac_database import bound, grants, one_active_user_per_role, release_one
 
 import rfq_copilot.quote_drafts as quote_drafts
 import rfq_copilot.quote_versions as quote_versions
@@ -293,7 +293,7 @@ async def test_states_outside_draft_are_never_revised(populated, seed_plan, tamp
     await savepoint.commit()
     before = await state(populated, quote_id)
     # A staged 'rejected' status has no rejected request: not a genuine rejection, so the
-    # service refuses it (K5 would too). The genuine path: test_day55_quote_lifecycle_database.
+    # service refuses it (K5 would too). The genuine path: test_quote_lifecycle_database.
     await refused("revision_not_allowed", revise_quote(populated, principal, quote_id, **rargs()))
     await unchanged_since(populated, quote_id, before)
 
@@ -434,7 +434,7 @@ async def test_retry_replays_and_reused_keys_conflict(populated, seed_plan):
     assert len(await rows(populated, VERSIONS, quote_id)) == 2
     assert await count(populated, IdempotencyRecord, IdempotencyRecord.operation == "edit_quote_draft") == 1  # fmt: skip
     assert await count(populated, AuditEvent, AuditEvent.operation == "quote_version.create") == 1
-    # A Day 51 key never replays as a revision: operations are separate receipt scopes.
+    # A draft persistence key never replays as a revision: operations are separate receipt scopes.
     assert await count(populated, IdempotencyRecord, IdempotencyRecord.operation == "create_quote_draft") == 1  # fmt: skip
 
 

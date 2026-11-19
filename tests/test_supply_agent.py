@@ -1,4 +1,4 @@
-"""Day 39 Supply and Scheduling Agent (A3), offline.
+"""supply evidence Supply and Scheduling Agent (A3), offline.
 
 The fake MCP executor runs the real pure services (manufacturing check, ``evaluate_inventory``,
 ``evaluate_capacity``, ``plan_start``, ``evaluate_lead_time``) and maps each result with
@@ -484,7 +484,7 @@ async def test_intake_to_manufacturing_to_supply_handoff():
     assert a.requested_delivery_date is None  # COMPLETE states no delivery date
 
 
-# --- D39-01: upstream A2 evidence binding --------------------------------------------------
+# --- supply evidence control: upstream A2 evidence binding --------------------------------------------------
 
 
 def with_output(p, **over):
@@ -532,21 +532,21 @@ INVALID = "manufacturing_evidence_invalid"
         (lambda p: with_catalog(p, material_id="MAT-001"), INVALID),
         (lambda p: with_catalog(p, supported_thickness_mm=(D("6.0"),)), INVALID),
         (contradicting_material, INVALID),
-        # D42-A2-01: a bent part's minimum radius dropped or lowered (A5's borderline input)
+        # cross-agent evidence control: a bent part's minimum radius dropped or lowered (A5's borderline input)
         (lambda p: with_output(p, min_bend_radius_mm=None), INVALID),
         (lambda p: with_output(p, min_bend_radius_mm=D("0.5")), INVALID),
         (stale_rules, "manufacturing_rule_mismatch"),
         (lambda p: p.model_copy(update={"error": "timeout"}), "manufacturing_evidence_missing"),
     ],
 )
-async def test_d39_01_unbound_or_altered_a2_evidence_is_not_evaluated(alter, reason):
+async def test_unbound_or_altered_a2_evidence_is_not_evaluated(alter, reason):
     a2 = await manufacturing()
     broken = a2.model_copy(update={"parts": (alter(a2.parts[0]),)})
     a, tool = await run(a2=broken)
     assert (a.status, a.not_evaluated_reason, a.evidence, tool.calls) == ("not_evaluated", reason, None, [])  # fmt: skip
 
 
-async def test_d39_01_another_parts_evidence_is_not_evaluated():
+async def test_another_parts_evidence_is_not_evaluated():
     a2 = await manufacturing(part(), part(part_id="P2", thickness_mm=D("2.0"), bend_radius_mm=D("2.0")))  # fmt: skip
     first, second = a2.parts
     swapped = first.model_copy(update={"evidence": second.evidence})
@@ -554,7 +554,7 @@ async def test_d39_01_another_parts_evidence_is_not_evaluated():
     assert (a.status, a.not_evaluated_reason, tool.calls) == ("not_evaluated", "manufacturing_evidence_invalid", [])  # fmt: skip
 
 
-async def test_d39_01_stale_a2_rule_version_is_not_evaluated():
+async def test_stale_a2_rule_version_is_not_evaluated():
     a2 = (await manufacturing()).model_copy(update={"manufacturing_rule_version": "mfg-v0.9"})
     a, tool = await run(a2=a2)
     assert (a.not_evaluated_reason, tool.calls) == ("manufacturing_rule_mismatch", [])
@@ -569,12 +569,12 @@ async def test_d39_01_stale_a2_rule_version_is_not_evaluated():
         (part(part_type="fabricated_assembly", height_mm=None, weld_length_mm=D("100")),),
     ],
 )
-async def test_d39_01_valid_a2_evidence_passes_the_gate(specs):
+async def test_valid_a2_evidence_passes_the_gate(specs):
     a, tool = await run(*specs)
     assert a.status == "available" and len(tool.calls) == 3
 
 
-# --- D39-02: inventory evidence consistency ------------------------------------------------
+# --- supply evidence control: inventory evidence consistency ------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -590,12 +590,12 @@ async def test_d39_01_valid_a2_evidence_passes_the_gate(specs):
         ("100", line(available_kg=D("0"))),  # shortage no longer matches
     ],
 )
-async def test_d39_02_impossible_stock_lines_are_refused(available, rewrite):
+async def test_impossible_stock_lines_are_refused(available, rewrite):
     a, _ = await run(tool=Supply(available=available, rewrite={"check_inventory": rewrite}))
     assert (a.status, a.error, a.evidence) == ("error", "invalid_evidence", None)
 
 
-async def test_d39_02_shared_stock_split_into_independent_lines_is_refused():
+async def test_shared_stock_split_into_independent_lines_is_refused():
     def split(out):
         (shared,) = out.lines
         lines = tuple(shared.model_copy(update={"part_ids": (pid,)}) for pid in shared.part_ids)
@@ -606,7 +606,7 @@ async def test_d39_02_shared_stock_split_into_independent_lines_is_refused():
 
 
 @pytest.mark.parametrize("available,status", [("1000", "sufficient"), ("100", "insufficient"), ("0", "unavailable")])  # fmt: skip
-async def test_d39_02_real_stock_lines_reconcile(available, status):
+async def test_real_stock_lines_reconcile(available, status):
     a, _ = await run(tool=Supply(available=available))
     stock_line = a.parts[0].stock
     assert stock_line.status == status and a.error is None
@@ -614,14 +614,14 @@ async def test_d39_02_real_stock_lines_reconcile(available, status):
     assert stock_line.shortage_kg == max(stock_line.required_kg - stock_line.available_kg, D(0))
 
 
-async def test_d39_02_real_shared_stock_is_one_aggregated_line():
+async def test_real_shared_stock_is_one_aggregated_line():
     a, _ = await run(part(), part(part_id="P2", quantity=10), tool=Supply(available="200"))
     (shared,) = a.evidence.inventory.lines
     assert shared.part_ids == ("P1", "P2") and shared.status == "insufficient"
     assert a.status == "constrained"
 
 
-# --- D39-03: impossible scheduling dates ---------------------------------------------------
+# --- supply evidence control: impossible scheduling dates ---------------------------------------------------
 
 
 BEFORE_HORIZON = tweak(estimated_ready_date=date(2026, 11, 6), earliest_start_date=date(2026, 11, 6))  # fmt: skip
@@ -651,18 +651,18 @@ def moved_weeks(week_start, final=None):
         ("100", {"estimate_lead_time": tweak(earliest_start_date=date(2026, 11, 9))}),
     ],
 )
-async def test_d39_03_impossible_dates_are_refused(available, rewrite):
+async def test_impossible_dates_are_refused(available, rewrite):
     a, _ = await run(tool=Supply(available=available, rewrite=rewrite))
     assert (a.status, a.error, a.evidence) == ("error", "invalid_evidence", None)
 
 
-async def test_d39_03_impossible_achievable_delivery_is_refused():
+async def test_impossible_achievable_delivery_is_refused():
     early = tweak(estimated_ready_date=date(2026, 11, 12), lead_business_days=3, delivery_feasible=True, findings=())  # fmt: skip
     a, _ = await run(extraction=intake(delivery(date(2026, 11, 12))), tool=Supply(rewrite={"estimate_lead_time": early}))  # fmt: skip
     assert (a.status, a.error) == ("error", "invalid_evidence")
 
 
-# D42-A3-01: schedules that pass every D39-03 check yet are not the lead-time service's plan
+# cross-agent evidence control: schedules that pass every supply evidence control check yet are not the lead-time service's plan
 # for these stock lines (100 kg: supplier lead 7 business days, start week 2, ready Nov 27).
 NOV_12, NOV_16, NOV_20 = date(2026, 11, 12), date(2026, 11, 16), date(2026, 11, 20)
 SHORT_DELAY = {"procurement_business_days": 3, "earliest_start_date": NOV_12}
@@ -689,7 +689,7 @@ def week_1(out):  # capacity planned from week 1
         ("1000", {"estimate_lead_time": tweak(estimated_ready_date=NOV_20, lead_business_days=9)}),
     ],
 )
-async def test_d42_a3_01_schedule_not_from_the_stock_lines_is_refused(available, rewrite):
+async def test_schedule_not_from_the_stock_lines_is_refused(available, rewrite):
     a, _ = await run(tool=Supply(available=available, rewrite=rewrite))
     assert (a.status, a.error, a.evidence) == ("error", "invalid_evidence", None)
 
@@ -712,7 +712,7 @@ NOV_18, NOV_27 = date(2026, 11, 18), date(2026, 11, 27)
         (Supply(available="100"), NOV_27, "constrained", NOV_18, NOV_27, 14),  # met on the day
     ],
 )
-async def test_d39_03_real_schedules_pass(supply, requested, status, earliest, ready, days):
+async def test_real_schedules_pass(supply, requested, status, earliest, ready, days):
     extraction = intake(delivery(requested)) if requested else None
     a, _ = await run(tool=supply, extraction=extraction)
     lead = a.evidence.lead_time

@@ -1,5 +1,5 @@
-"""Day 46 Supervisor delegation: A1 -> A5 run through the routing graph, attempt-scoped custody
-and the L03 extraction -> validation chain of custody. Offline: the Phase 6 harness (fake
+"""delegation Supervisor delegation: A1 -> A5 run through the routing graph, attempt-scoped custody
+and the L03 extraction -> validation chain of custody. Offline: the specialist workflow harness (fake
 intake model, fake MCP executor), no network, no database.
 
 Sections (-k): test_delegation_, test_l03_, test_handoff_, test_parity_, test_security_,
@@ -33,7 +33,7 @@ BOB = Principal("CUST-009", frozenset({"view_quote"}), user_id="U-9", subject="s
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """No direct MCP. The Phase 6 offline A2 fake is bound to the RULES fixture (sha "test"),
+    """No direct MCP. The specialist workflow offline A2 fake is bound to the RULES fixture (sha "test"),
     so exactly that object is admitted as the manufacturing rule; every other check stands."""
 
     async def forbidden(*args, **kwargs):
@@ -101,7 +101,7 @@ def replace_result(monkeypatch, stage: str, change):
 
 
 def setup(name: str, monkeypatch):
-    """The scenario's agent patches (Day 45 parity scenarios)."""
+    """The scenario's agent patches (routing parity scenarios)."""
     if name == "manufacturing_error":
         override(monkeypatch, a2, "evaluate_manufacturing_feasibility", status="error")
 
@@ -339,7 +339,7 @@ async def test_handoff_a_rejected_result_stops_everything_after_it(monkeypatch, 
     assert not result.draft_available and result.customer_view() is None
 
 
-# --- D. Phase 6 parity --------------------------------------------------------------------
+# --- D. specialist workflow parity --------------------------------------------------------------------
 
 
 @A

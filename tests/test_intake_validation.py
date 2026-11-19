@@ -1,4 +1,4 @@
-"""Day 37 Intake validation and clarification: deterministic, offline.
+"""intake validation Intake validation and clarification: deterministic, offline.
 
 The pinned manufacturing rule document and the material catalog are read from the frozen
 dataset (read-only). The catalog is served by a fake MCP executor at the tool boundary
@@ -189,8 +189,10 @@ async def test_conflicting_quantities_without_correction_words():
     text = "We need 100 L brackets, 2 mm thick. Please make the quantity 150."
     args = {"parts": [{"quantity": ev("100", "100 L brackets"), "thickness": ev("2 mm", "2 mm thick")}]}  # fmt: skip
     result, v = await validate(text, args)
-    assert result.parts[0].get("quantity").status == "verified"  # Day 36 alone trusted it
-    assert ("quantity", "contradiction") in kinds(v)  # Day 37 sees the other sentence
+    assert (
+        result.parts[0].get("quantity").status == "verified"
+    )  # intake extraction alone trusted it
+    assert ("quantity", "contradiction") in kinds(v)  # intake validation sees the other sentence
     assert "quantity" not in v.parts[0].verified
 
 
@@ -486,17 +488,17 @@ async def test_end_to_end_through_the_intake_graph():
     )
 
 
-# --- Day 36 regressions through validation: unresolved values never become a spec --------
+# --- intake extraction regressions through validation: unresolved values never become a spec --------
 
 
 @pytest.mark.parametrize(
     ("text", "over"),
     [
-        (COMPLETE.replace("2 mm thick", "−2 mm thick"), {"thickness": ev("2 mm", "2 mm thick")}),  # D36-09
-        (COMPLETE.replace("powder coat finish", "do not use powder coat finish"), {}),  # D36-03
-        (COMPLETE.replace("25 aluminum", "25 or 30 aluminum"), {"quantity": ev("25", "25 or 30 aluminum 5052-H32 flat panels")}),  # D36-02
-        (COMPLETE + " Thickness 2 mm is wrong.", {}),  # D36-12
-        (COMPLETE.replace("aluminum 5052-H32", "black powder coating"), {"material": ev("black powder coating"), "finish": ev("aluminum", "aluminum")}),  # D36-10
+        (COMPLETE.replace("2 mm thick", "−2 mm thick"), {"thickness": ev("2 mm", "2 mm thick")}),  # intake extraction control
+        (COMPLETE.replace("powder coat finish", "do not use powder coat finish"), {}),  # intake extraction control
+        (COMPLETE.replace("25 aluminum", "25 or 30 aluminum"), {"quantity": ev("25", "25 or 30 aluminum 5052-H32 flat panels")}),  # intake extraction control
+        (COMPLETE + " Thickness 2 mm is wrong.", {}),  # intake extraction control
+        (COMPLETE.replace("aluminum 5052-H32", "black powder coating"), {"material": ev("black powder coating"), "finish": ev("aluminum", "aluminum")}),  # intake extraction control
     ],
 )  # fmt: skip
 async def test_unresolved_values_never_reach_a_specification(text, over):
@@ -590,7 +592,7 @@ async def test_model_error_value_is_replaced_by_the_segment_value():
     assert {f.field: f.evidence for f in v.parts[1].derived}.get("material") == "aluminum"
 
 
-async def test_d36_01_swapped_proposal_never_reaches_the_spec_but_source_values_can():
+async def test_swapped_proposal_never_reaches_the_spec_but_source_values_can():
     text = COMPLETE.replace("300 mm long, 200 mm wide", "300 mm wide, 200 mm long")
     result, v = await validate(text, complete_args())  # model kept length 300 / width 200
     assert result.parts[0].get("length").status != "verified"
@@ -621,7 +623,7 @@ async def test_negated_material_is_never_derived():
     assert not v.parts[0].derived
 
 
-# --- Day 37 final audit remediation (D37-01 .. D37-06) -----------------------------------
+# --- intake validation final audit remediation (intake validation control .. intake validation control) -----------------------------------
 
 
 def evidence(v, field, kind):
@@ -642,7 +644,7 @@ def assert_not_ready(v):
         ("Forging is required for these panels.", "forging", "Forging"),
     ],  # fmt: skip
 )
-async def test_d37_01_unsupported_operation_the_model_omitted(tail, name, said):
+async def test_unsupported_operation_the_model_omitted(tail, name, said):
     _, v = await validate(f"{COMPLETE} {tail}", complete_args())  # model kept only "laser cut"
     found = [f for f in v.parts[0].findings if f.kind == "unsupported_requirement"]
     assert [(f.detail, f.evidence) for f in found] == [(name, (said,))]
@@ -651,7 +653,7 @@ async def test_d37_01_unsupported_operation_the_model_omitted(tail, name, said):
 
 
 @pytest.mark.parametrize("tail", ["Do not cast the panels.", "No forging.", "Casting is not acceptable."])  # fmt: skip
-async def test_d37_01_prohibited_unsupported_operation_is_not_a_request(tail):
+async def test_prohibited_unsupported_operation_is_not_a_request(tail):
     _, v = await validate(f"{COMPLETE} {tail}", complete_args())
     assert v.readiness == "ready_for_manufacturing_evaluation"
 
@@ -674,7 +676,7 @@ def coded_part(label, qty, grade, length, width, thick, tol):
 CODED_ARGS = {"parts": [coded_part("BRK-200", "100", "5052-H32", 300, 200, 2, "0.2"), coded_part("BRK-201", "50", "6061-T6", 400, 100, 3, "0.1")]}  # fmt: skip
 
 
-async def test_d37_01_rfq_wide_unsupported_operation_blocks_every_part():
+async def test_rfq_wide_unsupported_operation_blocks_every_part():
     _, ok = await validate(CODED, CODED_ARGS)
     assert ok.readiness == "ready_for_manufacturing_evaluation"  # control
     _, v = await validate("Cast all parts. " + CODED, CODED_ARGS)
@@ -683,7 +685,7 @@ async def test_d37_01_rfq_wide_unsupported_operation_blocks_every_part():
     assert_not_ready(v)
 
 
-async def test_d37_02_conflicting_material_categories():
+async def test_conflicting_material_categories():
     _, v = await validate(f"{COMPLETE} Material: stainless steel.", complete_args())
     assert evidence(v, "material", "contradiction") == {"aluminum", "stainless steel"}
     assert v.parts[0].material.material_id is None and "material" not in v.parts[0].verified
@@ -691,7 +693,7 @@ async def test_d37_02_conflicting_material_categories():
     assert_not_ready(v)
 
 
-async def test_d37_03_conflicting_grades():
+async def test_conflicting_grades():
     _, v = await validate(f"{COMPLETE} Material grade must be 6061-T6.", complete_args())
     assert evidence(v, "material_grade", "contradiction") == {"5052-H32", "6061-T6"}
     assert (
@@ -700,7 +702,7 @@ async def test_d37_03_conflicting_grades():
     assert_not_ready(v)
 
 
-async def test_d37_04_cross_sentence_finish_prohibition():
+async def test_cross_sentence_finish_prohibition():
     _, v = await validate(f"{COMPLETE} Do not powder coat these parts.", complete_args())
     found = [f for f in v.parts[0].findings if f.field == "finish" and f.kind == "contradiction"]
     assert found and found[0].detail == "requested_and_prohibited"
@@ -721,18 +723,18 @@ async def test_d37_04_cross_sentence_finish_prohibition():
         "Grade 6061-T6 is not acceptable.",  # a prohibited grade is not a second request
     ],
 )
-async def test_d37_02_03_04_consistent_restatements_stay_ready(tail):
+async def test_consistent_restatements_stay_ready(tail):
     _, v = await validate(f"{COMPLETE} {tail}", complete_args())
     assert v.readiness == "ready_for_manufacturing_evaluation", v.parts[0].findings
 
 
-async def test_d37_04_explicit_no_finish_with_other_prohibition_is_ready():
+async def test_explicit_no_finish_with_other_prohibition_is_ready():
     text = COMPLETE.replace("powder coat finish", "unfinished") + " Do not paint these parts."
     _, v = await validate(text, complete_args(finish=ev("unfinished")))
     assert v.parts[0].specification.finish_id == "none"
 
 
-async def test_d37_02_material_conflict_stays_in_its_part():
+async def test_material_conflict_stays_in_its_part():
     _, v = await validate(CODED + " Material: stainless steel.", CODED_ARGS)
     a, b = v.parts
     assert a.readiness == "ready_for_manufacturing_evaluation" and a.specification.material_id == "MAT-001"  # fmt: skip
@@ -748,7 +750,7 @@ class Paged(Catalog):
         return MaterialPage(items=rows, limit=1, offset=query.offset, has_more=query.offset + 1 < len(page.items))  # fmt: skip
 
 
-async def test_d37_05_paginated_catalog_is_read_to_the_end():
+async def test_paginated_catalog_is_read_to_the_end():
     catalog = Paged()
     _, v = await validate(COMPLETE, complete_args(), catalog=catalog)
     assert v.readiness == "ready_for_manufacturing_evaluation"
@@ -756,7 +758,7 @@ async def test_d37_05_paginated_catalog_is_read_to_the_end():
     assert [q["offset"] for _, q in catalog.calls if "finish_id" not in q] == [0]
 
 
-async def test_d37_05_more_rows_on_a_later_page_are_not_a_unique_match():
+async def test_more_rows_on_a_later_page_are_not_a_unique_match():
     rows = [MaterialSummary(material_id=m, category="aluminum", grade="5052-H32") for m in ("MAT-001", "MAT-X")]  # fmt: skip
 
     async def executor(tool, query):
@@ -769,7 +771,7 @@ async def test_d37_05_more_rows_on_a_later_page_are_not_a_unique_match():
 
 
 @pytest.mark.parametrize("second", ["empty", "never_ends"])
-async def test_d37_05_incomplete_catalog_results_block_readiness(second):
+async def test_incomplete_catalog_results_block_readiness(second):
     row = MaterialSummary(material_id="MAT-001", category="aluminum", grade="5052-H32")
 
     async def executor(tool, query):
@@ -791,7 +793,7 @@ async def test_d37_05_incomplete_catalog_results_block_readiness(second):
         {"material_id": "MAT-002", "category": "aluminum", "grade": "6061-T6"},  # wrong grade
     ],
 )
-async def test_d37_06_rows_that_do_not_answer_the_query_are_rejected(row):
+async def test_rows_that_do_not_answer_the_query_are_rejected(row):
     page = MaterialPage(items=(MaterialSummary(**row),), limit=100, offset=0, has_more=False)
     _, v = await validate(COMPLETE, complete_args(), catalog=Catalog(raw=page))
     m = v.parts[0].material
@@ -800,7 +802,7 @@ async def test_d37_06_rows_that_do_not_answer_the_query_are_rejected(row):
     assert_not_ready(v)
 
 
-async def test_d37_06_inconsistent_finish_response_is_rejected():
+async def test_inconsistent_finish_response_is_rejected():
     async def executor(tool, query):
         category = "stainless_steel" if query.finish_id else "aluminum"
         return MaterialPage(items=(MaterialSummary(material_id="MAT-001", category=category, grade="5052-H32"),), limit=100, offset=0, has_more=False)  # fmt: skip
@@ -810,27 +812,27 @@ async def test_d37_06_inconsistent_finish_response_is_rejected():
     assert_not_ready(v)
 
 
-async def test_d37_06_wrong_page_offset_is_rejected():
+async def test_wrong_page_offset_is_rejected():
     page = MaterialPage(items=(MaterialSummary(material_id="MAT-001", category="aluminum", grade="5052-H32"),), limit=100, offset=7, has_more=False)  # fmt: skip
     _, v = await validate(COMPLETE, complete_args(), catalog=Catalog(raw=page))
     assert v.parts[0].material.status == "unavailable"
     assert_not_ready(v)
 
 
-async def test_d37_03_part_label_is_not_a_grade():
+async def test_part_label_is_not_a_grade():
     text = CODED.replace("BRK-200: 100 aluminum 5052-H32", "BRK-200: grade 5052-H32 aluminum, 100 aluminum 5052-H32")  # fmt: skip
     _, v = await validate(text, CODED_ARGS)
     assert not any(f.field == "material_grade" for f in v.parts[0].findings)
 
 
-async def test_d37_02_prohibited_material_conflicts_with_the_request():
+async def test_prohibited_material_conflicts_with_the_request():
     _, v = await validate(f"{COMPLETE} Do not use aluminum.", complete_args())
     found = [f for f in v.parts[0].findings if f.field == "material" and f.kind == "contradiction"]
     assert found and found[0].detail == "requested_and_prohibited"
     assert_not_ready(v)
 
 
-# --- D37-07: RFQ-wide requirements, D37-08: operations the model omitted -----------------
+# --- intake validation control: RFQ-wide requirements, intake validation control: operations the model omitted -----------------
 
 POWDER = CODED.replace("unfinished", "powder coat finish")
 POWDER_ARGS = {"parts": [p | {"finish": ev("powder coat", "powder coat finish")} for p in CODED_ARGS["parts"]]}  # fmt: skip
@@ -869,9 +871,7 @@ def part_findings(v, index, field):
         ),  # fmt: skip
     ],
 )
-async def test_d37_07_rfq_wide_conflicts_block_every_part(
-    lead, text, args, field, expected, detail
-):
+async def test_rfq_wide_conflicts_block_every_part(lead, text, args, field, expected, detail):
     _, ok = await validate(text, args)
     assert ok.readiness == "ready_for_manufacturing_evaluation"  # control without the lead
     full = lead + text
@@ -889,12 +889,12 @@ async def test_d37_07_rfq_wide_conflicts_block_every_part(
     assert_not_ready(v)
 
 
-async def test_d37_07_consistent_rfq_wide_requirement_stays_ready():
+async def test_consistent_rfq_wide_requirement_stays_ready():
     _, v = await validate("All parts must be aluminum. " + CODED, CODED_ARGS)
     assert v.readiness == "ready_for_manufacturing_evaluation"
 
 
-async def test_d37_07_unclear_scope_is_asked_only_when_it_conflicts():
+async def test_unclear_scope_is_asked_only_when_it_conflicts():
     _, v = await validate("We usually work with stainless steel. " + CODED, CODED_ARGS)
     for index in (1, 2):
         (f,) = part_findings(v, index, "material")
@@ -904,7 +904,7 @@ async def test_d37_07_unclear_scope_is_asked_only_when_it_conflicts():
     assert v.readiness == "ready_for_manufacturing_evaluation"
 
 
-async def test_d37_07_rfq_wide_value_is_never_copied_into_a_part():
+async def test_rfq_wide_value_is_never_copied_into_a_part():
     text = "All parts must be aluminum. " + CODED.replace("100 aluminum 5052-H32 flat panels", "100 flat panels")  # fmt: skip
     args = {"parts": [CODED_ARGS["parts"][0] | {"quantity": ev("100", "100 flat panels"), "material": None, "material_grade": None}, CODED_ARGS["parts"][1]]}  # fmt: skip
     _, v = await validate(text, args)
@@ -914,19 +914,19 @@ async def test_d37_07_rfq_wide_value_is_never_copied_into_a_part():
     assert b.readiness == "ready_for_manufacturing_evaluation"
 
 
-async def test_d37_07_statement_limited_to_one_part_stays_in_that_part():
+async def test_statement_limited_to_one_part_stays_in_that_part():
     _, v = await validate(CODED + " Note: BRK-201 must be stainless steel.", CODED_ARGS)
     a, b = v.parts
     assert a.readiness == "ready_for_manufacturing_evaluation" and a.specification is not None
     assert any(f.kind == "contradiction" for f in part_findings(v, 2, "material")) and b.specification is None  # fmt: skip
 
 
-async def test_d37_07_label_named_before_its_section_fails_safe():
+async def test_label_named_before_its_section_fails_safe():
     _, v = await validate("BRK-201 must be stainless steel. " + CODED, CODED_ARGS)
     assert_not_ready(v)
 
 
-async def test_d37_08_omitted_unknown_operation_is_asked():
+async def test_omitted_unknown_operation_is_asked():
     text = f"{COMPLETE} Also knurl the edges."
     _, v = await validate(text, complete_args())  # the model kept only "laser cut"
     (f,) = [f for f in v.parts[0].findings if f.kind == "unknown_operation"]
@@ -951,25 +951,25 @@ async def test_d37_08_omitted_unknown_operation_is_asked():
         "Supplied with mounting holes.",  # a gerund used as an adjective
     ],
 )
-async def test_d37_08_non_requests_and_recognized_operations_stay_ready(tail):
+async def test_non_requests_and_recognized_operations_stay_ready(tail):
     _, v = await validate(f"{COMPLETE} {tail}", complete_args())
     assert v.readiness == "ready_for_manufacturing_evaluation", v.parts[0].findings
 
 
-async def test_d37_08_extracted_unknown_operation_is_not_asked_twice():
+async def test_extracted_unknown_operation_is_not_asked_twice():
     text = f"{COMPLETE} Also knurl the edges."
     _, v = await validate(text, complete_args(operations=[ev("laser cut"), ev("knurl", "knurl the edges")]))  # fmt: skip
     assert len([f for f in v.parts[0].findings if f.kind == "unknown_operation"]) == 1
     assert len([c for c in v.clarifications if c.field == "operations"]) == 1
 
 
-async def test_d37_08_unsupported_operation_is_not_also_unknown():
+async def test_unsupported_operation_is_not_also_unknown():
     _, v = await validate(f"{COMPLETE} Also cast the panels.", complete_args())
     assert not any(f.kind == "unknown_operation" for f in v.parts[0].findings)
     assert any(f.kind == "unsupported_requirement" for f in v.parts[0].findings)
 
 
-async def test_d37_08_rfq_wide_unknown_operation_blocks_every_part():
+async def test_rfq_wide_unknown_operation_blocks_every_part():
     _, v = await validate("Also knurl all edges. " + CODED, CODED_ARGS)
     (f,) = [f for f in v.findings if f.kind == "unknown_operation"]
     assert f.part_index is None and f.evidence == ("knurl",)
@@ -978,20 +978,20 @@ async def test_d37_08_rfq_wide_unknown_operation_blocks_every_part():
     assert_not_ready(v)
 
 
-async def test_d37_08_part_operation_request_stays_with_its_part():
+async def test_part_operation_request_stays_with_its_part():
     _, v = await validate(CODED + " Also knurl the edges.", CODED_ARGS)
     a, b = v.parts
     assert a.readiness == "ready_for_manufacturing_evaluation"
     assert any(f.kind == "unknown_operation" for f in b.findings) and b.specification is None
 
 
-async def test_d37_08_several_unknown_operations_share_one_question():
+async def test_several_unknown_operations_share_one_question():
     _, v = await validate(f"{COMPLETE} Also knurl the edges. Please emboss the logo.", complete_args())  # fmt: skip
     (q,) = [c for c in v.clarifications if c.field == "operations"]
     assert "'knurl'" in q.question and "'emboss'" in q.question
 
 
-async def test_d37_07_contested_material_is_not_catalog_checked():
+async def test_contested_material_is_not_catalog_checked():
     catalog = Catalog()
     _, v = await validate(
         "All parts must be stainless steel. " + CODED, CODED_ARGS, catalog=catalog
@@ -1000,12 +1000,12 @@ async def test_d37_07_contested_material_is_not_catalog_checked():
     assert catalog.calls == []
 
 
-async def test_d37_08_finish_request_is_not_an_unknown_operation():
+async def test_finish_request_is_not_an_unknown_operation():
     _, v = await validate(f"{COMPLETE} Also paint the panels.", complete_args())
     assert not any(f.kind == "unknown_operation" for f in v.parts[0].findings)
 
 
-async def test_d37_07_unclear_scope_material_is_not_catalog_checked():
+async def test_unclear_scope_material_is_not_catalog_checked():
     catalog = Catalog()
     _, v = await validate(
         "We usually work with stainless steel. " + CODED, CODED_ARGS, catalog=catalog
@@ -1023,10 +1023,10 @@ async def test_prohibition_questions_say_requested_and_ruled_out():
     assert "requested and ruled out" in q.question
 
 
-# --- D37-09: grade-first notation ("6061-T6 aluminum") -------------------------------------
+# --- intake validation control: grade-first notation ("6061-T6 aluminum") -------------------------------------
 
 
-async def test_d37_09_part_grade_first_contradiction():
+async def test_part_grade_first_contradiction():
     catalog = Catalog()
     text = f"{COMPLETE} Additional specification: 6061-T6 aluminum."
     _, v = await validate(text, complete_args(), catalog=catalog)
@@ -1039,7 +1039,7 @@ async def test_d37_09_part_grade_first_contradiction():
     assert_not_ready(v)
 
 
-async def test_d37_09_rfq_wide_grade_first_contradiction():
+async def test_rfq_wide_grade_first_contradiction():
     catalog = Catalog()
     _, v = await validate(
         "All parts must be 6061-T6 aluminum. " + CODED, CODED_ARGS, catalog=catalog
@@ -1053,14 +1053,14 @@ async def test_d37_09_rfq_wide_grade_first_contradiction():
     assert not any(q.get("grade") == "5052-H32" for _, q in catalog.calls)
 
 
-async def test_d37_09_prohibited_grade_written_before_material():
+async def test_prohibited_grade_written_before_material():
     _, v = await validate(f"{COMPLETE} Do not use 5052-H32 aluminum.", complete_args())
     (f,) = [f for f in v.parts[0].findings if f.field == "material_grade" and f.kind == "contradiction"]  # fmt: skip
     assert f.detail == "requested_and_prohibited" and set(f.evidence) == {"5052-H32"} and len(f.spans) == 2  # fmt: skip
     assert_not_ready(v)
 
 
-async def test_d37_09_grade_first_requirement_for_one_part_only():
+async def test_grade_first_requirement_for_one_part_only():
     _, v = await validate(CODED + " Note: BRK-201 must be 5052-H32 aluminum.", CODED_ARGS)
     a, b = v.parts
     assert a.readiness == "ready_for_manufacturing_evaluation" and a.specification.material_id == "MAT-001"  # fmt: skip
@@ -1100,13 +1100,13 @@ async def test_d37_09_grade_first_requirement_for_one_part_only():
         ),  # a label before material  # fmt: skip
     ],
 )
-async def test_d37_09_valid_grade_notations_stay_ready(text, args, material_id):
+async def test_valid_grade_notations_stay_ready(text, args, material_id):
     _, v = await validate(text, args)
     assert v.readiness == "ready_for_manufacturing_evaluation", v.parts[0].findings
     assert v.parts[0].specification.material_id == material_id
 
 
-async def test_d37_09_grade_scan_notation_and_exclusions():
+async def test_grade_scan_notation_and_exclusions():
     from rfq_copilot.intake_validation import _scan_grade
 
     def grades(text, labels=frozenset()):

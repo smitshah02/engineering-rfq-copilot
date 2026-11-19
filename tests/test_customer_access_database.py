@@ -12,16 +12,16 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import func, select, update
 from test_auth import AUDIENCE, bearer
 from test_auth import trust as trust
+from test_auth_database import app_with, call
+from test_auth_database import database as database
 from test_database_queries import customer_id, other_customer
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day20_auth_database import app_with, call
-from test_day20_auth_database import database as database
-from test_day21_rbac_database import bound, own_rfq, release_one
 from test_operator_assignment_admin_database import admin, first_operator, staff
+from test_rbac_database import bound, own_rfq, release_one
 
 from rfq_copilot import assignment_admin as assignments
 from rfq_copilot import identity_admin

@@ -1,4 +1,4 @@
-"""K5 (Day 55) offline: the decision-authority revision, its contract pins, the decision
+"""K5 (human decision) offline: the decision-authority revision, its contract pins, the decision
 allowlists and provisioning artifact, the decision credential and the separate human
 decision application. No database."""
 
@@ -89,7 +89,7 @@ def test_every_decision_needs_the_decision_group_and_is_bound_to_its_rows():
     assert quotes.count("IF decision AND") == 3  # approve, reject, release; never submit
     for grant in ("'approve_quote'", "'reject_quote'", "'release_quote'"):
         assert grant in quotes
-    assert "NEW.released_by <> OLD.approver_id" in quotes  # Day 55 policy
+    assert "NEW.released_by <> OLD.approver_id" in quotes  # human decision policy
     assert quotes.count("v.expiry_date >= today") == 2  # approve and release, database time
     assert "r.requested_by <> NEW.approver_id AND v.created_by <> NEW.approver_id" in quotes
     assert "OLD.status = 'rejected' AND NEW.status = 'revised_draft'" in quotes

@@ -1,4 +1,4 @@
-"""Day 37 fixed Intake evaluation set (authored for development; not frozen evaluation data).
+"""intake validation fixed Intake evaluation set (authored for development; not frozen evaluation data).
 
 ``gold`` lists, per expected part, the values a correct extraction should *verify*. Any other
 verified value counts as an incorrect trusted value. Text values match by containment.

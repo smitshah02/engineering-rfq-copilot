@@ -1,4 +1,4 @@
-"""Day 54D offline: request validation, idempotency digests, result types and isolation of
+"""integrity offline: request validation, idempotency digests, result types and isolation of
 ``rfq_copilot.quote_approval``. No database: every refusal here happens before any read."""
 
 import asyncio
@@ -124,7 +124,7 @@ def test_decisions_are_human_only_and_isolated_from_agents():
     assert not imported & AGENT_MODULES
     assert not {m for m in imported if m.startswith(("rfq_copilot.mcp", "rfq_copilot.agents"))}
     assert {approval.APPROVE, "release_quote"} == AGENT_MUST_NOT
-    # Nothing else in src/ invokes a decision: the API/MCP integration is out of Phase 2 scope.
+    # Nothing else in src/ invokes a decision: the API/MCP integration is out of business services scope.
     callers = [
         p.relative_to(SRC) for p in SRC.rglob("*.py")
         if p.name != "quote_approval.py"

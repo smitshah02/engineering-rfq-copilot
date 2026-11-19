@@ -1,5 +1,5 @@
-"""Pre-Phase 8 recovery hardening: D50-01 (abandoned running entries), D50-02 (cancellation on
-a closed event loop) and D50-07 (telemetry closed on abrupt teardown). Offline: the Phase 6
+"""Pre-recovery hardening recovery hardening: telemetry control (abandoned running entries), telemetry control (cancellation on
+a closed event loop) and telemetry control (telemetry closed on abrupt teardown). Offline: the specialist workflow
 harness, no network, database or model.
 
 Abandonment is driven with synthetic task objects on genuinely closed (or closing) asyncio
@@ -29,7 +29,7 @@ A = pytest.mark.asyncio
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -57,7 +57,7 @@ def closed_loop():
 
 
 class ClosingLoop:
-    """A loop that closes while the cancellation is being delivered (the race in D50-02)."""
+    """A loop that closes while the cancellation is being delivered (the race in telemetry control)."""
 
     def __init__(self):
         self.closed = False
@@ -88,7 +88,7 @@ def assert_released(entry, custody, lifecycle, code):
     assert custody.carried == {} and entry.result is None
 
 
-# --- D50-01: abandoned running entries ------------------------------------------------------
+# --- telemetry control: abandoned running entries ------------------------------------------------------
 
 
 @A
@@ -228,7 +228,7 @@ def test_abandon_real_attempt_is_cancelled_and_settled_before_its_loop_closes():
     assert recovery.prune() == 1  # capacity returns on the normal TTL
 
 
-# --- D50-02: cancellation when the task's loop is closed --------------------------------------
+# --- telemetry control: cancellation when the task's loop is closed --------------------------------------
 
 
 @A
@@ -300,7 +300,7 @@ async def test_closed_loop_concurrent_cancel_and_close_from_threads_settle_once(
     assert entry.custody is None and entry.result is None and gate.active == 0
 
 
-# --- D50-07: telemetry after abrupt teardown ------------------------------------------------
+# --- telemetry control: telemetry after abrupt teardown ------------------------------------------------
 
 
 @A

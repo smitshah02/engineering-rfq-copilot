@@ -1,4 +1,4 @@
-"""Day 32 LangGraph foundation: mocked chat models only, no provider, MCP or database."""
+"""graph execution LangGraph foundation: mocked chat models only, no provider, MCP or database."""
 
 import asyncio
 import json
@@ -47,7 +47,7 @@ class EchoModel(BaseChatModel):
         reply = (
             AIMessage("", tool_calls=[call(args={"material_id": material}, id=material)])
             if material
-            else AIMessage("echo " + "x" * text.count("slow"))  # non-numeric (Day 35 guard)
+            else AIMessage("echo " + "x" * text.count("slow"))  # non-numeric (grounding guard)
         )
         return ChatResult(generations=[ChatGeneration(message=reply)])
 
@@ -55,7 +55,7 @@ class EchoModel(BaseChatModel):
 @pytest.fixture(autouse=True)
 def no_mcp(monkeypatch):
     async def forbidden(*args, **kwargs):
-        raise AssertionError("MCP must not be called on Day 32")
+        raise AssertionError("MCP must not be called by the proposal-only graph")
 
     monkeypatch.setattr(McpToolClient, "call", forbidden)
 
@@ -70,8 +70,8 @@ async def test_graph_compiles_with_expected_topology():
         "prepare_input",
         "invoke_llm",
         "inspect_response",
-        "execute_tools",  # Day 34
-        "respond",  # Day 34
+        "execute_tools",  # tool execution
+        "respond",  # tool execution
         "safe_error",
         "__end__",
     }
@@ -87,7 +87,7 @@ async def test_graph_compiles_with_expected_topology():
     assert mermaid.startswith("---") and "inspect_response" in mermaid
 
 
-async def test_tool_binding_reuses_day31_helper():
+async def test_tool_binding_reuses_model_interface_helper():
     model = fake()
     build(model, ["get_material"])
     assert [t["function"]["name"] for t in model.bound] == ["get_material"]
@@ -100,7 +100,7 @@ async def test_tool_binding_reuses_day31_helper():
 
 
 async def test_direct_response_runs_start_to_end():
-    # Phase 5: tool-free model text is never shown; the reply is the fixed guidance.
+    # conversational graph: tool-free model text is never shown; the reply is the fixed guidance.
     graph = build(fake(AIMessage("I can look that up in the material catalog for you.")))
     state = await graph.ainvoke({"question": "Is 304 available?"})
     assert state["status"] == "answered" and state["reply"] == g.GUIDANCE
@@ -125,8 +125,8 @@ async def test_valid_tool_proposal_ends_without_execution():
     )
 
 
-async def test_tool_free_stock_claim_is_refused_day35():
-    # Day 32 showed this reply; Phase 5 never shows tool-free model text (fixed guidance).
+async def test_tool_free_stock_claim_is_refused_grounding():
+    # graph execution showed this reply; conversational graph never shows tool-free model text (fixed guidance).
     result = await g.run_graph(build(fake(AIMessage("Steel 304 is in stock."))), "Is 304 available?")  # fmt: skip
     assert (result.status, result.reply, result.grounding) == ("answered", g.GUIDANCE, "guidance")
     assert "in stock" not in result.message
@@ -135,7 +135,9 @@ async def test_tool_free_stock_claim_is_refused_day35():
 async def test_multiple_proposals_kept_in_order():
     calls = [call(id="a"), call(name="search_materials", args={"limit": 5}, id="b")]
     result = await g.run_graph(build(fake(AIMessage("checking", tool_calls=calls))), "q")
-    assert result.status == "proposed" and result.reply is None  # Phase 5: no model text
+    assert (
+        result.status == "proposed" and result.reply is None
+    )  # conversational graph: no model text
     assert [p["id"] for p in result.proposals] == ["a", "b"]
     assert result.proposals[1]["arguments"]["limit"] == 5
     json.dumps(result.proposals)  # plain, serializable data

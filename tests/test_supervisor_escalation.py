@@ -1,7 +1,7 @@
-"""Day 48 clarification, blocking, escalation and safe outcome contracts.
+"""escalation clarification, blocking, escalation and safe outcome contracts.
 
-The disposition is derived from the Supervisor's validated route (Day 45 ``decide``) and the
-attempt's own custody; these tests drive real runs through the offline Phase 6 harness and the
+The disposition is derived from the Supervisor's validated route (routing ``decide``) and the
+attempt's own custody; these tests drive real runs through the offline specialist workflow harness and the
 pure builder for codes no fixture produces. No network, database or model.
 
 Sections (-k): test_clarification_, test_blocking_, test_engineering_, test_supply_,
@@ -41,7 +41,7 @@ FINANCIAL = ("_usd", "cost", "margin", "evidence", "wholesale")
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")
@@ -52,7 +52,7 @@ def offline_harness(monkeypatch):
 
 
 async def prepared(name, monkeypatch) -> sv.SupervisorContext:
-    """A Day 45 scenario's context and agent patches, borderline bend as Day 46 builds it.
+    """A routing scenario's context and agent patches, borderline bend as delegation builds it.
     Preparation may call agents itself (the bend minimum), so install a Spy only after it."""
     if name == "borderline_bend":
         minimum = (await manufacturing()).parts[0].evidence.output.min_bend_radius_mm
@@ -67,7 +67,7 @@ async def scenario(name, monkeypatch) -> sv.SupervisorExecutionResult:
 
 
 async def spied(name, monkeypatch) -> tuple[sv.SupervisorExecutionResult, Spy]:
-    """The scenario with a Spy that records only the Supervisor workflow (D48-01)."""
+    """The scenario with a Spy that records only the Supervisor workflow (escalation control)."""
     ctx = await prepared(name, monkeypatch)
     spy = Spy(monkeypatch)
     return await sv.run_supervisor_workflow(ctx), spy
@@ -81,7 +81,7 @@ def dumped(result) -> str:
     return json.dumps(result.summary()) + result.customer_outcome().model_dump_json()
 
 
-# Day 45 EXPECTED route -> the disposition category (blocked splits on the route's outcome)
+# routing EXPECTED route -> the disposition category (blocked splits on the route's outcome)
 CATEGORY = {
     "baseline": "draft_ready_for_approval",
     "missing_thickness": "clarification_required",
@@ -297,7 +297,7 @@ async def test_engineering_review_conditions_recommend_engineering(monkeypatch, 
 async def test_supply_concerns_continue_through_pricing_and_surface_at_a5(monkeypatch, name):
     result, spy = await spied(name, monkeypatch)
     d = result.disposition
-    assert spy.stages() == STAGES  # constrained supply is priced, not blocked (Phase 6)
+    assert spy.stages() == STAGES  # constrained supply is priced, not blocked (specialist workflow)
     assert result.outcomes[STAGES.index("supply")].decision == "continue"
     assert (d.category, d.stage) == ("review_required", "quotation")
     assert "supply_delivery" in d.review_categories
@@ -623,7 +623,9 @@ async def test_security_no_financial_data_in_any_disposition_or_customer_outcome
 
 @A
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
-async def test_compat_disposition_category_matches_the_phase6_workflow_status(monkeypatch, name):
+async def test_compat_disposition_category_matches_the_specialist_workflow_workflow_status(
+    monkeypatch, name
+):
     if name == "borderline_bend":
         minimum = (await manufacturing()).parts[0].evidence.output.min_bend_radius_mm
         bent_intake(monkeypatch, part(bend_radius_mm=minimum))
@@ -631,7 +633,7 @@ async def test_compat_disposition_category_matches_the_phase6_workflow_status(mo
     text, args, router = SCENARIOS[name]
     a, _ = await run(text, args, router())
     result = await sv.run_supervisor_workflow(context(text, args, router()))
-    phase6 = {
+    specialist_workflow = {
         "draft_ready_for_review": "draft_ready_for_approval",
         "requires_review": "review_required",
         "clarification_required": "clarification_required",
@@ -639,7 +641,7 @@ async def test_compat_disposition_category_matches_the_phase6_workflow_status(mo
         "not_evaluated": "not_evaluated",
         "error": "technical_failure",
     }[a.status]
-    assert result.disposition.category == phase6
+    assert result.disposition.category == specialist_workflow
     assert result.disposition.draft_available == a.draft_available
 
 

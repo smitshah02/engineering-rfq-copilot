@@ -1,4 +1,4 @@
-"""Day 52 quotation versioning: offline checks (no database, network or model)."""
+"""versioning quotation versioning: offline checks (no database, network or model)."""
 
 import csv
 import json
@@ -47,7 +47,7 @@ def test_revision_digest_binds_quote_expected_version_tenant_and_inputs():
         revision_digest(PRINCIPAL, "QUOTE-1", 2, draft_inputs()),
         revision_digest(PRINCIPAL, "QUOTE-1", 1, draft_inputs(requested_delivery_date=MONDAY)),
         revision_digest(PRINCIPAL, "QUOTE-1", 1, draft_inputs(capacity_snapshot="SNAP")),
-        request_digest(PRINCIPAL, "QUOTE-1", draft_inputs()),  # never a Day 51 digest
+        request_digest(PRINCIPAL, "QUOTE-1", draft_inputs()),  # never a draft persistence digest
     ]
     assert base not in variants and len(set(variants)) == len(variants)
 
@@ -93,13 +93,13 @@ def test_revisions_use_approved_operation_permission_and_transition():
     assert "revised_draft" in workflow["transitions"]["draft"]
     assert "revised_draft" not in workflow["transitions"]["revised_draft"]  # hence v1.1
     assert workflow["version_bump_requires_approval_reset"] is True  # why approved is refused
-    # Pending, approved, released, blocked, clarification and expired: never revised. Day 55:
+    # Pending, approved, released, blocked, clarification and expired: never revised. human decision:
     # rejected -> revised_draft, listed by every workflow rule and allowed by K4.
     assert quote_versions.REVISABLE == {"draft", "revised_draft", "rejected"}
     assert "revised_draft" in workflow["transitions"]["rejected"]
 
 
-# --- workflow-v1.1 (approved 2026-11-15, Day 52 Option B) ----------------------------------
+# --- workflow-v1.1 (approved 2026-11-15, versioning Option B) ----------------------------------
 
 V11 = registered_rule_row("workflow-v1.1")  # re-derives sha256 and fingerprint, else SeedError
 

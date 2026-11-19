@@ -1,9 +1,9 @@
-"""K3 (Day 54B) calculation records, version evidence and validity on the guarded test DB.
+"""K3 (integrity) calculation records, version evidence and validity on the guarded test DB.
 
 Fixture-transaction tests (``populated``) run as the owner fixture role and are rolled
 back; K3 triggers bind the owner too (only the partial-version timestamp seal exempts it,
 for seeding history). States K2/K3 refuse to create are staged with
-``history_corruption.corrupted``. The committed race uses the Day 51 ``world`` and its
+``history_corruption.corrupted``. The committed race uses the draft persistence ``world`` and its
 TRUNCATE teardown. Runtime-role limits are in ``test_runtime_role_database.py``. The
 development database is never opened, and workflow-v1.2 is registered only inside these
 rolled-back or truncated test transactions.
@@ -21,7 +21,6 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day21_rbac_database import bound
 from test_quote_drafts_concurrency import hold_after_checks, race
 from test_quote_drafts_concurrency import world as world
 from test_quote_drafts_database import (
@@ -35,6 +34,7 @@ from test_quote_drafts_database import (
     setup,
 )
 from test_quote_versions_database import DUE, LATER, LINES, VERSIONS, rargs, rows, state
+from test_rbac_database import bound
 
 import rfq_copilot.quote_drafts as quote_drafts
 from rfq_copilot import quote_evidence

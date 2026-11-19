@@ -1,10 +1,10 @@
-"""Day 45 Supervisor routing: decide(), record_outcome(), routing-state validation and the
+"""routing Supervisor routing: decide(), record_outcome(), routing-state validation and the
 conditional LangGraph edges. Offline: no model, no MCP, no database.
 
-Stage results come from the Phase 6 offline harness (real A1-A5 agents over the existing
+Stage results come from the specialist workflow offline harness (real A1-A5 agents over the existing
 fakes), never built by hand. The delegation node in ``delegating_graph`` is a test fixture:
 it hands the delegated stage's precomputed result to the production ``record_outcome``.
-Day 46 replaces it with real delegation; the production graph has no such node.
+delegation replaces it with real delegation; the production graph has no such node.
 
 Sections (-k): test_decision_, test_graph_, test_prereq_, test_scenario_, test_security_,
 test_compat_, test_failure_."""
@@ -44,7 +44,7 @@ PRINCIPAL = Principal("CUST-008", frozenset({"view_quote"}), user_id="U-1", subj
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """No direct MCP. The Phase 6 offline A2 fake is bound to the RULES fixture (sha "test"),
+    """No direct MCP. The specialist workflow offline A2 fake is bound to the RULES fixture (sha "test"),
     so exactly that object is admitted as the manufacturing rule; every other check stands."""
 
     async def forbidden(*args, **kwargs):
@@ -70,7 +70,7 @@ def context(**over) -> sv.SupervisorContext:
 
 
 def results_of(a: wf.RFQWorkflowAssessment) -> dict:
-    """The stage results Phase 6 kept, by stage."""
+    """The stage results specialist workflow kept, by stage."""
     return {s.stage: getattr(a, s.key) for s in sv.STAGE_PLAN if getattr(a, s.key) is not None}
 
 
@@ -95,7 +95,7 @@ SCENARIOS = {
     "manufacturing_error": (COMPLETE, None, Router),
 }
 # fmt: on
-# name -> (route action, stopped_at): what the Phase 6 gating requires
+# name -> (route action, stopped_at): what the specialist workflow gating requires
 EXPECTED = {
     "baseline": ("complete", None),
     "missing_thickness": ("clarification", "intake_validation"),
@@ -196,7 +196,7 @@ STOPS = [
 
 
 @pytest.mark.parametrize(("i", "status", "decision"), STOPS)
-def test_decision_every_phase6_stop_maps_to_one_route(i, status, decision):
+def test_decision_every_specialist_workflow_stop_maps_to_one_route(i, status, decision):
     stage = STAGES[i]
     stop = oc(stage, decision, status=status, reason="code", clarifications=("0:f:missing",))
     route = sv.decide((*continued(i), stop))
@@ -207,7 +207,7 @@ def test_decision_every_phase6_stop_maps_to_one_route(i, status, decision):
     assert (route.human_approval_required, route.approved, route.released) == (True, False, False)
 
 
-def test_decision_review_conditions_that_phase6_continues_do_not_stop():
+def test_decision_review_conditions_that_specialist_workflow_continues_do_not_stop():
     continues = {(s, status) for s in STAGES for status, n in wf._NEXT[s].items() if n == wf._GO}
     assert ("supply", "constrained") in continues  # priced with the constraint carried
     assert ("pricing", "requires_review") in continues  # A5 replays A4, no amount
@@ -280,7 +280,7 @@ async def test_graph_stop_branch_runs_no_later_stage_or_other_terminal(monkeypat
 @A
 async def test_graph_production_run_invokes_no_specialist_llm_or_mcp(monkeypatch):
     async def boom(*args, **kwargs):
-        raise AssertionError("must not run on Day 45")
+        raise AssertionError("must not run during routing-only evaluation")
 
     for spec in sv.STAGE_PLAN:
         monkeypatch.setattr(inspect.getmodule(spec.entry), spec.entry.__name__, boom)
@@ -367,7 +367,7 @@ async def test_prereq_skipped_reordered_or_backward_state_is_rejected(monkeypatc
 
 @A
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
-async def test_scenario_routing_matches_the_phase6_gating(monkeypatch, name):
+async def test_scenario_routing_matches_the_specialist_workflow_gating(monkeypatch, name):
     text, a = await scenario(name, monkeypatch)
     result = await sv._route(delegating_graph(results_of(a)), context(source_text=text))
     route = result.route
@@ -587,7 +587,7 @@ async def test_security_a_delegation_node_cannot_write_outside_record_outcome(mo
 
 
 @A
-async def test_compat_day44_foundation_is_unchanged():
+async def test_compat_supervisor_foundation_foundation_is_unchanged():
     graph = sv.build_supervisor_graph()
     nodes = set(graph.get_graph().nodes) - {"__start__", "__end__"}
     assert nodes == {"trusted_entry", "initialize_supervisor"}
@@ -602,12 +602,14 @@ def test_compat_routing_bounds_and_destinations_follow_the_plan():
     assert len(set(sv.DESTINATIONS.values())) == len(sv.DESTINATIONS)
     assert set(sv._ACTION_OF) | {"continue"} == set(typing.get_args(sv.Decision))
     workflow_stops = {n for table in wf._NEXT.values() for n in table.values()} - {wf._GO}
-    assert workflow_stops == set(sv._ACTION_OF)  # every Phase 6 stop has exactly one route
+    assert workflow_stops == set(
+        sv._ACTION_OF
+    )  # every specialist workflow stop has exactly one route
     assert sv.ROUTING_RECURSION_LIMIT > 3 + 2 * len(sv.STAGE_PLAN) + 1
     assert sv.DEFAULT_TIMEOUT == wf.DEFAULT_TIMEOUT == 390.0
 
 
-def test_compat_router_reuses_phase6_gating_instead_of_copying_it():
+def test_compat_router_reuses_specialist_workflow_gating_instead_of_copying_it():
     source = inspect.getsource(sv)
     reused = ("wf._NEXT", "wf._handoff_error", "wf._clarifications", "wf._reviews", "wf._reason")
     for name in reused:

@@ -1,4 +1,4 @@
-"""Day 36 RFQ Intake Agent: mocked chat models at the provider boundary only.
+"""intake extraction RFQ Intake Agent: mocked chat models at the provider boundary only.
 
 Pydantic validation, the graph, normalization and provenance checks all run for real.
 No provider, MCP or database.
@@ -322,7 +322,9 @@ async def test_unnamed_parts_with_shared_evidence_are_ambiguous():
     result = verify_extraction(proposal(args), text, "s")
     assert result.part_boundaries == "unverified"
     for i in (0, 1):
-        qty = field(result, i, "quantity")  # D36-05: evidence kept, ownership not trusted
+        qty = field(
+            result, i, "quantity"
+        )  # intake extraction control: evidence kept, ownership not trusted
         assert (qty.status, qty.reason, qty.span is not None) == (
             "ambiguous",
             "part_association_unverified",
@@ -635,7 +637,7 @@ async def test_invoke_structured_still_accepts_a_single_schema_call():
     assert len(out.parts) == 1
 
 
-# --- segmentation adversarial cases (found by probing before Day 36 sign-off) ------------
+# --- segmentation adversarial cases (found by probing before intake extraction sign-off) ------------
 
 
 async def test_single_letter_labels_match_whole_words_only():
@@ -668,7 +670,7 @@ async def test_quote_does_not_match_inside_a_longer_number():
     assert field(result, 0, "thickness").reason == "evidence_not_in_source"
 
 
-# --- real-model findings (qwen3 4B, Day 36): bogus splits and field reassignment ---------
+# --- real-model findings (qwen3 4B, intake extraction): bogus splits and field reassignment ---------
 
 
 async def test_specification_phrases_used_as_labels_do_not_split_the_rfq():
@@ -714,7 +716,10 @@ async def test_one_value_under_two_fields_is_not_trusted():
         ]
     }
     result = verify_extraction(proposal(args), BRACKETS, "s")
-    expected = {"thickness": "value_reused", "height": "field_not_attributable"}  # D36-01
+    expected = {
+        "thickness": "value_reused",
+        "height": "field_not_attributable",
+    }  # intake extraction control
     for name, reason in expected.items():
         f = field(result, 0, name)
         assert (f.status, f.reason, f.normalized) == ("ambiguous", reason, None)
@@ -739,14 +744,14 @@ async def test_label_overlapping_field_evidence_does_not_split_the_rfq():
     assert result.part_boundaries == "unverified"
 
 
-# --- Day 36 independent audit remediation (D36-01 .. D36-07) ------------------------------
+# --- intake extraction independent audit remediation (intake extraction control .. intake extraction control) ------------------------------
 
 
 def one(name: str, item: dict, text: str):
     return field(verify_extraction(proposal({"parts": [{name: item}]}), text, "s"), 0, name)
 
 
-async def test_d36_01_swapped_dimensions_are_not_verified():
+async def test_swapped_dimensions_are_not_verified():
     text = "Bracket: 3 mm thick, 80 mm wide."
     args = {"parts": [{"width": ev("3 mm", text), "thickness": ev("80 mm", text)}]}
     result = verify_extraction(proposal(args), text, "s")
@@ -768,7 +773,7 @@ async def test_d36_01_swapped_dimensions_are_not_verified():
         "Tolerance ±0.1 mm on 3 mm thickness.",  # tolerance clause, not a thickness
     ],
 )
-async def test_d36_01_unattributable_dimensions(text):
+async def test_unattributable_dimensions(text):
     assert one("thickness", ev("3 mm", text), text).reason == "field_not_attributable"
 
 
@@ -782,11 +787,11 @@ async def test_d36_01_unattributable_dimensions(text):
         ("quantity", "200", "We need 200 brackets with 4 holes."),
     ],
 )
-async def test_d36_01_explicitly_attributed_values_still_verify(name, value, text):
+async def test_explicitly_attributed_values_still_verify(name, value, text):
     assert one(name, ev(value, text), text).status == "verified"
 
 
-async def test_d36_01_quantity_and_hole_count_cannot_swap():
+async def test_quantity_and_hole_count_cannot_swap():
     args = {"parts": [{"quantity": ev("four", BRACKETS), "hole_count": ev("200", BRACKETS)}]}
     result = verify_extraction(proposal(args), BRACKETS, "s")
     for name in ("quantity", "hole_count"):
@@ -808,7 +813,7 @@ async def test_d36_01_quantity_and_hole_count_cannot_swap():
         ("requested_delivery_date", "2026-12-15", "Deliver by 2026-12-15 or 2026-12-22."),
     ],
 )
-async def test_d36_02_alternatives_in_the_source_are_never_resolved(name, value, text):
+async def test_alternatives_in_the_source_are_never_resolved(name, value, text):
     if name == "requested_delivery_date":
         args = {"parts": [], "requested_delivery_date": ev(value, text)}
         (f,) = verify_extraction(proposal(args), text, "s").rfq_fields
@@ -830,7 +835,7 @@ async def test_d36_02_alternatives_in_the_source_are_never_resolved(name, value,
         ("hole_count", "4", "Don't drill 4 holes."),
     ],
 )
-async def test_d36_03_negated_or_conditional_requests_are_not_verified(name, value, text):
+async def test_negated_or_conditional_requests_are_not_verified(name, value, text):
     f = (
         one(name, ev(value, text), text)
         if name != "operations"
@@ -844,7 +849,7 @@ async def test_d36_03_negated_or_conditional_requests_are_not_verified(name, val
     assert f.reason in ("negated_or_conditional", "alternatives")
 
 
-async def test_d36_03_explicit_no_finish_and_part_numbers_are_not_negations():
+async def test_explicit_no_finish_and_part_numbers_are_not_negations():
     assert one("finish", ev("no finish"), "Part A: no finish.").normalized == "none"
     assert one("finish", ev("unfinished"), "Unfinished.").normalized == "none"
     text = "Part No. 7731: 50 plates."
@@ -869,14 +874,14 @@ async def test_d36_03_explicit_no_finish_and_part_numbers_are_not_negations():
         ("thickness", "\u0663 mm"),  # Arabic-Indic digit three
     ],
 )
-async def test_d36_04_unicode_signs_and_digits_are_never_normalized(name, value):
+async def test_unicode_signs_and_digits_are_never_normalized(name, value):
     text = f"Need {value} thick plates" if name == "thickness" else f"Need {value} plates"
     f = one(name, ev(value), text)
     assert f.status == "invalid" and f.reason in ("out_of_range", "unsupported_format")
     assert f.normalized is None
 
 
-async def test_d36_04_positive_value_cannot_cite_a_negative_source():
+async def test_positive_value_cannot_cite_a_negative_source():
     assert one("quantity", ev("5", "\u22125 plates"), "Need \u22125 plates").reason == (
         "value_not_in_evidence"
     )
@@ -886,7 +891,7 @@ async def test_d36_04_positive_value_cannot_cite_a_negative_source():
     assert f.normalized == Decimal("0.1")
 
 
-async def test_d36_05_exchanged_values_between_unlabelled_parts_are_not_owned():
+async def test_exchanged_values_between_unlabelled_parts_are_not_owned():
     text = "200 aluminum brackets and 300 steel plates."
     args = {
         "parts": [
@@ -902,7 +907,7 @@ async def test_d36_05_exchanged_values_between_unlabelled_parts_are_not_owned():
         assert intake.candidate_specification(result, part) is None
 
 
-async def test_d36_05_single_entry_for_a_multi_part_source_is_not_owned():
+async def test_single_entry_for_a_multi_part_source_is_not_owned():
     args = {
         "parts": [
             {
@@ -922,7 +927,7 @@ async def test_d36_05_single_entry_for_a_multi_part_source_is_not_owned():
     "label",
     ["200 aluminum brackets", "brackets", "black powder coating", "3 mm", "4"],
 )
-async def test_d36_06_descriptions_are_not_part_identifiers(label):
+async def test_descriptions_are_not_part_identifiers(label):
     args = {"parts": [{"label": label, "quantity": ev("200", "200 aluminum brackets")}]}
     result = verify_extraction(proposal(args), BRACKETS + " Ref 4.", "s")
     assert not result.parts[0].label_verified
@@ -931,7 +936,7 @@ async def test_d36_06_descriptions_are_not_part_identifiers(label):
 
 
 @pytest.mark.parametrize("label", ["Part A", "Item 2", "P/N 7731", "BRK-200", "A"])
-async def test_d36_06_identifier_labels_still_verify(label):
+async def test_identifier_labels_still_verify(label):
     text = f"{label}: 200 brackets, 3 mm thick."
     args = {"parts": [{"label": label, "quantity": ev("200", "200 brackets")}]}
     result = verify_extraction(proposal(args), text, "s")
@@ -949,7 +954,7 @@ async def test_d36_06_identifier_labels_still_verify(label):
         ("Deliver by 2026-12-15 if possible.", "2026-12-15"),
     ],
 )
-async def test_d36_07_negated_or_unlabelled_dates_are_not_delivery_dates(text, value):
+async def test_negated_or_unlabelled_dates_are_not_delivery_dates(text, value):
     args = {"parts": [], "requested_delivery_date": ev(value, text)}
     (f,) = verify_extraction(proposal(args), text, "s").rfq_fields
     assert (f.status, f.normalized) == ("ambiguous", None)
@@ -959,7 +964,7 @@ async def test_d36_07_negated_or_unlabelled_dates_are_not_delivery_dates(text, v
     "text",
     ["Deliver by 2026-12-15.", "Requested delivery date 2026-12-15.", "No later than 2026-12-15."],
 )
-async def test_d36_07_stated_delivery_dates_still_verify(text):
+async def test_stated_delivery_dates_still_verify(text):
     args = {"parts": [], "requested_delivery_date": ev("2026-12-15", text)}
     (f,) = verify_extraction(proposal(args), text, "s").rfq_fields
     assert str(f.normalized) == "2026-12-15"
@@ -992,18 +997,18 @@ async def test_remediated_values_never_reach_a_part_specification(text, part):
         ("12", "12 week lead time.", False),
     ],
 )
-async def test_d36_01_quantity_needs_a_quantity_or_part_cue(value, text, verified):
+async def test_quantity_needs_a_quantity_or_part_cue(value, text, verified):
     f = one("quantity", ev(value, text), text)
     assert (f.status == "verified") is verified
 
 
 @pytest.mark.parametrize("text", ["Need 4 bracket holes.", "Need 3 mm brackets."])
-async def test_d36_01_hole_counts_and_measures_are_not_quantities(text):
+async def test_hole_counts_and_measures_are_not_quantities(text):
     value = "4" if "4" in text else "3"
     assert one("quantity", ev(value, text), text).reason == "field_not_attributable"
 
 
-async def test_d36_06_identifier_shaped_value_is_not_a_label():
+async def test_identifier_shaped_value_is_not_a_label():
     text = "Need 6061-T6 plates, quantity 5."
     args = {
         "parts": [
@@ -1034,7 +1039,7 @@ async def test_label_claimed_by_two_entries_is_not_verified():
     assert all(f.status != "verified" for p in result.parts for f in p.fields)
 
 
-# --- Day 36 final remediation (D36-09 .. D36-13) ------------------------------------------
+# --- intake extraction final remediation (intake extraction control .. intake extraction control) ------------------------------------------
 
 
 def labelled(text: str, **fields) -> tuple[intake.IntakeResult, intake.IntakePart]:
@@ -1055,7 +1060,7 @@ def labelled(text: str, **fields) -> tuple[intake.IntakeResult, intake.IntakePar
         ("quantity", "5", "Part A: ±5 plates."),
     ],
 )
-async def test_d36_09_positive_value_from_signed_source_is_rejected(name, value, text):
+async def test_positive_value_from_signed_source_is_rejected(name, value, text):
     result, part = labelled(text, **{name: ev(value)})  # quote excludes the sign
     f = part.get(name)
     assert (f.status, f.reason, f.normalized) == ("unverified", "value_not_in_evidence", None)
@@ -1066,14 +1071,14 @@ async def test_d36_09_positive_value_from_signed_source_is_rejected(name, value,
     ("value", "text", "mm"),
     [("±0.1 mm", "Part A: tolerance ±0.1 mm.", "0.1"), ("+/-0.1 mm", "Part A: tolerance +/-0.1 mm.", "0.1")],
 )  # fmt: skip
-async def test_d36_09_valid_signs_still_work(value, text, mm):
+async def test_valid_signs_still_work(value, text, mm):
     result, part = labelled(text, tolerance=ev(value), quantity=ev("4", "Part A: 4"))
     assert part.get("tolerance").normalized == Decimal(mm)
     result, part = labelled("Part A: 3 mm thick.", thickness=ev("3 mm"))
     assert intake.candidate_specification(result, part).thickness_mm == Decimal("3")
 
 
-async def test_d36_10_swapped_material_and_finish_are_rejected():
+async def test_swapped_material_and_finish_are_rejected():
     text = "Part A: 50 aluminum brackets, black powder coating."
     result, part = labelled(
         text,
@@ -1101,7 +1106,7 @@ async def test_d36_10_swapped_material_and_finish_are_rejected():
         ("finish", "unfinished", "Part A: unfinished."),
     ],
 )
-async def test_d36_10_legitimate_material_grade_finish_still_verify(name, value, text):
+async def test_legitimate_material_grade_finish_still_verify(name, value, text):
     assert labelled(text, **{name: ev(value)})[1].get(name).status == "verified"
 
 
@@ -1115,11 +1120,11 @@ async def test_d36_10_legitimate_material_grade_finish_still_verify(name, value,
         ("finish", "galvanized steel", "Part A: galvanized steel."),
     ],
 )
-async def test_d36_10_values_of_another_kind_are_not_attributed(name, value, text):
+async def test_values_of_another_kind_are_not_attributed(name, value, text):
     assert labelled(text, **{name: ev(value)})[1].get(name).reason == "field_not_attributable"
 
 
-async def test_d36_11_candidate_rejects_foreign_or_missing_parts():
+async def test_candidate_rejects_foreign_or_missing_parts():
     a = await extract(TWO_PARTS, two_part_args())
     b = await extract(TWO_PARTS, two_part_args())
     assert a.parts[0] == b.parts[0] and a.parts[0] is not b.parts[0]
@@ -1132,7 +1137,7 @@ async def test_d36_11_candidate_rejects_foreign_or_missing_parts():
     assert intake.candidate_specification(a, copy) is None
 
 
-async def test_d36_11_candidate_rejects_unsuccessful_results():
+async def test_candidate_rejects_unsuccessful_results():
     good = await extract(TWO_PARTS, two_part_args())
     for status in ("error", "no_parts_found"):
         forged = good.model_copy(update={"status": status})
@@ -1150,7 +1155,7 @@ async def test_d36_11_candidate_rejects_unsuccessful_results():
         "Part A: 3 mm thick (revised: 4 mm thick).",
     ],
 )
-async def test_d36_12_superseded_values_are_never_trusted(text):
+async def test_superseded_values_are_never_trusted(text):
     quote = "thickness 3 mm" if "thickness 3 mm" in text else "3 mm thick"
     result, part = labelled(text, thickness=ev("3 mm", quote))
     f = part.get("thickness")
@@ -1158,15 +1163,15 @@ async def test_d36_12_superseded_values_are_never_trusted(text):
     assert intake.candidate_specification(result, part) is None
     corrected = "Correct thickness is 4 mm" if "Correct" in text else "4 mm thick"
     result, part = labelled(text, thickness=ev("4 mm", corrected))
-    assert part.get("thickness").status == "ambiguous"  # which value survives is Day 37
+    assert part.get("thickness").status == "ambiguous"  # which value survives is intake validation
 
 
-async def test_d36_12_plain_source_still_verifies():
+async def test_plain_source_still_verifies():
     result, part = labelled("Part A: thickness 4 mm.", thickness=ev("4 mm", "thickness 4 mm"))
     assert intake.candidate_specification(result, part).thickness_mm == Decimal("4")
 
 
-async def test_d36_13_one_entry_for_two_coded_parts_is_not_owned():
+async def test_one_entry_for_two_coded_parts_is_not_owned():
     text = "BRK-200: 100 brackets; BRK-201: 200 brackets."
     args = {"parts": [{"label": "BRK-200", "quantity": ev("200", "200 brackets")}]}
     result = verify_extraction(proposal(args), text, "s")
@@ -1176,7 +1181,7 @@ async def test_d36_13_one_entry_for_two_coded_parts_is_not_owned():
     assert intake.candidate_specification(result, result.parts[0]) is None
 
 
-async def test_d36_13_same_type_parts_with_codes_are_separated():
+async def test_same_type_parts_with_codes_are_separated():
     text = "BRK-200: 100 brackets; BRK-201: 200 brackets."
     args = {
         "parts": [
@@ -1197,13 +1202,13 @@ async def test_d36_13_same_type_parts_with_codes_are_separated():
     "text",
     ["BRK-200: 100 brackets in 6061-T6, 3 mm thick.", "Part A: 5052-H32 aluminum, M6 holes."],
 )
-async def test_d36_13_grades_and_sizes_are_not_part_codes(text):
+async def test_grades_and_sizes_are_not_part_codes(text):
     label = text.split(":")[0]
     args = {"parts": [{"label": label, "thickness": ev("3 mm", "3 mm thick")} if "3 mm" in text else {"label": label, "material": ev("aluminum")}]}  # fmt: skip
     assert verify_extraction(proposal(args), text, "s").part_boundaries == "single_part"
 
 
-# --- Day 37: extraction fixes found during validation and real-model evaluation ----------
+# --- intake validation: extraction fixes found during validation and real-model evaluation ----------
 
 
 @pytest.mark.parametrize(

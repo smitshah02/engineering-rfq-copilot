@@ -1,4 +1,4 @@
-"""K2 (Day 54A) database-enforced history against the guarded PostgreSQL test database.
+"""K2 (integrity) database-enforced history against the guarded PostgreSQL test database.
 
 Connections here use the owner fixture role. Triggers bind it too, unless it disables them,
 which only ``history_corruption`` does. Fixture-transaction tests share one transaction
@@ -84,7 +84,7 @@ def partial_drafts(monkeypatch):
     monkeypatch.setattr(quote_drafts, "WORKFLOW_RULE_VERSION", "workflow-v1.1")
 
 
-# --- Legitimate Day 51 / Day 52 writes ---------------------------------------------------------
+# --- Legitimate draft persistence / versioning writes ---------------------------------------------------------
 
 
 async def test_drafts_and_revisions_pass_stamped_by_their_transaction(populated, seed_plan):

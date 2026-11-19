@@ -1,6 +1,6 @@
-"""Day 37 opt-in live check: Intake validation's catalog path through the real MCP host.
+"""intake validation opt-in live check: Intake validation's catalog path through the real MCP host.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the Day 34 live agent test:
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), same fixtures as the tool execution live agent test:
 a separate uvicorn MCP host on loopback TCP over the guarded, seeded test database. Pinned
 manufacturing rules are read from that database. No model is involved.
 """

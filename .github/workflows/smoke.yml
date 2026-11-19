@@ -1,10 +1,25 @@
 # Public smoke checks: lint, lockfile and the tests that need neither PostgreSQL nor the
-# private v1.1.0 dataset. This is NOT the full regression suite (see README "Testing").
+# private v1.1.0 dataset. This is a subset of the regression (see docs/development/testing.md).
 name: smoke
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run test:run
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
   smoke:
     runs-on: ubuntu-latest
     steps:
@@ -14,4 +29,4 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check src tests alembic
-      - run: uv run pytest -q -p no:cacheprovider tests/test_database_config.py tests/test_hardening_public.py tests/test_api.py tests/test_api_schemas.py tests/test_api_reads.py tests/test_attachments.py tests/test_auth.py tests/test_rbac.py tests/test_phase3_hardening.py tests/test_phase3_reconcile.py tests/test_phase35_completion.py tests/test_serving_database_config.py tests/test_quote_approval.py tests/test_k5_decision_authority.py
+      - run: uv run pytest -q -p no:cacheprovider tests/test_database_config.py tests/test_hardening_public.py tests/test_api.py tests/test_api_schemas.py tests/test_api_reads.py tests/test_attachments.py tests/test_auth.py tests/test_rbac.py tests/test_api_security.py tests/test_attachment_reconciliation.py tests/test_backend_policy_contracts.py tests/test_serving_database_config.py tests/test_quote_approval.py tests/test_k5_decision_authority.py

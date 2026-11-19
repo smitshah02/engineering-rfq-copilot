@@ -1,4 +1,4 @@
-"""Day 28 MCP host: edge policy, mounted servers, F1-F4 through the full host.
+"""gateway MCP host: edge policy, mounted servers, F1-F4 through the full host.
 
 In-memory ASGI transport only (no listener). The host's ASGI lifespan is driven
 explicitly, so the three SDK session managers start and stop as under uvicorn.
@@ -25,9 +25,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day14_quotation import insert_valid_runtime_rfq
 from test_mcp_auth import ARGS, BASE, MCP_AUDIENCE, NOT_FOUND, settings, world
 from test_mcp_manufacturing import text
+from test_quotation_database import insert_valid_runtime_rfq
 
 from rfq_copilot.api.config import ApiSettings
 from rfq_copilot.api.schemas.reads import MaterialPage, MaterialSummary
@@ -542,7 +542,7 @@ async def test_rejected_credentials_never_open_a_snapshot(populated, seed_plan, 
 async def test_customer_isolation_and_assignments_survive_the_host(populated, seed_plan, trust):
     a, _, user_a, user_b = await world(populated, seed_plan)
     await insert_valid_runtime_rfq(populated, a)
-    request = {"rfq_id": "TEST-DAY14-RFQ", "horizon_start": "2026-11-09"}
+    request = {"rfq_id": "TEST-QUOTATION-RFQ", "horizon_start": "2026-11-09"}
     token_a = trust.mint(sub=user_a.authentication_subject, aud=MCP_AUDIENCE)
     token_b = trust.mint(sub=user_b.authentication_subject, aud=MCP_AUDIENCE)
     app, _ = seeded_host(populated, trust)
@@ -555,7 +555,7 @@ async def test_customer_isolation_and_assignments_survive_the_host(populated, se
     assigned_app, _ = seeded_host(populated, trust, rfq_assignments="required")
     async with running(assigned_app):
         unassigned = await tool(assigned_app, token_a, "check_inventory", request)
-        await populated.execute(insert(RfqAssignment).values(rfq_id="TEST-DAY14-RFQ", user_id=user_a.user_id, assigned_by=user_b.user_id))  # fmt: skip
+        await populated.execute(insert(RfqAssignment).values(rfq_id="TEST-QUOTATION-RFQ", user_id=user_a.user_id, assigned_by=user_b.user_id))  # fmt: skip
         assigned = await tool(assigned_app, token_a, "check_inventory", request)
     assert text(unassigned) == NOT_FOUND and not assigned.is_error
 

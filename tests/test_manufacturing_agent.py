@@ -1,4 +1,4 @@
-"""Day 38 Manufacturing Feasibility Agent (A2), offline.
+"""manufacturing evidence Manufacturing Feasibility Agent (A2), offline.
 
 The fake MCP executor runs the real pure services (``evaluate_material`` and
 ``evaluate_manufacturing``) over the frozen dataset catalog and maps the result exactly as the
@@ -326,7 +326,7 @@ def catalog(**over):
     return rewrite
 
 
-# D38-01: every rewrite goes through the executor, so the agent re-validates it against the
+# manufacturing evidence control: every rewrite goes through the executor, so the agent re-validates it against the
 # real MCP output contract (JSON round trip) before the evidence checks see it.
 @pytest.mark.parametrize(
     "part,rewrite",
@@ -369,7 +369,7 @@ def catalog(**over):
         ),  # fmt: skip
     ],
 )
-async def test_d38_01_inconsistent_evidence_is_refused(part, rewrite):
+async def test_inconsistent_evidence_is_refused(part, rewrite):
     a, _ = await run(spec(**part), tool=Tool(rewrite=rewrite))
     assert (a.status, a.error) == ("error", "invalid_evidence")
     assert a.parts[0].status == "error" and a.parts[0].evidence is None
@@ -392,13 +392,13 @@ async def test_d38_01_inconsistent_evidence_is_refused(part, rewrite):
         ({"part_type": "fabricated_assembly", "weld_length_mm": Decimal("100")}, "feasible"),
     ],
 )
-async def test_d38_01_real_service_outcomes_pass_the_strict_checks(over, status):
+async def test_real_service_outcomes_pass_the_strict_checks(over, status):
     a, _ = await run(spec(**over))
     assert (a.status, a.error) == (status, None)
     assert a.parts[0].evidence is not None
 
 
-# D42-A2-01: min_bend_radius_mm is the input of A5's borderline-bend engineering review. A
+# cross-agent evidence control: min_bend_radius_mm is the input of A5's borderline-bend engineering review. A
 # valid result must carry a minimum for a bent route, never below thickness x the catalog
 # factor (the service's floor), and never above the stated radius it accepted.
 BENT = {"part_type": "l_bracket", "height_mm": Decimal("50"), "finish_id": "none", "bend_radius_mm": Decimal("2.5")}  # fmt: skip
@@ -412,13 +412,13 @@ BENT = {"part_type": "l_bracket", "height_mm": Decimal("50"), "finish_id": "none
         forge(min_bend_radius_mm=Decimal("3.0")),  # valid, yet the stated 2.5 mm is below it
     ],
 )
-async def test_d42_a2_01_forged_bend_minimum_is_refused(rewrite):
+async def test_forged_bend_minimum_is_refused(rewrite):
     a, _ = await run(spec(**BENT), tool=Tool(rewrite=rewrite))
     assert (a.status, a.error, a.parts[0].evidence) == ("error", "invalid_evidence", None)
 
 
 @pytest.mark.parametrize("radius", [None, Decimal("2.0"), Decimal("2.5")])
-async def test_d42_a2_01_real_bend_minimum_passes(radius):
+async def test_real_bend_minimum_passes(radius):
     a, _ = await run(spec(**(BENT | {"bend_radius_mm": radius})))
     assert (a.status, a.error) == ("feasible", None)
     assert a.parts[0].evidence.output.min_bend_radius_mm == Decimal("2.0")

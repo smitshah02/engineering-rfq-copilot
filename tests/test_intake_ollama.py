@@ -1,10 +1,10 @@
-"""Day 36/37 optional real-LLM check of the Intake Agent: local Ollama only.
+"""intake extraction/37 optional real-LLM check of the Intake Agent: local Ollama only.
 
 Opt-in (``RFQ_OLLAMA_SMOKE=1``, marked ``integration``, like ``test_ollama_smoke``). Requires
 ``ollama serve`` with ``qwen3:4b-instruct-2507-q4_K_M``. No database, no MCP host, no hosted
 provider, no tracing, no retries.
 
-Runs the fixed evaluation set (``intake_eval_set``) and Day 37 validation (pinned rule
+Runs the fixed evaluation set (``intake_eval_set``) and intake validation validation (pinned rule
 document and catalog from the frozen dataset, catalog served at the tool boundary). Safety is
 asserted strictly (no incorrect trusted value). Usefulness is asserted with a floor: failing
 safely with nothing verified is not a functional pass. Metrics are printed.
@@ -27,7 +27,7 @@ pytestmark = [
     ),  # fmt: skip
 ]
 MODEL = "qwen3:4b-instruct-2507-q4_K_M"
-MIN_RECALL = 0.6  # measured 0.88 on Day 37; a floor, not a target
+MIN_RECALL = 0.6  # measured 0.88 on intake validation; a floor, not a target
 
 
 def ollama():

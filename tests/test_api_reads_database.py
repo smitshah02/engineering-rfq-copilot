@@ -1,4 +1,4 @@
-"""Day 18 protected reads against the guarded, seeded, rolled-back test database.
+"""protected reads protected reads against the guarded, seeded, rolled-back test database.
 
 Requests go through the real application, dependencies, repositories and serializers.
 Identity is injected only through dependency overrides. Seeded data lives in one
@@ -36,7 +36,7 @@ from rfq_copilot.seeding.mapping import TABLES
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
-# Day 21: an injected principal is permission-checked like a real one; these reads need
+# authorization: an injected principal is permission-checked like a real one; these reads need
 # exactly these grants (business.role_permissions names).
 READS = frozenset({VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS})
 

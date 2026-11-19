@@ -15,9 +15,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day07_materials import reference_module
-from test_day08_manufacturing import base_parts
-from test_day09_inventory import PANEL, REF_MATERIALS, pinned, truth_files, variant
+from test_inventory_database import PANEL, REF_MATERIALS, pinned, truth_files, variant
+from test_manufacturing_database import base_parts
+from test_materials_database import reference_module
 
 from rfq_copilot.entities import Part
 from rfq_copilot.models import Material

@@ -1,6 +1,6 @@
 """Test-only staging of history that K2/K3 refuse to create (not a pytest module).
 
-Day 51-53 tests must still prove that already-corrupted data is *detected*: rows changed
+draft persistence tests must still prove that already-corrupted data is *detected*: rows changed
 before K2 existed, or by the table owner or a superuser, whom triggers do not bind. The
 only honest way to create such rows now is the owner's own power, so ``corrupted`` disables
 every guard trigger of the named tables (K2 and K3: a table may have several, including the

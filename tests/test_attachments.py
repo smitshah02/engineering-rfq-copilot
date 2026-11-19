@@ -1,8 +1,8 @@
-"""Day 19 attachment intake: content checks, extraction, storage and the upload API.
+"""attachment attachment intake: content checks, extraction, storage and the upload API.
 
 Public smoke tests: no PostgreSQL, no private dataset, no credentials. Every document is
 built here. Repository calls are replaced by in-memory fakes; the PostgreSQL behaviour is
-covered by test_day19_attachments_database.py.
+covered by test_attachments_database.py.
 """
 
 import asyncio
@@ -52,7 +52,7 @@ LIMIT = 64 * 1024
 # --- Document builders -------------------------------------------------------------------
 
 
-# Day 21: an injected principal is permission-checked like a real one; upload needs
+# authorization: an injected principal is permission-checked like a real one; upload needs
 # create_rfq and the metadata list view_assigned_rfqs.
 UPLOADS = frozenset({CREATE_RFQ, VIEW_ASSIGNED_RFQS})
 
@@ -673,7 +673,7 @@ async def test_missing_identity_reads_no_body_and_writes_nothing(tmp_path, fakes
 )
 async def test_request_supplied_identity_is_never_trusted(tmp_path, fakes, spoof, trust):
     app = make_app(tmp_path, principal=None)
-    # Day 20: verify the forged bearer token against a real configured trust boundary.
+    # authentication: verify the forged bearer token against a real configured trust boundary.
     app.state.token_verifier = trust.verifier()
     response = await upload(app, files=pdf_file(), **spoof)
     assert response.status_code == 401
@@ -813,7 +813,7 @@ async def test_rejections_are_fixed_vocabulary_and_never_echo_input(
 
 
 async def test_database_failure_removes_the_file_and_answers_503(tmp_path, fakes):
-    # Phase 3: a failure before COMMIT is certain, so the file goes (the Day 19 invariant).
+    # backend: a failure before COMMIT is certain, so the file goes (the attachment invariant).
     app = make_app(tmp_path, session=FakeSession(fail_flush=True))
     response = await upload(app, files=pdf_file())
     assert response.status_code == 503 and response.json() == {"detail": "Service unavailable."}

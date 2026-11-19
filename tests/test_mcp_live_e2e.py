@@ -1,4 +1,4 @@
-"""Day 30: resource-binding model, hardened REST profile, authenticated live end to end.
+"""MCP verification: resource-binding model, hardened REST profile, authenticated live end to end.
 
 Live test process boundary: pytest runs the REST app in process (ASGI) -> its MCP client
 connects over real loopback TCP -> ``uvicorn --factory rfq_copilot.mcp.host:create_app_from_env``
@@ -28,20 +28,20 @@ from sqlalchemy import func, insert, select, text, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import bearer
 from test_auth import trust as trust
+from test_auth_database import app_with, bind, call
+from test_auth_database import database as database
+from test_backend_policy_contracts_database import files, operator_with, policy_v2
 from test_database_queries import customer_id, other_customer
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import pinned
-from test_day14_quotation import insert_valid_runtime_rfq
-from test_day20_auth_database import app_with, bind, call
-from test_day20_auth_database import database as database
-from test_day21_rbac_database import bound, grants, one_active_user_per_role, own_rfq
+from test_inventory_database import pinned
 from test_mcp_auth import MCP_AUDIENCE, granted_user, settings
 from test_mcp_client import PLAN, TestIssuer, hardened, live_host
-from test_phase35_completion_database import files, operator_with, policy_v2
+from test_quotation_database import insert_valid_runtime_rfq
+from test_rbac_database import bound, grants, one_active_user_per_role, own_rfq
 from test_runtime_role_database import grant_block
 
 from rfq_copilot import identity_admin
@@ -60,7 +60,7 @@ from rfq_copilot.services.materials import get_material_spec
 from rfq_copilot.services.quotation import quote_rfq
 
 ENDPOINTS = ("manufacturing", "supply", "pricing")
-STORED = {"rfq_id": "TEST-DAY14-RFQ", "horizon_start": "2026-11-09"}
+STORED = {"rfq_id": "TEST-QUOTATION-RFQ", "horizon_start": "2026-11-09"}
 SPEC = "/api/v1/materials/MAT-002/specification"
 ONE_TOOL_PER_SERVER = {
     "get_material": {"material_id": "MAT-002"},

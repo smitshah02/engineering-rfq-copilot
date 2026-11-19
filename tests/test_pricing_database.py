@@ -15,10 +15,10 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day06_repositories import insert_runtime_rfq
-from test_day07_materials import reference_module
-from test_day08_manufacturing import base_parts
-from test_day09_inventory import PANEL, REF_MATERIALS, pinned, truth_files, variant
+from test_inventory_database import PANEL, REF_MATERIALS, pinned, truth_files, variant
+from test_manufacturing_database import base_parts
+from test_materials_database import reference_module
+from test_repositories_database import insert_runtime_rfq
 
 from rfq_copilot.entities import Part
 from rfq_copilot.models import Operation
@@ -104,7 +104,7 @@ async def test_parts_read_back_from_the_database_keep_their_calculation_id(popul
     # Stored Numeric(12,3) columns come back as 450.000, 1.000, 1.500.
     customer = seed_plan.rows["rfqs"][0]["customer_id"]
     await insert_runtime_rfq(populated, customer)
-    stored = (await get_rfq_parts(populated, "TEST-DAY6-RFQ", customer_id=customer))[0]
+    stored = (await get_rfq_parts(populated, "TEST-REPOSITORY-RFQ", customer_id=customer))[0]
     assert stored.length_mm == D("450") and str(stored.length_mm) != "450"
     mapping = Part.from_mapping(
         {

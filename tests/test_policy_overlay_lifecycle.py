@@ -119,7 +119,7 @@ async def test_current_contract_pins_are_the_measured_schema(proposed_database):
     async with proposed_database.engine.connect() as connection:
         revision = await connection.scalar(text("SELECT version_num FROM public.alembic_version"))
         assert revision == schema_contract.CURRENT.revision == "20261118_01"
-        # The measurement point: the failure message prints the digest to pin (K3, Day 54B).
+        # The measurement point: the failure message prints the digest to pin (K3, integrity).
         digest = await connection.run_sync(lambda c: shape_digest(owned_shape(c)))
         assert digest == schema_contract.CURRENT.shape_digest, digest
         await connection.run_sync(verify_definitions)  # catalog counts: CURRENT (measured)

@@ -1,6 +1,6 @@
-"""Pre-Phase 8 telemetry hardening: Langfuse partial-failure cleanup (Task 1), approved code
+"""Pre-recovery hardening telemetry hardening: Langfuse partial-failure cleanup (Task 1), approved code
 vocabularies at the telemetry boundary (Task 2) and terminal events without a running event
-loop (Task 3). Offline: the Phase 6 harness, an in-memory sink and a fake Langfuse SDK.
+loop (Task 3). Offline: the specialist workflow harness, an in-memory sink and a fake Langfuse SDK.
 
 Sections (-k): test_partial_, test_vocabulary_, test_terminal_."""
 
@@ -30,7 +30,7 @@ RUN, OTHER = "a" * 32, "b" * 32
 
 @pytest.fixture(autouse=True)
 def offline_harness(monkeypatch):
-    """As Day 46: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
+    """As delegation: no direct MCP; only the RULES fixture is admitted as the manufacturing rule."""
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("the Supervisor must use only the injected executor")

@@ -21,7 +21,7 @@ from rfq_copilot.seeding.sources import load_sources
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 
-async def test_complete_day5_database_lifecycle(
+async def test_complete_database_verification_database_lifecycle(
     session, seed_database, approved, tmp_path, record_testsuite_property
 ):
     # Existing seed_database fixture proves the original empty test catalog,
@@ -138,4 +138,4 @@ async def test_complete_day5_database_lifecycle(
         "remaining_test_rows": 0,
         "session_released": True,
     }
-    record_testsuite_property("day5_end_to_end", json.dumps(evidence, sort_keys=True))
+    record_testsuite_property("database_end_to_end", json.dumps(evidence, sort_keys=True))

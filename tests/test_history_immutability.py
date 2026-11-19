@@ -1,4 +1,4 @@
-"""K2 (Day 54A) offline checks: revision chain, allowlist, runtime configuration, model.
+"""K2 (integrity) offline checks: revision chain, allowlist, runtime configuration, model.
 
 No database connection: catalog behaviour is in ``test_history_immutability_database.py``
 and runtime privileges in ``test_runtime_role_database.py``.
@@ -47,7 +47,7 @@ def test_k3_is_the_single_active_head_and_05_is_merged_without_rewriting_history
     assert active.get_revision("20261115_01").down_revision == "20261111_06"
     following = ScriptDirectory.from_config(schema_contract.NEXT.alembic_config())
     assert following.get_heads() == ["20261116_02"] == [schema_contract.NEXT.revision]
-    # 05 keeps its original parent (Day 54B R4); the schema-free merge joins it with K3.
+    # 05 keeps its original parent (integrity R4); the schema-free merge joins it with K3.
     assert following.get_revision("20261111_05").down_revision == "20261111_06"
     assert following.get_revision("20261116_02").down_revision == ("20261111_05", "20261118_01")
 

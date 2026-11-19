@@ -1,4 +1,4 @@
-"""Day 29: MCP client, REST -> MCP delegation, and a live loopback host smoke test.
+"""delegation: MCP client, REST -> MCP delegation, and a live loopback host smoke test.
 
 The credential provider here is TEST-ONLY: it signs MCP-audience tokens with the test
 trust key, standing in for an identity-provider token exchange that does not exist yet.
@@ -26,17 +26,17 @@ from sqlalchemy import insert, update
 from test_auth import AUDIENCE as REST_AUDIENCE
 from test_auth import ISSUER, bearer
 from test_auth import trust as trust
+from test_auth_database import call
+from test_auth_database import database as database
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day14_quotation import insert_valid_runtime_rfq
-from test_day20_auth_database import call
-from test_day20_auth_database import database as database
 from test_mcp_auth import BASE, MCP_AUDIENCE, settings, world
 from test_mcp_host import Factories, body, host_settings, modern_headers, running
 from test_mcp_host import fake_identity as fake_identity
+from test_quotation_database import insert_valid_runtime_rfq
 
 from rfq_copilot.api.app import create_app
 from rfq_copilot.api.auth import Principal
@@ -176,7 +176,7 @@ async def test_unreachable_host_and_timeout():
     assert (refused.value.code, late.value.code) == ("unavailable", "timeout")
 
 
-# --- client against the Day 28 host (faked identity rows; no database) ----------------
+# --- client against the gateway host (faked identity rows; no database) ----------------
 
 
 def faked_gateway(trust, **overrides):
@@ -349,7 +349,7 @@ async def test_client_reaches_all_three_servers_with_customer_scope(trust, popul
     gateway, client, _ = stack(trust, populated, None, TestIssuer(trust))
     token_a = trust.mint(sub=user_a.authentication_subject, aud=MCP_AUDIENCE)
     token_b = trust.mint(sub=user_b.authentication_subject, aud=MCP_AUDIENCE)
-    stored = {"rfq_id": "TEST-DAY14-RFQ", "horizon_start": "2026-11-09"}
+    stored = {"rfq_id": "TEST-QUOTATION-RFQ", "horizon_start": "2026-11-09"}
     async with running(gateway):
         material = await client.call("get_material", {"material_id": "MAT-002"}, token=token_a)
         inventory = await client.call("check_inventory", PLAN, token=token_a)
@@ -444,7 +444,7 @@ def live_host(trust, **extra_env):
 @pytest.mark.integration
 def test_live_uvicorn_host_smoke(trust):
     """Unauthenticated and rejection paths only: a separate process cannot see the rolled-back
-    seeded fixtures. Authenticated live execution: tests/test_mcp_live_e2e.py (Day 30)."""
+    seeded fixtures. Authenticated live execution: tests/test_mcp_live_e2e.py (MCP verification)."""
     with live_host(trust) as (base, secrets, _):
         with httpx2.Client(base_url=base, timeout=5) as http:
             responses = []
@@ -496,7 +496,7 @@ def test_live_uvicorn_host_smoke(trust):
 
 
 def test_auth_and_host_settings_share_the_environment(trust):
-    # Day 29 regression: RFQ_MCP_HOST_* and RFQ_MCP_DATABASE_TARGET broke McpAuthSettings.
+    # delegation regression: RFQ_MCP_HOST_* and RFQ_MCP_DATABASE_TARGET broke McpAuthSettings.
     env = {
         "RFQ_MCP_RESOURCE_SERVER_URL": f"{BASE}/mcp",
         "RFQ_MCP_JWT_ISSUER": ISSUER,

@@ -1,4 +1,4 @@
-"""Day 26 Supply MCP server, plus the Day 25 hardening checks (A1-A3) for all servers."""
+"""supply and pricing tool Supply MCP server, plus the manufacturing tool hardening checks (A1-A3) for all servers."""
 
 import json
 from contextlib import asynccontextmanager
@@ -7,13 +7,13 @@ from datetime import date, timedelta
 import pytest
 from mcp import Client
 from sqlalchemy import text as sql
+from test_capacity_database import set_free_hours
 from test_database_queries import populated as populated
 from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day09_inventory import PANEL, pinned
-from test_day10_capacity import set_free_hours
+from test_inventory_database import PANEL, pinned
 from test_mcp_manufacturing import SECRET, acting_as, text
 from test_mcp_manufacturing import authenticated as authenticated
 
@@ -89,7 +89,7 @@ async def test_each_server_registers_exactly_its_three_contract_tools(server):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name", PLANNING_TOOLS)
 async def test_stored_rfq_fails_closed_without_any_lookup(name):
-    # Day 27: stored RFQs are served only to a verified principal; without one, no lookup.
+    # MCP authentication: stored RFQs are served only to a verified principal; without one, no lookup.
     snapshot, entered = spy()
     with acting_as(permissions=None):
         result = await call(

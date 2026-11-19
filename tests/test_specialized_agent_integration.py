@@ -1,9 +1,9 @@
-"""Day 43 specialized-agent integration (A1 -> A5), offline.
+"""specialist integration specialized-agent integration (A1 -> A5), offline.
 
 One ``Router`` is the trusted executor for every stage and sends each tool to the existing
-fake for it (Days 37-41): the real catalog rows, the real manufacturing, inventory, capacity,
+fake for it (intake validation): the real catalog rows, the real manufacturing, inventory, capacity,
 lead-time, costing, pricing and quotation services, mapped exactly as the MCP servers map
-them. A1 runs its real graph on the fake chat model of the Day 36 tests (no network). Rules
+them. A1 runs its real graph on the fake chat model of the intake extraction tests (no network). Rules
 are the trusted ``price-v1.0`` / ``approval-v1.2`` fixtures. Where a scenario needs a bent part,
 ``bent_intake`` replaces only A1's validation output with a ready ``IntakeValidation`` of the
 same identity; A2 -> A5 still run for real. Status-override tests patch one agent's result to
@@ -57,8 +57,8 @@ TOOLS_OF = {
 }
 KEY_OF = {"intake_validation": "intake", "manufacturing": "manufacturing", "supply": "supply", "pricing": "pricing", "quotation": "quotation"}  # fmt: skip
 CHAIN = ["check_manufacturing_feasibility", *a3.TOOLS, *a4.TOOLS, "evaluate_quotation"]
-# The Day 37 coded two-part RFQ, with BRK-201 at ±0.2 mm: mfg-v1.0 limits.min_tolerance_mm is
-# 0.2, so the Day 37 ±0.1 mm is TOLERANCE_UNSUPPORTED (D43-01). Both parts are otherwise
+# The intake validation coded two-part RFQ, with BRK-201 at ±0.2 mm: mfg-v1.0 limits.min_tolerance_mm is
+# 0.2, so the intake validation ±0.1 mm is TOLERANCE_UNSUPPORTED (specialist integration control). Both parts are otherwise
 # supported: MAT-001 2 mm "none" and MAT-002 3 mm "brushed" (materials.csv), dimensions and
 # quantities inside the rule limits.
 TWO = (
@@ -255,7 +255,9 @@ async def test_missing_field_asks_the_customer_and_runs_no_business_agent():
 
 
 async def test_unsupported_requirement_requires_review_at_intake():
-    a, router = await run(COMPLETE + " Also cast the panels.")  # the Day 37 D37-01 fixture
+    a, router = await run(
+        COMPLETE + " Also cast the panels."
+    )  # the intake validation intake validation control fixture
     assert a.status == "requires_review", a.summary()
     assert_stopped(a, router, "intake_validation")
     assert "intake_unsupported_requirement" in a.review_reasons
@@ -373,7 +375,7 @@ async def test_manufacturing_rule_drift_requires_engineering_review():
     assert part.evidence.output.operations  # the route is kept, not dropped
 
 
-async def test_outer_fingerprint_alone_contradicts_its_nested_rule():  # D38-01 stays strict
+async def test_outer_fingerprint_alone_contradicts_its_nested_rule():  # manufacturing evidence control stays strict
     rewrite = forge(rule_fingerprint="0" * 64)
     a, router = await run(router=Router(manufacturing=ManufacturingTool(rewrite=rewrite)))
     assert (a.status, a.error) == ("error", "invalid_evidence")
@@ -384,7 +386,9 @@ async def test_outer_fingerprint_alone_contradicts_its_nested_rule():  # D38-01 
 @pytest.mark.parametrize(
     "rewrite",
     [
-        forge(result="valid", findings=("OUT_OF_RANGE_HOLE_COUNT",)),  # D38-01
+        forge(
+            result="valid", findings=("OUT_OF_RANGE_HOLE_COUNT",)
+        ),  # manufacturing evidence control
         forge(result="unsupported"),
         forge(rule_version="mfg-v9.9"),
     ],
@@ -404,14 +408,14 @@ async def test_forged_manufacturing_evidence_stops_at_a2(rewrite):
         forge(min_bend_radius_mm=Decimal("3.0")),
     ],
 )
-async def test_d42_a2_01_forged_bend_minimum_stops_at_a2(monkeypatch, rewrite):
+async def test_forged_bend_minimum_stops_at_a2(monkeypatch, rewrite):
     bent_intake(monkeypatch, spec(**BENT))
     a, router = await run(router=Router(manufacturing=ManufacturingTool(rewrite=rewrite)))
     assert (a.status, a.error) == ("error", "invalid_evidence")
     assert_stopped(a, router, "manufacturing")
 
 
-async def test_d39_01_a2_evidence_unbound_from_its_specification_stops_at_a3(monkeypatch):
+async def test_a2_evidence_unbound_from_its_specification_stops_at_a3(monkeypatch):
     original = a2.evaluate_manufacturing_feasibility
 
     async def unbound(*args, **kwargs):
@@ -431,13 +435,13 @@ async def test_d39_01_a2_evidence_unbound_from_its_specification_stops_at_a3(mon
 
 # The baseline panel needs 0.3 m x 0.2 m x 2 mm x 2680 kg/m3 = 0.3216 kg, x 1.12 (price-v1.0
 # scrap_fraction) = 0.360192 kg, x 25 = 9.0048 kg (services.inventory.part_requirement).
-# 10 kg is sufficient (D43-03); 1 kg is "insufficient" (positive, short); 0 kg "unavailable".
+# 10 kg is sufficient (specialist integration control); 1 kg is "insufficient" (positive, short); 0 kg "unavailable".
 SHORT = "1"
 
 
 async def test_insufficient_stock_is_priced_but_never_concealed():
     # A3's and A5's stock fakes both see 1 kg; the pricing fake's own stock read does not
-    # change cost or price (material cost is per required kg), as in the Day 41 A5 tests.
+    # change cost or price (material cost is per required kg), as in the quotation evidence A5 tests.
     a, router = await run(router=Router(available=SHORT))
     (line,) = a.supply.evidence.inventory.lines
     assert (line.status, line.required_kg > line.available_kg > 0) == ("insufficient", True)
@@ -445,7 +449,7 @@ async def test_insufficient_stock_is_priced_but_never_concealed():
     assert "supply_constrained" in a.review_reasons and a.stopped_at is None
     view = a.customer_view()
     assert view is not None and view.conditional is True
-    # D41-01: each line's delay is its own stock line's; the RFQ delay is the longest.
+    # quotation evidence control: each line's delay is its own stock line's; the RFQ delay is the longest.
     stock = {p.part_id: p.stock for p in a.supply.parts}
     delays = [ln.procurement_business_days for ln in a.quotation.lines]
     assert delays == [procurement_business_days(stock[ln.part_id]) for ln in a.quotation.lines]
@@ -489,10 +493,16 @@ FP = TRUSTED.fingerprint
 @pytest.mark.parametrize(
     "rewrite",
     [
-        {"estimate_lead_time": tweak(estimated_ready_date=date(2026, 11, 20))},  # D42-A3-01
-        {"estimate_lead_time": tweak(procurement_business_days=3)},  # D42-A3-01
-        {"check_capacity": tweak(pricing_rule_fingerprint=FP, start_week=3)},  # D42-A3-01
-        {"check_inventory": tweak(pricing_rule_fingerprint=FP, lines=())},  # D39-02: no stock line
+        {
+            "estimate_lead_time": tweak(estimated_ready_date=date(2026, 11, 20))
+        },  # cross-agent evidence control
+        {"estimate_lead_time": tweak(procurement_business_days=3)},  # cross-agent evidence control
+        {
+            "check_capacity": tweak(pricing_rule_fingerprint=FP, start_week=3)
+        },  # cross-agent evidence control
+        {
+            "check_inventory": tweak(pricing_rule_fingerprint=FP, lines=())
+        },  # supply evidence control: no stock line
     ],
 )
 async def test_inconsistent_supply_evidence_stops_at_a3(rewrite):
@@ -566,7 +576,7 @@ async def test_customer_and_summary_views_hold_no_cost_or_evidence():
 # --- F. quotation and review ----------------------------------------------------------------
 
 
-async def test_draft_is_conditional_on_unevaluated_customer_checks():  # D41-02
+async def test_draft_is_conditional_on_unevaluated_customer_checks():  # quotation evidence control
     a, _ = await run()
     assert a.unevaluated_conditions[:2] == a5.CUSTOMER_CONDITIONS
     view = a.customer_view()

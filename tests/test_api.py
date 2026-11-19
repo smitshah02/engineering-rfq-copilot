@@ -177,7 +177,7 @@ def test_response_model_rejects_a_dependency_that_breaks_the_contract():
 # --- Routing and OpenAPI -----------------------------------------------------------------
 
 
-# Day 18 added protected read routes; Day 19 added the attachment routes. The upload is
+# protected reads added protected read routes; attachment added the attachment routes. The upload is
 # the only non-GET operation.
 ROUTES = {
     "/health/live": {"get"},

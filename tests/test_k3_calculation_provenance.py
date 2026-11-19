@@ -1,4 +1,4 @@
-"""K3 (Day 54B) offline checks: validity, fingerprints, rule file, allowlist, receipts.
+"""K3 (integrity) offline checks: validity, fingerprints, rule file, allowlist, receipts.
 
 No database: trigger and constraint behaviour is in
 ``test_k3_calculation_provenance_database.py``. Some tests here fail on purpose until the
@@ -17,7 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from test_day14_quotation import RFQ_0041
+from test_quotation_database import RFQ_0041
 from test_quote_drafts import draft as draft_receipt
 from test_quote_drafts import inputs as draft_inputs
 

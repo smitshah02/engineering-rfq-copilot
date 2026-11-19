@@ -1,4 +1,4 @@
-"""Day 44 Supervisor foundation: typed state, trusted context, stage plan and the two-node graph.
+"""Supervisor foundation Supervisor foundation: typed state, trusted context, stage plan and the two-node graph.
 Offline: no model, no MCP, no database. Selected with -k by section prefix:
 test_state_, test_context_, test_graph_, test_security_, test_failure_, test_compat_."""
 
@@ -53,7 +53,7 @@ class Executor:
 
     async def __call__(self, tool, arguments):
         self.calls.append(tool)
-        raise AssertionError("Day 44 makes no MCP call")
+        raise AssertionError("Supervisor initialization makes no MCP call")
 
 
 def context(**over) -> sv.SupervisorContext:
@@ -248,7 +248,7 @@ def test_state_ownership_boundary():
         ("trusted_entry", {}, {"stages": ()}),
         ("trusted_entry", {"identity": "old"}, {"identity": "new"}),  # write-once
         ("trusted_entry", {"attempt_id": "a" * 32}, {"attempt_id": "b" * 32}),
-        ("A2", {}, {"stages": ()}),  # no specialist writes on Day 44
+        ("A2", {}, {"stages": ()}),  # no specialist writes on Supervisor foundation
         ("supervisor", {}, {"approved": True}),
     ]:
         with raises_code("ownership_violation"):
@@ -379,7 +379,7 @@ def test_graph_compiles_with_fixed_topology():
         ("trusted_entry", "initialize_supervisor"),
         ("initialize_supervisor", "__end__"),
     }
-    assert not any(e.conditional for e in drawn.edges)  # no routing before Day 45
+    assert not any(e.conditional for e in drawn.edges)  # no routing before routing
     assert graph.checkpointer is None and graph.store is None
 
 
@@ -419,7 +419,7 @@ async def test_graph_result_holds_no_business_assessment():
 @A
 async def test_graph_invokes_no_specialist_llm_or_mcp(monkeypatch):
     async def boom(*args, **kwargs):
-        raise AssertionError("must not run on Day 44")
+        raise AssertionError("must not run during Supervisor initialization")
 
     for spec in sv.STAGE_PLAN:
         monkeypatch.setattr(inspect.getmodule(spec.entry), spec.entry.__name__, boom)
@@ -680,7 +680,7 @@ def test_failure_error_codes_are_fixed():
 # --- F. compatibility ---------------------------------------------------------------------
 
 
-def test_compat_stage_plan_matches_the_phase6_workflow():
+def test_compat_stage_plan_matches_the_specialist_workflow_workflow():
     assert [s.stage for s in sv.STAGE_PLAN] == SPECIALIST_STAGES
     assert {s.stage: s.agent for s in sv.STAGE_PLAN} == {
         k: v for k, v in wf._AGENT.items() if v is not None
@@ -702,15 +702,15 @@ def test_compat_stage_plan_is_immutable():
         sv.STAGE_PLAN[0].entry = print
 
 
-def test_compat_sequential_baseline_and_phase5_contracts_unchanged():
+def test_compat_sequential_baseline_and_conversation_contracts_unchanged():
     assert inspect.iscoroutinefunction(wf.evaluate_rfq_workflow)
     assert tuple(inspect.signature(wf.evaluate_rfq_workflow).parameters) == BASELINE_PARAMS
     assert callable(wf.RFQWorkflowAssessment.summary)
     assert callable(wf.RFQWorkflowAssessment.customer_view)
     assert list(inspect.signature(g.mcp_executor).parameters) == ["mcp", "principal", "rest_credential"]  # fmt: skip
     assert {f.name for f in dataclasses.fields(g.TurnContext)} == {"execute", "horizon_start"}
-    # The same principal-bound executor contract, via the neutral alias Phase 6 imports, so
-    # no application module imports the Phase 5 graph (test_conversations boundary test).
+    # The same principal-bound executor contract, via the neutral alias specialist workflow imports, so
+    # no application module imports the conversational graph graph (test_conversations boundary test).
     assert sv.ToolExecutor is a1v.ToolExecutor and sv.ToolExecutor == g.ToolExecutor
     assert typing.get_type_hints(sv.SupervisorContext)["execute"] == g.ToolExecutor | None
 

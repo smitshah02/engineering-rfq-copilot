@@ -1,4 +1,4 @@
-"""Phase 2.5 hardening checks that need neither PostgreSQL nor the private dataset.
+"""service hardening hardening checks that need neither PostgreSQL nor the private dataset.
 
 Part of the public smoke suite (see README "Testing"): canonical JSON for fingerprints,
 the planning-date policy, the Intake boundary for requested operations and the

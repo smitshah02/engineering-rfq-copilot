@@ -1,8 +1,8 @@
-"""Day 21 role-based authorization: public tests (no PostgreSQL, no dataset).
+"""authorization role-based authorization: public tests (no PostgreSQL, no dataset).
 
 Real ES256-signed JWTs from test_auth's generated trust; the user, binding and grant
 lookups are the in-memory fake from test_auth. The PostgreSQL version, with grants read
-from the seeded business.role_permissions, is test_day21_rbac_database.py.
+from the seeded business.role_permissions, is test_rbac_database.py.
 """
 
 import asyncio
@@ -23,7 +23,7 @@ from rfq_copilot.api.auth import (
     require_permission,
 )
 
-# The documented permission matrix (docs/development/day_21_rbac_authorization.md).
+# The documented permission matrix (docs/development/authentication.md).
 MATRIX = {
     ("GET", "/api/v1/customers/me"): VIEW_CUSTOMER,
     ("GET", "/api/v1/rfqs"): VIEW_ASSIGNED_RFQS,

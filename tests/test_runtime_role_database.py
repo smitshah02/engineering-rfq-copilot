@@ -1,4 +1,4 @@
-"""K2 (Day 54A) restricted runtime role against the guarded PostgreSQL test database.
+"""K2 (integrity) restricted runtime role against the guarded PostgreSQL test database.
 
 Needs the manually provisioned ``rfq_copilot_app_test`` role (docs/database/k2_runtime_roles.sql,
 steps 1-2) and ``TEST_APP_DATABASE_URL``; a missing credential is a failure, never a skip.
@@ -94,7 +94,7 @@ async def test_the_runtime_role_drafts_and_revises_under_the_triggers(runtime, w
 FORGED_APPROVED_QUOTE = (  # an approved quotation inserted directly, never approved by anyone
     "INSERT INTO business.quotes (quote_id, rfq_id, current_version, status, created_by, "
     "created_at, approved_version, approver_id, approval_timestamp) "
-    "SELECT 'QUOTE-K2-FORGED', 'TEST-DAY51-RFQ-FORGED', current_version, status, created_by, "
+    "SELECT 'QUOTE-K2-FORGED', 'TEST-DRAFT_PERSISTENCE-RFQ-FORGED', current_version, status, created_by, "
     "created_at, approved_version, approver_id, approval_timestamp "
     "FROM business.quotes WHERE status = 'approved' LIMIT 1"
 )
@@ -114,7 +114,7 @@ LINE_COPY = (
 )
 
 
-# K3 (Day 54B): runtime inserts cannot invent a creation time.
+# K3 (integrity): runtime inserts cannot invent a creation time.
 BACKDATED_VERSION = (  # a partial version claiming yesterday's creation time
     "INSERT INTO business.quote_versions (quote_version_id, quote_id, version, created_by, "
     "created_at, is_current, approval_valid, total_usd, pricing_rule_version, "

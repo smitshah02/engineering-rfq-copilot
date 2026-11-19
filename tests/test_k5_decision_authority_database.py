@@ -1,4 +1,4 @@
-"""K5 (Day 55) decision authority on the guarded test database.
+"""K5 (human decision) decision authority on the guarded test database.
 
 Needs both provisioned test logins: ``TEST_APP_DATABASE_URL`` (K2 artifact) and
 ``TEST_DECISION_DATABASE_URL`` (K5 artifact; the login is a member of

@@ -1,4 +1,4 @@
-"""Day 40 Pricing Agent A4: offline tests.
+"""pricing evidence Pricing Agent A4: offline tests.
 
 The fake executor runs the real pure services (inventory -> ``evaluate_costs`` ->
 ``evaluate_pricing``) and maps them exactly as the pricing MCP server does; A2 and A3 run for

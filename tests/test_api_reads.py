@@ -1,8 +1,8 @@
-"""Day 18 protected read routes without PostgreSQL. Public smoke suite.
+"""protected reads protected read routes without PostgreSQL. Public smoke suite.
 
 Covers the fail-closed identity seam, spoofing attempts, request validation, safe
 database-failure behaviour, database ownership, and response field selection. Real
-PostgreSQL behaviour is covered in tests/test_day18_api_database.py.
+PostgreSQL behaviour is covered in tests/test_api_reads_database.py.
 """
 
 from datetime import UTC, datetime
@@ -23,7 +23,7 @@ from rfq_copilot.api.errors import REDACTED
 from rfq_copilot.config import DatabaseConfig
 from rfq_copilot.database import Database
 
-# Day 21: an injected principal is permission-checked like a real one; these reads need
+# authorization: an injected principal is permission-checked like a real one; these reads need
 # exactly these grants (business.role_permissions names).
 READS = frozenset({VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS})
 
@@ -97,7 +97,7 @@ def test_protected_routes_deny_without_verified_identity(settings, path):
     ],
 )
 def test_client_supplied_identity_is_never_accepted(spoof, trust):
-    # Day 20: a real trust boundary is configured, so the forged bearer token is checked
+    # authentication: a real trust boundary is configured, so the forged bearer token is checked
     # cryptographically (and rejected) instead of meeting an unconfigured verifier.
     app = create_app(trust.settings())
     tripwire = Tripwire()

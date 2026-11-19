@@ -1,7 +1,7 @@
-"""Day 53 approval-policy assessment against the guarded, seeded PostgreSQL test database.
+"""approval policy approval-policy assessment against the guarded, seeded PostgreSQL test database.
 
 Every test runs in the seeded fixture transaction, which is rolled back; the assessment
-itself never writes. Version 1 comes from the Day 51 draft service (RFQ-0041's lines:
+itself never writes. Version 1 comes from the draft persistence draft service (RFQ-0041's lines:
 total 998.98, no borderline bend under approval-v1.2), with the customer's account facts set
 explicitly before drafting. Direct SQL changes are followed by ``expunge_all`` because
 another transaction would not share this session's identity map. K2 triggers refuse every
@@ -24,9 +24,9 @@ from test_database_seeding_integration import seed_bundle as seed_bundle
 from test_database_seeding_integration import seed_database as seed_database
 from test_database_seeding_integration import seed_plan as seed_plan
 from test_database_seeding_integration import session as session
-from test_day21_rbac_database import bound, grants, one_active_user_per_role, release_one
 from test_quote_drafts_database import RFQ_ID, args, drafters, refused, setup
 from test_quote_versions_database import LINES, VERSIONS, rargs, rows, state
+from test_rbac_database import bound, grants, one_active_user_per_role, release_one
 
 import rfq_copilot.quote_drafts as quote_drafts
 from rfq_copilot.api.auth import Principal

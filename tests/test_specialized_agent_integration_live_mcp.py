@@ -1,11 +1,11 @@
-"""Day 43 opt-in live check: the integrated A1 -> A5 workflow through the real MCP host and the
+"""specialist integration opt-in live check: the integrated A1 -> A5 workflow through the real MCP host and the
 seeded services.
 
-``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the Day 39-41 fixtures: a separate uvicorn MCP
+``RFQ_AGENT_LIVE_MCP=1`` (marked ``integration``), the supply evidence fixtures: a separate uvicorn MCP
 host on loopback TCP over the guarded, seeded test database. A1 runs its real graph on the
-Day 36 fake chat model (no paid or local model). Rules are the ones ``pinned_rules`` loads and
+intake extraction fake chat model (no paid or local model). Rules are the ones ``pinned_rules`` loads and
 verifies; ``approval-v1.2`` (post-baseline, TD-004) is registered on the test database first
-with the existing idempotent ``register_rule_version``, exactly as the Day 41 live test does.
+with the existing idempotent ``register_rule_version``, exactly as the quotation evidence live test does.
 The workflow itself writes nothing.
 """
 

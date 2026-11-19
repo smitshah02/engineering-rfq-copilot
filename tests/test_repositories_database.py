@@ -89,7 +89,7 @@ async def test_document_claiming_another_version_is_rejected(populated):
 async def insert_runtime_rfq(session, customer):
     await session.execute(
         insert(TABLES["rfqs"]).values(
-            rfq_id="TEST-DAY6-RFQ", customer_id=customer, source_type="mcp_shell"
+            rfq_id="TEST-REPOSITORY-RFQ", customer_id=customer, source_type="mcp_shell"
         )
     )
     # Inserted out of order to prove line_number ordering.
@@ -98,7 +98,7 @@ async def insert_runtime_rfq(session, customer):
         [
             {
                 "rfq_line_id": uuid4(),
-                "rfq_id": "TEST-DAY6-RFQ",
+                "rfq_id": "TEST-REPOSITORY-RFQ",
                 "line_number": 2,
                 "part_id": "PART-B",
                 "quantity": 5,
@@ -120,7 +120,7 @@ async def insert_runtime_rfq(session, customer):
             },
             {
                 "rfq_line_id": uuid4(),
-                "rfq_id": "TEST-DAY6-RFQ",
+                "rfq_id": "TEST-REPOSITORY-RFQ",
                 "line_number": 1,
                 "part_id": "PART-A",
                 "part_type": "l_bracket",
@@ -142,7 +142,7 @@ async def insert_runtime_rfq(session, customer):
 async def test_rfq_parts_round_trip_in_line_order(populated, seed_plan):
     customer = seed_plan.rows["rfqs"][0]["customer_id"]
     await insert_runtime_rfq(populated, customer)
-    parts = await get_rfq_parts(populated, "TEST-DAY6-RFQ", customer_id=customer)
+    parts = await get_rfq_parts(populated, "TEST-REPOSITORY-RFQ", customer_id=customer)
     assert [p.part_id for p in parts] == ["PART-A", "PART-B"]
     assert parts[0] == Part.from_mapping(
         {
@@ -162,7 +162,7 @@ async def test_rfq_parts_round_trip_in_line_order(populated, seed_plan):
     )
     assert parts[1] == Part(part_id="PART-B", quantity=5)
     assert (
-        await get_rfq_parts(populated, "TEST-DAY6-RFQ", customer_id=other_customer(seed_plan))
+        await get_rfq_parts(populated, "TEST-REPOSITORY-RFQ", customer_id=other_customer(seed_plan))
         is None
     )
 
@@ -178,7 +178,7 @@ async def test_part_and_rule_reads_are_bounded_selects(populated, seed_database,
     await insert_runtime_rfq(populated, customer)
     populated.expunge_all()
     with statements(seed_database) as captured:
-        await get_rfq_parts(populated, "TEST-DAY6-RFQ", customer_id=customer)
+        await get_rfq_parts(populated, "TEST-REPOSITORY-RFQ", customer_id=customer)
     assert len(captured) == 2 and all(s.lstrip().upper().startswith("SELECT") for s in captured)
     with statements(seed_database) as captured:
         await get_rule_version(populated, "manufacturing", "mfg-v1.0")

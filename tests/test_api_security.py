@@ -1,4 +1,4 @@
-"""Phase 3.5 hardening: public tests (no PostgreSQL, no dataset).
+"""authorization hardening hardening: public tests (no PostgreSQL, no dataset).
 
 Key rotation (TD-013), trusted ancestor directories, ambiguous commits, isolated PDF
 parsing, orphan reconciliation, the validation-error registry and SQL paging (TD-011).
@@ -173,7 +173,7 @@ def nested(tmp_path, *modes):
 
 @pytest.mark.parametrize("ancestor_mode", [0o777, 0o770, 0o757])
 def test_key_under_a_writable_grandparent_is_refused(trust, tmp_path, ancestor_mode):
-    # The pre-Phase-3 loader checked only the immediate parent and accepted this.
+    # The pre-backend loader checked only the immediate parent and accepted this.
     folder = nested(tmp_path, ancestor_mode, 0o755)
     key = write_key(folder, "k.pem", trust.key_file.read_bytes(), 0o644)
     with pytest.raises(TokenConfigurationError) as caught:
@@ -448,7 +448,7 @@ def test_reconciler_command_prints_counts_only(tmp_path, monkeypatch, capsys):
     folder.chmod(0o700)
 
 
-# --- Validation-error registry (Day 17) ---------------------------------------------------
+# --- Validation-error registry (request validation) ---------------------------------------------------
 
 
 def test_every_declared_parameter_is_a_trusted_error_segment(trust):
