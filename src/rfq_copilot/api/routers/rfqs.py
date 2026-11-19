@@ -14,13 +14,21 @@ from fastapi.responses import JSONResponse
 from rfq_copilot.api.auth import (
     CUSTOMER_CREATE_RFQ,
     Principal,
+    accepted_permissions,
     require_permission,
     require_route_permission,
 )
 from rfq_copilot.api.db import get_read_session, get_write_session
 from rfq_copilot.api.errors import VALIDATION_ERROR_RESPONSES, ValidationErrorResponse
 from rfq_copilot.api.schemas.common import Identifier
-from rfq_copilot.api.schemas.reads import RfqDetail, RfqLine, RfqListQuery, RfqPage, RfqSummary
+from rfq_copilot.api.schemas.reads import (
+    CustomerRfqSummary,
+    ReleasedQuoteReference,
+    RfqDetail,
+    RfqLine,
+    RfqListQuery,
+    RfqPage,
+)
 from rfq_copilot.api.schemas.rfq import (
     PartSpecification,
     RfqReceipt,
@@ -34,8 +42,35 @@ create_router = APIRouter(prefix="/rfqs", tags=["rfqs"], responses=VALIDATION_ER
 _PART_FIELDS = tuple(PartSpecification.model_fields)
 
 
+async def _released_references(
+    request: Request, session: Any, principal: Principal, rfq_ids: list[str]
+) -> dict[str, ReleasedQuoteReference]:
+    from rfq_copilot.repositories import released_quotation_references
+
+    # RFQ-read alone must never disclose an identifier requiring quote-read permission.
+    policy = request.app.state.settings.permission_policy
+    if not accepted_permissions(policy, "quote_read") & principal.permissions or not rfq_ids:
+        return {}
+    rows = await released_quotation_references(
+        session,
+        rfq_ids,
+        customer_id=principal.customer_id,
+        assigned_user=principal.assigned_user,
+    )
+    return {
+        row.rfq_id: ReleasedQuoteReference(
+            quote_id=row.quote_id,
+            version=row.version,
+            released_at=row.released_at,
+            expiry_date=row.expiry_date,
+        )
+        for row in rows
+    }
+
+
 @router.get("", summary="The verified customer's RFQs, newest first")
 async def list_customer_rfqs(
+    request: Request,
     principal: Annotated[Principal, Depends(require_route_permission("rfq_read"))],
     query: Annotated[RfqListQuery, Query()],
     session: Annotated[Any, Depends(get_read_session)],
@@ -49,10 +84,17 @@ async def list_customer_rfqs(
         offset=query.offset,
         assigned_user=principal.assigned_user,
     )
+    page = rows[: query.limit]
+    released = await _released_references(request, session, principal, [r.rfq_id for r in page])
     return RfqPage(
         items=[
-            RfqSummary(rfq_id=r.rfq_id, status=r.status, submitted_at=r.submitted_at)
-            for r in rows[: query.limit]
+            CustomerRfqSummary(
+                rfq_id=r.rfq_id,
+                status=r.status,
+                submitted_at=r.submitted_at,
+                released_quote=released.get(r.rfq_id),
+            )
+            for r in page
         ],
         limit=query.limit,
         offset=query.offset,
@@ -62,6 +104,7 @@ async def list_customer_rfqs(
 
 @router.get("/{rfq_id}", summary="One of the verified customer's RFQs")
 async def get_customer_rfq(
+    request: Request,
     principal: Annotated[Principal, Depends(require_route_permission("rfq_read"))],
     rfq_id: Annotated[Identifier, Path()],
     session: Annotated[Any, Depends(get_read_session)],
@@ -74,10 +117,12 @@ async def get_customer_rfq(
     if details is None:
         raise HTTPException(status_code=404, detail="Not found.")
     rfq = details.rfq
+    released = await _released_references(request, session, principal, [rfq.rfq_id])
     return RfqDetail(
         rfq_id=rfq.rfq_id,
         status=rfq.status,
         submitted_at=rfq.submitted_at,
+        released_quote=released.get(rfq.rfq_id),
         lines=[
             RfqLine(
                 line_number=line.line_number,

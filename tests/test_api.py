@@ -187,6 +187,10 @@ ROUTES = {
     "/api/v1/rfqs/{rfq_id}": {"get"},
     "/api/v1/materials": {"get"},
     "/api/v1/quotes/{quote_id}": {"get"},
+    "/api/v1/staff/quotes": {"get"},
+    "/api/v1/staff/quotes/{quote_id}": {"get"},
+    "/api/v1/staff/quotes/{quote_id}/actions": {"get"},
+    "/api/v1/staff/quotes/{quote_id}/submit-for-review": {"post"},
     "/api/v1/rfqs/{rfq_id}/attachments": {"get", "post"},
 }
 
@@ -206,7 +210,7 @@ def test_openapi_schema_in_development(client):
         "version": VERSION,
         "description": (
             "Deterministic RFQ backend. Customer-scoped routes require verified identity; "
-            "the only write is an RFQ attachment upload."
+            "quotation submission requires request_approval. Binding decisions use a separate service."
         ),
     }
     assert set(schema["paths"]) == set(ROUTES)
@@ -220,6 +224,7 @@ def test_openapi_schema_in_development(client):
         "rfqs",
         "materials",
         "quotes",
+        "staff-quotes",
         "attachments",
     }
     ok = schema["paths"]["/api/v1/system/info"]["get"]["responses"]["200"]

@@ -8,9 +8,9 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, Literal
 
-from sqlalchemy import Text, cast, exists, func, select
+from sqlalchemy import Text, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, raiseload, selectinload
+from sqlalchemy.orm import contains_eager, joinedload, raiseload, selectinload
 
 from rfq_copilot.canonical import fingerprint
 from rfq_copilot.entities import Part
@@ -29,6 +29,7 @@ from rfq_copilot.models import (
     OperationRouting,
     ProductionCapacity,
     Quote,
+    QuoteLineItem,
     QuoteVersion,
     Workcentre,
 )
@@ -38,9 +39,11 @@ from rfq_copilot.repositories.results import (
     MaterialAvailability,
     QuotationDetails,
     QuoteVersionDetails,
+    ReleasedQuotationReference,
     RFQDetails,
     RuleVersionDetails,
     SnapshotDetails,
+    StaffQuotationSummary,
     WorkcentreCapacity,
 )
 from rfq_copilot.repositories.rule_manifest import TRUSTED_RULES
@@ -606,6 +609,165 @@ async def list_quotation_history(
             await session.scalars(statement.order_by(Quote.created_at.desc(), Quote.quote_id))
         ).all()
     return _quotation_details(quotes)
+
+
+async def list_staff_quotations(
+    session: AsyncSession,
+    customer_id: str,
+    *,
+    limit: int,
+    offset: int = 0,
+    assigned_user: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+) -> tuple[StaffQuotationSummary, ...]:
+    """Bounded scalar projection of current versions; caller authorizes staff.
+
+    Ownership follows Quote.rfq_id (quotes have no separate customer_id). The version
+    must match both the header pointer and is_current. No history, lines or ORM loads.
+    One SELECT applies scope, filters, stable ordering and pagination together.
+    """
+    _identifier(customer_id)
+    if type(limit) is not int or not 1 <= limit <= 101:
+        raise ValueError("limit must be an integer from 1 to 101 (including lookahead).")
+    if type(offset) is not int or not 0 <= offset <= 10_000:
+        raise ValueError("offset must be an integer from 0 to 10000.")
+    if q is not None:
+        _identifier(q)
+    statement = (
+        select(
+            Quote.quote_id,
+            Quote.rfq_id,
+            Quote.status,
+            Quote.current_version,
+            Quote.created_at,
+            QuoteVersion.expiry_date,
+            QuoteVersion.currency,
+            QuoteVersion.total_usd,
+        )
+        .select_from(Quote)
+        .join(Quote.rfq)
+        .join(
+            QuoteVersion,
+            (QuoteVersion.quote_id == Quote.quote_id)
+            & (QuoteVersion.version == Quote.current_version)
+            & QuoteVersion.is_current.is_(True),
+        )
+        .where(RFQ.customer_id == customer_id)
+        .order_by(Quote.created_at.desc(), Quote.quote_id)
+        .limit(limit)
+        .offset(offset)
+    )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
+    if status is not None:
+        statement = statement.where(Quote.status == status)
+    if q is not None:
+        statement = statement.where(or_(Quote.quote_id == q, Quote.rfq_id == q))
+    with session.no_autoflush:
+        rows = (await session.execute(statement)).mappings().all()
+    return tuple(StaffQuotationSummary(**row) for row in rows)
+
+
+async def get_staff_quotation(
+    session: AsyncSession,
+    quote_id: str,
+    *,
+    customer_id: str,
+    assigned_user: str | None = None,
+    max_lines: int = 50,
+) -> QuotationDetails | None:
+    """One current version and bounded lines, scoped in SQL. Caller authorizes staff.
+
+    A single SELECT gives the header, version and lines one statement snapshot without
+    row locks. Never return a truncated quote or load its historical versions.
+    """
+    _identifier(quote_id)
+    _identifier(customer_id)
+    if type(max_lines) is not int or max_lines < 1:
+        raise ValueError("max_lines must be a positive integer.")
+    statement = (
+        select(Quote, QuoteVersion, QuoteLineItem)
+        .select_from(Quote)
+        .join(Quote.rfq)
+        .join(
+            QuoteVersion,
+            (QuoteVersion.quote_id == Quote.quote_id)
+            & (QuoteVersion.version == Quote.current_version)
+            & QuoteVersion.is_current.is_(True),
+        )
+        .join(
+            QuoteLineItem,
+            (QuoteLineItem.quote_id == QuoteVersion.quote_id)
+            & (QuoteLineItem.quote_version == QuoteVersion.version),
+        )
+        .where(Quote.quote_id == quote_id, RFQ.customer_id == customer_id)
+        .options(contains_eager(Quote.rfq), raiseload("*"))
+        .execution_options(populate_existing=True)
+        .order_by(QuoteLineItem.line_number, QuoteLineItem.quote_line_id)
+        .limit(max_lines + 1)
+    )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
+    with session.no_autoflush:
+        rows = (await session.execute(statement)).all()
+    if not rows or len(rows) > max_lines:
+        return None
+    quote, version, _ = rows[0]
+    return QuotationDetails(quote, (QuoteVersionDetails(version, tuple(r[2] for r in rows)),))
+
+
+async def released_quotation_references(
+    session: AsyncSession,
+    rfq_ids: Sequence[str],
+    *,
+    customer_id: str,
+    assigned_user: str | None = None,
+) -> tuple[ReleasedQuotationReference, ...]:
+    """One bounded SELECT for an RFQ page; at most one quote exists per RFQ.
+
+    Select only safe reference columns, without histories, lines or internal facts.
+    Join the approved version, never a different draft. Expired *dates* remain visible
+    on released quotes, just as in get_released_quotation; status=expired stays private.
+    """
+    _identifier(customer_id)
+    if len(rfq_ids) > 100:
+        raise ValueError("At most 100 RFQs may be enriched.")
+    for rfq_id in rfq_ids:
+        _identifier(rfq_id)
+    if not rfq_ids:
+        return ()
+    statement = (
+        select(
+            Quote.rfq_id,
+            Quote.quote_id,
+            QuoteVersion.version,
+            Quote.released_at,
+            QuoteVersion.expiry_date,
+        )
+        .select_from(Quote)
+        .join(RFQ, RFQ.rfq_id == Quote.rfq_id)
+        .join(
+            QuoteVersion,
+            (QuoteVersion.quote_id == Quote.quote_id)
+            & (QuoteVersion.version == Quote.approved_version),
+        )
+        .where(
+            RFQ.customer_id == customer_id,
+            RFQ.rfq_id.in_(rfq_ids),
+            Quote.status == "released",
+            Quote.released_at.is_not(None),
+            Quote.released_at <= func.now(),
+            QuoteVersion.version >= 1,
+            QuoteVersion.total_usd.is_not(None),
+        )
+        .order_by(Quote.rfq_id)
+    )
+    if assigned_user is not None:
+        statement = statement.where(assigned_to(assigned_user))
+    with session.no_autoflush:
+        rows = (await session.execute(statement)).all()
+    return tuple(ReleasedQuotationReference(*row) for row in rows)
 
 
 async def get_released_quotation(

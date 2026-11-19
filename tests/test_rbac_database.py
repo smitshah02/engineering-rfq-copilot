@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 
 import pytest
 from history_corruption import corrupted
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from test_attachments import pdf
 from test_auth import bearer
 from test_auth import trust as trust
@@ -28,6 +29,7 @@ from test_database_seeding_integration import session as session
 from test_rbac import APPROVAL, MATRIX, concrete
 
 from rfq_copilot.api.auth import CREATE_RFQ, VIEW_ASSIGNED_RFQS, VIEW_CUSTOMER
+from rfq_copilot.integrity import fingerprint
 from rfq_copilot.models import (
     RFQ,
     Customer,
@@ -112,7 +114,7 @@ async def test_route_permissions_are_real_grantable_permission_records(populated
         ).all()  # fmt: skip
     )
     assert set(MATRIX.values()) <= records & granted_somewhere
-    assert APPROVAL <= records  # exist in the vocabulary, required by no route
+    assert APPROVAL <= records  # decisions stay separate; submission uses request_approval
 
 
 async def test_every_role_gets_exactly_the_routes_its_database_grants_allow(
@@ -121,6 +123,9 @@ async def test_every_role_gets_exactly_the_routes_its_database_grants_allow(
     released, mine = await release_one(populated)
     rfq = await own_rfq(populated, mine)
     app = app_with(trust, database, attachment_dir=tmp_path / "store")
+    released_version = await populated.scalar(
+        select(Quote.current_version).where(Quote.quote_id == released)
+    )
     roles = await one_active_user_per_role(populated)
     assert len(roles) == 6  # every seeded role is exercised
     denied_somewhere = allowed_somewhere = 0
@@ -130,12 +135,25 @@ async def test_every_role_gets_exactly_the_routes_its_database_grants_allow(
         auth = bearer(trust.mint(sub=user.authentication_subject))
         for (method, template), required in MATRIX.items():
             path = template.replace("{rfq_id}", rfq).replace("{quote_id}", released)
-            kwargs = upload(rfq) if method == "POST" else {}
+            submission = template.endswith("/submit-for-review")
+            assessment = template.endswith("/actions")
+            kwargs = (
+                {"json": {"expected_version": 1, "idempotency_key": f"matrix-{user.user_id}"}}
+                if submission
+                else {"params": {"expected_version": released_version}}
+                if assessment
+                else upload(rfq)
+                if method == "POST"
+                else {}
+            )
             before = await populated.scalar(select(func.count()).select_from(RFQAttachment))
             response = await call(app, method, path, headers=auth, **kwargs)
             if required in held:
                 allowed_somewhere += 1
-                assert response.status_code in (200, 201), (user.role, template)
+                # The fixture is an already released historical quote: a requester is
+                # authorized to reach the service, which must refuse resubmission.
+                expected_status = (409,) if submission else (200, 201)
+                assert response.status_code in expected_status, (user.role, template, response.text)
             else:
                 denied_somewhere += 1
                 assert response.status_code == 403, (user.role, template)
@@ -146,6 +164,58 @@ async def test_every_role_gets_exactly_the_routes_its_database_grants_allow(
     stored = list((tmp_path / "store").iterdir()) if (tmp_path / "store").exists() else []
     uploaders = [u for u in roles if CREATE_RFQ in await grants(populated, u.role)]
     assert len(stored) == len(uploaders)  # only permitted uploads wrote files
+
+
+@pytest.mark.parametrize(
+    "role", ["sales_representative", "estimator", "manufacturing_engineer", "sales_manager"]
+)
+async def test_staff_actions_use_lock_capable_session_without_weakening_reads(
+    trust, database, populated, seed_database, monkeypatch, role
+):
+    """Read and assessment sessions share one fixture connection, as in the role matrix."""
+    import rfq_copilot.repositories as repositories
+
+    quote_id, customer = await release_one(populated)
+    user = next(user for user in await one_active_user_per_role(populated) if user.role == role)
+    await bound(populated, user, customer)
+    version = await populated.scalar(
+        select(Quote.current_version).where(Quote.quote_id == quote_id)
+    )
+    app = app_with(trust, database)
+    headers = bearer(trust.mint(sub=user.authentication_subject))
+    original, modes = repositories.get_staff_quotation, []
+
+    async def checked(session, *args, **kwargs):
+        modes.append(await session.scalar(text("SHOW transaction_read_only")))
+        return await original(session, *args, **kwargs)
+
+    async def no_commit(self):
+        raise AssertionError("Staff reads and assessments must never commit")
+
+    monkeypatch.setattr(repositories, "get_staff_quotation", checked)
+    monkeypatch.setattr(AsyncSession, "commit", no_commit)
+    before = await fingerprint(populated)
+    with statements(seed_database) as captured:
+        detail = await call(app, "GET", f"/api/v1/staff/quotes/{quote_id}", headers=headers)
+        assessment = await call(
+            app,
+            "GET",
+            f"/api/v1/staff/quotes/{quote_id}/actions",
+            headers=headers,
+            params={"expected_version": version},
+        )
+    assert detail.status_code == 200, detail.text
+    assert assessment.status_code == 200, assessment.text
+    assert modes == ["on", "off"]
+    data = assessment.json()
+    assert data["expected_version"] == version
+    assert not any(action["allowed"] for action in data["actions"].values())
+    assert data["attestation_context"] is None
+    assert not any(
+        statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in captured
+    )
+    assert await fingerprint(populated) == before
 
 
 async def test_denied_request_runs_only_identity_reads(trust, database, populated, seed_plan, seed_database):  # fmt: skip

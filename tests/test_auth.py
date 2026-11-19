@@ -48,6 +48,10 @@ PROTECTED = [
     ("GET", "/api/v1/rfqs/RFQ-1"),
     ("GET", "/api/v1/materials"),
     ("GET", "/api/v1/quotes/Q-1"),
+    ("GET", "/api/v1/staff/quotes"),
+    ("GET", "/api/v1/staff/quotes/Q-1"),
+    ("GET", "/api/v1/staff/quotes/Q-1/actions"),
+    ("POST", "/api/v1/staff/quotes/Q-1/submit-for-review"),
     ("GET", "/api/v1/rfqs/RFQ-1/attachments"),
     ("POST", "/api/v1/rfqs/RFQ-1/attachments"),
 ]

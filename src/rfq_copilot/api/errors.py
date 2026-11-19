@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict
 
 from rfq_copilot.api.schemas.reads import MaterialListQuery, RfqListQuery
 from rfq_copilot.api.schemas.rfq import RfqSubmissionRequest
+from rfq_copilot.api.schemas.staff_quotes import StaffQuoteListQuery, SubmitForReviewBody
 
 ERROR_CODE = "REQUEST_VALIDATION_ERROR"
 ERROR_MESSAGE = "Request validation failed."
@@ -35,6 +36,8 @@ REQUEST_MODELS: tuple[type[BaseModel], ...] = (
     RfqSubmissionRequest,
     RfqListQuery,
     MaterialListQuery,
+    StaffQuoteListQuery,
+    SubmitForReviewBody,
 )
 # Path parameter names declared by routers (fixed names, never client-chosen).
 PATH_PARAMETERS = frozenset({"rfq_id", "quote_id"})

@@ -111,7 +111,7 @@ async def test_rfq_detail_hides_other_customers_rfqs(populated, seed_plan):
     their_id = (await rfqs_of(populated, theirs))[0]
     own = await get(app_for(mine, populated), f"/api/v1/rfqs/{own_id}")
     assert own.status_code == 200
-    assert set(own.json()) == {"rfq_id", "status", "submitted_at", "lines"}
+    assert set(own.json()) == {"rfq_id", "status", "submitted_at", "lines", "released_quote"}
     assert own.json()["lines"] == []  # historical RFQs have no runtime lines
     forged = await get(app_for(mine, populated), f"/api/v1/rfqs/{their_id}")
     absent = await get(app_for(mine, populated), "/api/v1/rfqs/RFQ-DOES-NOT-EXIST")
@@ -218,8 +218,8 @@ async def test_only_released_quotes_are_visible_and_only_to_their_customer(popul
     ("path", "selects"),
     [
         ("/api/v1/customers/me", 2),
-        ("/api/v1/rfqs", 1),
-        ("/api/v1/rfqs/{rfq}", 2),
+        ("/api/v1/rfqs", 2),
+        ("/api/v1/rfqs/{rfq}", 3),
         ("/api/v1/materials", 2),
         ("/api/v1/quotes/RFQ-NOT-A-QUOTE", 1),  # TD-010: keyed lookup, was 3
     ],

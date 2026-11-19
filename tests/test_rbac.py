@@ -30,6 +30,10 @@ MATRIX = {
     ("GET", "/api/v1/rfqs/{rfq_id}"): VIEW_ASSIGNED_RFQS,
     ("GET", "/api/v1/materials"): VIEW_ASSIGNED_RFQS,
     ("GET", "/api/v1/quotes/{quote_id}"): VIEW_ASSIGNED_RFQS,
+    ("GET", "/api/v1/staff/quotes"): VIEW_ASSIGNED_RFQS,
+    ("GET", "/api/v1/staff/quotes/{quote_id}"): VIEW_ASSIGNED_RFQS,
+    ("GET", "/api/v1/staff/quotes/{quote_id}/actions"): VIEW_ASSIGNED_RFQS,
+    ("POST", "/api/v1/staff/quotes/{quote_id}/submit-for-review"): "request_approval",
     ("GET", "/api/v1/rfqs/{rfq_id}/attachments"): VIEW_ASSIGNED_RFQS,
     ("POST", "/api/v1/rfqs/{rfq_id}/attachments"): CREATE_RFQ,
 }
@@ -38,7 +42,6 @@ PUBLIC = {("GET", "/health/live"), ("GET", "/api/v1/system/info")}  # stay publi
 UNRELATED = (
     "create_quote_draft",
     "edit_quote_draft",
-    "request_approval",
     "engineering_review",
     "approve_quote",
     "reject_quote",
@@ -64,7 +67,7 @@ def test_every_api_operation_is_in_the_documented_matrix(trust):
     operations = {(m.upper(), path) for path, item in schema["paths"].items() for m in item}
     assert operations - PUBLIC == set(MATRIX)
     assert {(m, concrete(p)) for m, p in MATRIX} == set(PROTECTED)
-    assert not set(MATRIX.values()) & APPROVAL  # no route executes or implies approval
+    assert not set(MATRIX.values()) & (APPROVAL - {"request_approval"})
 
 
 @pytest.mark.parametrize(("method", "template"), list(MATRIX))
@@ -102,7 +105,9 @@ def test_unrelated_permissions_grant_no_route(trust, identity, permission):
         assert call(app, method, path, headers=bearer(trust.mint())).status_code == 403, path
 
 
-@pytest.mark.parametrize("permission", [VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS, CREATE_RFQ])
+@pytest.mark.parametrize(
+    "permission", [VIEW_CUSTOMER, VIEW_ASSIGNED_RFQS, CREATE_RFQ, "request_approval"]
+)
 def test_each_permission_opens_exactly_its_routes(trust, identity, permission, tmp_path):
     granted(identity, permission)
     app = api(trust, attachment_dir=tmp_path / "store")

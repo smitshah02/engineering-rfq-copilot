@@ -65,11 +65,21 @@ def granted(identity, *permissions, user="U-1", customer="CUST-A"):
 
 
 def test_policy_tables_cover_every_operation_and_v1_is_the_authorization_matrix():
-    assert set(OPERATION) == set(MATRIX) == set(V2)
+    # Staff quotation routes have fixed permissions across policy versions. They use
+    # explicit permission dependencies, outside the versioned customer route matrix.
+    staff = {key: value for key, value in MATRIX.items() if "/staff/quotes" in key[1]}
+    versioned = {key: value for key, value in MATRIX.items() if key not in staff}
+    assert staff == {
+        ("GET", "/api/v1/staff/quotes"): VIEW_ASSIGNED_RFQS,
+        ("GET", "/api/v1/staff/quotes/{quote_id}"): VIEW_ASSIGNED_RFQS,
+        ("GET", "/api/v1/staff/quotes/{quote_id}/actions"): VIEW_ASSIGNED_RFQS,
+        ("POST", "/api/v1/staff/quotes/{quote_id}/submit-for-review"): "request_approval",
+    }
+    assert set(OPERATION) == set(versioned) == set(V2)
     assert set(ROUTE_PERMISSIONS) == {"v1", "v2", "v3"}
     for policy in ROUTE_PERMISSIONS.values():
         assert set(policy) == set(OPERATION.values())
-    assert {key: ROUTE_PERMISSIONS["v1"][op] for key, op in OPERATION.items()} == MATRIX
+    assert {key: ROUTE_PERMISSIONS["v1"][op] for key, op in OPERATION.items()} == versioned
     assert {key: ROUTE_PERMISSIONS["v2"][op] for key, op in OPERATION.items()} == V2
     assert ROUTE_PERMISSIONS["v3"] == ROUTE_PERMISSIONS["v2"]  # staff unchanged under v3
     approval = {"request_approval", "approve_quote", "reject_quote", "release_quote"}

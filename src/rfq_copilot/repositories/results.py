@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -66,6 +66,27 @@ class WorkcentreCapacity:
 class QuoteVersionDetails:
     version: QuoteVersion
     line_items: tuple[QuoteLineItem, ...]
+
+
+@dataclass(frozen=True)
+class StaffQuotationSummary:
+    quote_id: str
+    rfq_id: str
+    status: str
+    current_version: int
+    created_at: datetime
+    expiry_date: date | None
+    currency: str
+    total_usd: Decimal | None
+
+
+@dataclass(frozen=True)
+class ReleasedQuotationReference:
+    rfq_id: str
+    quote_id: str
+    version: int
+    released_at: datetime
+    expiry_date: date | None
 
 
 @dataclass(frozen=True)

@@ -65,6 +65,17 @@ class CustomerProfile(BaseModel):
     contacts: tuple[CustomerContact, ...]
 
 
+class ReleasedQuoteReference(BaseModel):
+    """Discoverable release for an RFQ; expiry does not hide a past release."""
+
+    model_config = _STRICT
+
+    quote_id: Identifier
+    version: Annotated[int, Field(ge=1)]
+    released_at: AwareDatetime
+    expiry_date: date | None
+
+
 class RfqSummary(BaseModel):
     model_config = _STRICT
 
@@ -73,10 +84,14 @@ class RfqSummary(BaseModel):
     submitted_at: AwareDatetime
 
 
+class CustomerRfqSummary(RfqSummary):
+    released_quote: ReleasedQuoteReference | None = None
+
+
 class RfqPage(BaseModel):
     model_config = _STRICT
 
-    items: tuple[RfqSummary, ...]
+    items: tuple[CustomerRfqSummary, ...]
     limit: int
     offset: int
     has_more: bool
@@ -98,6 +113,7 @@ class RfqDetail(BaseModel):
     status: str
     submitted_at: AwareDatetime
     lines: tuple[RfqLine, ...]
+    released_quote: ReleasedQuoteReference | None = None
 
 
 class MaterialSummary(BaseModel):

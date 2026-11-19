@@ -23,6 +23,7 @@ from rfq_copilot.api.routers import (
     materials,
     quotes,
     rfqs,
+    staff_quotes,
     system,
 )
 from rfq_copilot.api.tokens import TokenVerifier
@@ -47,6 +48,10 @@ TAGS = [
     {
         "name": "attachments",
         "description": "PDF and CSV BOM attachments of the verified customer's RFQs. Requires identity.",
+    },
+    {
+        "name": "staff-quotes",
+        "description": "Staff quotation reads, assessments and review submission.",
     },
 ]
 
@@ -84,8 +89,8 @@ def create_app(
     """Build an independent application; ``None`` reads ``RFQ_API_*`` process variables.
 
     ``database`` is an optional caller-owned ``Database``. Without one, protected routes
-    build a read-only one lazily on first authorized use (see ``api/db.py``). Attachment
-    uploads use a separate writable ``Database``, also built lazily and app-owned.
+    build a read-only one lazily on first authorized use (see ``api/db.py``). Ordinary
+    writes and lock-capable assessments use a separate app-role ``Database``.
     """
     settings = ApiSettings.from_env() if settings is None else settings
     docs = settings.docs_enabled
@@ -94,7 +99,7 @@ def create_app(
         version=version("engineering-rfq-copilot"),
         description=(
             "Deterministic RFQ backend. Customer-scoped routes require verified identity; "
-            "the only write is an RFQ attachment upload."
+            "quotation submission requires request_approval. Binding decisions use a separate service."
         ),
         openapi_tags=TAGS,
         openapi_url="/openapi.json" if docs else None,
@@ -114,9 +119,9 @@ def create_app(
     app.state.database_lock = asyncio.Lock()
     app.include_router(health.router)
     prefix = f"/api/{system.API_VERSION}"
-    for module in (system, customers, rfqs, materials, quotes, attachments):
+    for module in (system, customers, rfqs, materials, quotes, attachments, staff_quotes):
         app.include_router(module.router, prefix=prefix)
-    # Day 29: the MCP-backed route exists only with an explicit integration (a trusted
+    # delegation: the MCP-backed route exists only with an explicit integration (a trusted
     # credential provider). Without one it is not mounted at all: fail closed.
     # Milestone 2 Step 2: customer RFQ creation exists only under rbac-policy-v3.
     if settings.permission_policy == "v3":

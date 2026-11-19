@@ -534,13 +534,15 @@ def test_error_contract_is_documented_in_openapi_for_routers_that_opt_in():
 def test_production_application_registers_no_rfq_route_or_schema():
     for settings in (DEV, ApiSettings(environment="production")):
         schema = create_app(settings).openapi()
-        # protected reads added protected GET routes; still no RFQ submission route or request body.
-        # attachment's attachment upload is the only other operation.
-        upload = "/api/v1/rfqs/{rfq_id}/attachments"
-        assert all(
-            set(ops) == ({"get", "post"} if path == upload else {"get"})
-            for path, ops in schema["paths"].items()
-        )
+        # The default staff policy has no customer RFQ submission route or request body.
+        # Attachment upload and staff review submission are the explicit POST exceptions.
+        exceptions = {
+            "/api/v1/rfqs/{rfq_id}/attachments": {"get", "post"},
+            "/api/v1/staff/quotes/{quote_id}/submit-for-review": {"post"},
+        }
+        assert set(exceptions) <= set(schema["paths"])
+        for path, operations in schema["paths"].items():
+            assert set(operations) == exceptions.get(path, {"get"}), path
         assert not any("test-only" in path for path in schema["paths"])
         assert "RfqSubmissionRequest" not in schema["components"]["schemas"]
     with TestClient(create_app(DEV)) as client:

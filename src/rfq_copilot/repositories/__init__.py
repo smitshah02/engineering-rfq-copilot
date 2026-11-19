@@ -24,6 +24,7 @@ from rfq_copilot.repositories.queries import (
     get_rfq_parts,
     get_rule_version,
     get_snapshot,
+    get_staff_quotation,
     get_workcentre_capacity,
     list_materials,
     list_operations,
@@ -31,6 +32,8 @@ from rfq_copilot.repositories.queries import (
     list_pending_approvals,
     list_quotation_history,
     list_rfqs,
+    list_staff_quotations,
+    released_quotation_references,
 )
 from rfq_copilot.repositories.results import (
     CustomerDetails,
@@ -69,8 +72,11 @@ __all__ = [
     "list_operations",
     "list_part_routing",
     "get_released_quotation",
+    "get_staff_quotation",
+    "list_staff_quotations",
     "list_quotation_history",
     "list_rfqs",
+    "released_quotation_references",
     "list_pending_approvals",
     "CustomerDetails",
     "RFQDetails",

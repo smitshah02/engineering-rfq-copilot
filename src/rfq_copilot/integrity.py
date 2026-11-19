@@ -180,7 +180,7 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan, runti
     if runtime:  # the strict default imports nothing new
         from rfq_copilot.runtime_integrity import RUNTIME_TABLES, verify_runtime
     validate_target(config)
-    runtime_extras, all_users = {}, {}
+    runtime_extras, all_users, runtime_authority = {}, {}, {}
     connection = await session.connection()
     identity = await connection.run_sync(verify_schema, config)
     definitions = await connection.run_sync(verify_definitions)
@@ -253,6 +253,8 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan, runti
             for col in table.c:
                 if isinstance(col.type, JSONB) and record[col.name] is not None:
                     record[col.name] = json_value(record[col.name], "stored JSON")
+        if runtime and name in {"user_customer_bindings", "role_permissions"}:
+            runtime_authority[name] = stored
         key_columns = [c.name for c in table.primary_key]
         lookup = {tuple(r[c] for c in key_columns): r for r in stored}
         # Approved post-baseline rule versions (seeding/rules.py) and the rows of an overlay
@@ -310,7 +312,15 @@ async def audit_integrity(session, config: DatabaseConfig, plan: SeedPlan, runti
         }
     overlay = overlay_state(policy_extras)
     check(overlay is not None, "permission policy overlay", "partial or modified overlay")
-    runtime_report = verify_runtime(runtime_extras, all_users, overlay) if runtime else None
+    runtime_report = (
+        verify_runtime(runtime_extras, all_users, overlay, authority=runtime_authority)
+        if runtime
+        else None
+    )
+    if runtime:
+        from rfq_copilot.runtime_quote_lifecycle import verify_evidence
+
+        await verify_evidence(session, runtime_extras)
     snapshot_artifacts(plan)
     after = await fingerprint(session)
     check(before == after, "database", "verification changed the snapshot")

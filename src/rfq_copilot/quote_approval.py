@@ -1,4 +1,4 @@
-"""Day 54D: human submission, approval and rejection of one persisted quotation version.
+"""integrity: human submission, approval and rejection of one persisted quotation version.
 
     Principal + quote id + expected current version (+ attestation / reason)
         -> submit_for_review / approve_quote / reject_quote -> QuoteDecision
@@ -24,7 +24,7 @@ the quote can move only together with the request (or, for a release, the histor
 resolved in the same transaction for the same version; the version's ``approval_valid``
 flips once and only with an approved request; a request resolves once.
 
-Policy (Day 54D decisions, fail closed where the roadmap left a gap):
+Policy (integrity decisions, fail closed where the roadmap left a gap):
 - a pending request (``submit_for_review``) is mandatory before any decision;
 - the approver must differ from the quote's creator (quotes rule_03), from the version's
   creator and from the requester (``separation_of_duties``);
@@ -45,7 +45,7 @@ the stored decision is returned (``replayed``); same key, another request:
 ``stale_version``/``not_pending``, never a second decision. Results are customer-safe:
 no cost, margin or RFQ text. The service never commits and never logs.
 
-Day 55 lifecycle. Allowed: draft/revised_draft -> pending_approval (submit),
+human decision lifecycle. Allowed: draft/revised_draft -> pending_approval (submit),
 pending_approval -> approved | rejected (decide), rejected -> revised_draft (revision,
 ``quote_versions``), approved -> released (``release_quote``). Every other jump is refused
 by the services and, behind them, by ``k4_quotes_guard``.
@@ -61,7 +61,7 @@ by the services and, behind them, by ``k4_quotes_guard``.
   recorded approver, with its attested ``approved`` history row. Release changes only the
   quote status and writes the ``released`` history row, audit event and receipt. Nothing is
   sent, delivered or dispatched. The releaser must differ from the approver
-  (``separation_of_duties``; Day 55 business decision, also enforced by ``k5_quotes_guard``).
+  (``separation_of_duties``; human decision business decision, also enforced by ``k5_quotes_guard``).
 - ``assess_release`` is the internal, read-only operator view of the same checks
   (``view_assigned_rfqs``): codes only. The customer sees a quotation only through the
   existing released-quote API (``api/routers/quotes.py``), after a release.
@@ -347,6 +347,22 @@ async def _finish(
     await session.flush()
 
 
+def _check_submission(assessment, quote) -> None:
+    if quote.rejection_reason is not None:
+        raise DraftRefused("resubmission_blocked")
+    if assessment.human_review != "eligible" or assessment.integrity_findings:
+        raise DraftRefused("not_submittable")
+
+
+def _check_approval(assessment) -> None:
+    if assessment.classification not in policy.REVIEWABLE or assessment.integrity_findings:
+        raise DraftRefused("not_approvable")
+    if any(r.kind == "engineering_review" for r in assessment.policy.reviews):
+        raise DraftRefused("review_unverified")
+    if set(assessment.binding_approval_blockers) != {ATTESTATION_BLOCKER}:
+        raise DraftRefused("not_approvable")
+
+
 async def submit_for_review(
     session: AsyncSession,
     principal: Principal,
@@ -373,10 +389,7 @@ async def submit_for_review(
         if replay is not None:
             return replay
         raise
-    if quote.rejection_reason is not None:
-        raise DraftRefused("resubmission_blocked")  # K4 would refuse its approval (module doc)
-    if assessment.human_review != "eligible" or assessment.integrity_findings:
-        raise DraftRefused("not_submittable")  # blocked, unresolved, changed or expired
+    _check_submission(assessment, quote)
     now = await k3.database_now(session)
     request_id = f"APR-{secrets.token_hex(16).upper()}"
     try:
@@ -480,12 +493,7 @@ async def approve_quote(
         if replay is not None:
             return replay
         raise
-    if assessment.classification not in policy.REVIEWABLE or assessment.integrity_findings:
-        raise DraftRefused("not_approvable")
-    if any(r.kind == "engineering_review" for r in assessment.policy.reviews):
-        raise DraftRefused("review_unverified")  # no evidence record exists: fail closed
-    if set(assessment.binding_approval_blockers) != {"CONTEXT_ATTESTATION_REQUIRED"}:
-        raise DraftRefused("not_approvable")  # legacy, partial or caller-dated context
+    _check_approval(assessment)
     if not (
         hmac.compare_digest(attestation.rfq_source_sha256, version.rfq_source_sha256)
         and attestation.requested_delivery_date == version.requested_delivery_date
@@ -615,7 +623,7 @@ async def reject_quote(
     return decision
 
 
-# --- Day 55: release of the approved current version ------------------------------------------
+# --- human decision: release of the approved current version ------------------------------------------
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -715,6 +723,64 @@ async def assess_release(
     )
 
 
+async def assess_staff_actions(session, principal: Principal, quote_id: str, version: int):
+    """Limited staff projection on a lock-capable, rollback-only ordinary-role session.
+
+    No decision credential, writes or commits. Reuse the locked service assessments and
+    trusted grants; this is a momentary hint, never authority for a subsequent mutation.
+    """
+    results, context, reviews = {}, None, ()
+    for operation in (SUBMIT, APPROVE, REJECT, RELEASE):
+        try:
+            await drafts._authorize(session, principal, operation)
+            if operation == RELEASE:
+                assessment, quote, approval, blockers = await _release_checked(
+                    session, principal, quote_id, version, permission=operation, share=True
+                )
+                if "QUOTE_EXPIRED" in blockers:
+                    raise DraftRefused("quote_expired")
+                if blockers:
+                    raise DraftRefused("not_releasable")
+                if principal.user_id == quote.approver_id:
+                    raise DraftRefused("separation_of_duties")
+            else:
+                deciding = operation in {APPROVE, REJECT}
+                if deciding:
+                    await _approver(session, principal)
+                assessment, quote, stored, request = await policy._assessed(
+                    session,
+                    principal,
+                    quote_id,
+                    version,
+                    permission=operation,
+                    share=True,
+                    statuses=PENDING_STATUSES if deciding else policy.ASSESSABLE,
+                    next_states=("approved" if operation == APPROVE else "rejected",)
+                    if deciding
+                    else ("pending_approval",),
+                    pending_required=deciding,
+                )
+                if deciding:
+                    _separated(principal, quote, stored, request)
+                    if "QUOTE_EXPIRED" in assessment.binding_approval_blockers:
+                        raise DraftRefused("quote_expired")
+                if operation == SUBMIT:
+                    _check_submission(assessment, quote)
+                if operation == APPROVE:
+                    _check_approval(assessment)
+                    context = {
+                        "rfq_source_sha256": stored.rfq_source_sha256,
+                        "requested_delivery_date": stored.requested_delivery_date,
+                    }
+            reviews = tuple(
+                {"kind": r.kind, "reasons": r.reasons} for r in assessment.policy.reviews
+            )
+            results[operation] = {"allowed": True, "reason": None}
+        except DraftRefused as refused:
+            results[operation] = {"allowed": False, "reason": refused.reason}
+    return results, context, reviews
+
+
 async def release_quote(
     session: AsyncSession,
     principal: Principal,
@@ -748,7 +814,7 @@ async def release_quote(
     if blockers:
         raise DraftRefused("not_releasable")
     if principal.user_id == quote.approver_id:
-        raise DraftRefused("separation_of_duties")  # Day 55 policy: releaser != approver
+        raise DraftRefused("separation_of_duties")  # human decision policy: releaser != approver
     now = await k3.database_now(session)
     request_id = approval.approval_request_id
     try:

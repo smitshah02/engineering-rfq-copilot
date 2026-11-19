@@ -37,6 +37,8 @@ PROTECTED = [
     "/api/v1/rfqs/RFQ-1",
     "/api/v1/materials",
     "/api/v1/quotes/Q-1",
+    "/api/v1/staff/quotes",
+    "/api/v1/staff/quotes/Q-1",
 ]
 WHEN = datetime(2026, 11, 2, 9, 30, tzinfo=UTC)
 

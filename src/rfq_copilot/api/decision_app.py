@@ -1,4 +1,4 @@
-"""Human-only quotation decisions (K5, Day 55): a separate ASGI application and process.
+"""Human-only quotation decisions (K5, human decision): a separate ASGI application and process.
 
 Serve with ``uvicorn --factory rfq_copilot.api.decision_app:create_decision_app``. The main
 API (``api/app.py``) never mounts these routes and never reads the decision credential.
@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rfq_copilot.api.auth import Principal, get_principal, require_permission
 from rfq_copilot.api.config import ApiSettings
@@ -54,7 +54,7 @@ router = APIRouter(prefix="/quote-decisions", tags=["quote-decisions"])
 class _Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    expected_version: int = Field(ge=1)
+    expected_version: int = Field(ge=1, strict=True)
     idempotency_key: str = Field(min_length=1, max_length=256)
 
 
@@ -64,6 +64,14 @@ class ApprovalRequestBody(_Request):
     rfq_source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     requested_delivery_date: date | None = None
     no_contradictions: Literal[True]
+
+    @field_validator("no_contradictions", mode="before")
+    @classmethod
+    def explicit_confirmation(cls, value):
+        # Python equality treats 1 as True; a human attestation requires JSON true.
+        if value is not True:
+            raise ValueError("Explicit confirmation required.")
+        return value
 
 
 class RejectionRequestBody(_Request):

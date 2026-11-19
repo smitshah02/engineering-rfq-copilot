@@ -124,13 +124,16 @@ def test_decisions_are_human_only_and_isolated_from_agents():
     assert not imported & AGENT_MODULES
     assert not {m for m in imported if m.startswith(("rfq_copilot.mcp", "rfq_copilot.agents"))}
     assert {approval.APPROVE, "release_quote"} == AGENT_MUST_NOT
-    # Nothing else in src/ invokes a decision: the API/MCP integration is out of business services scope.
+    # The ordinary staff router may submit only. Binding decisions remain indirect
+    # calls in the separate decision application; agents and MCP cannot invoke them.
     callers = [
         p.relative_to(SRC) for p in SRC.rglob("*.py")
         if p.name != "quote_approval.py"
         and any(f"{name}(" in p.read_text() for name in ("approve_quote", "reject_quote", "submit_for_review"))
     ]  # fmt: skip
-    assert callers == []
+    assert [str(p) for p in callers] == ["api/routers/staff_quotes.py"]
+    router = (SRC / "api/routers/staff_quotes.py").read_text()
+    assert "approve_quote(" not in router and "reject_quote(" not in router
     source = path.read_text()
     assert "require_decision_runtime(session)" in source  # K5: before any read, for decisions
     assert "principal.permissions" not in source  # grants are re-read, never trusted

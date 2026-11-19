@@ -228,6 +228,23 @@ def test_decision_bodies_never_carry_an_identity(field):
         decision_app.ApprovalRequestBody(**{**good, "no_contradictions": False})
 
 
+@pytest.mark.parametrize("value", [False, 1, "true", None])
+def test_http_attestation_requires_a_literal_boolean_confirmation(value):
+    with pytest.raises(ValidationError):
+        decision_app.ApprovalRequestBody(
+            expected_version=1,
+            idempotency_key="k",
+            rfq_source_sha256="a" * 64,
+            no_contradictions=value,
+        )
+
+
+@pytest.mark.parametrize("value", [True, "1", 1.0])
+def test_http_decision_version_precondition_is_an_exact_integer(value):
+    with pytest.raises(ValidationError):
+        decision_app.ReleaseRequestBody(expected_version=value, idempotency_key="k")
+
+
 def test_the_decision_credential_is_read_only_by_the_decision_process():
     readers = sorted(
         str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if "DECISION_DATABASE_URL" in p.read_text()

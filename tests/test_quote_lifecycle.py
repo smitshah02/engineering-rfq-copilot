@@ -1,6 +1,7 @@
 """human decision offline: release request validation, release blockers, lifecycle contracts and
 isolation of the binding paths from agents, the Supervisor and MCP. No database."""
 
+import ast
 import inspect
 import json
 from types import SimpleNamespace
@@ -116,7 +117,31 @@ def test_binding_paths_are_human_only_and_unreachable_from_agents():
         str(p.relative_to(SRC)) for p in SRC.rglob("*.py")
         if "rfq_copilot.quote_approval" in imported_modules(p)
     ]  # fmt: skip
-    assert importers == ["api/decision_app.py"]  # K5: only the human decision process
+    # Read-only integrity reconstruction and staff assessment/submission may import the
+    # lifecycle module. Binding decision references remain exclusive to the decision API.
+    assert set(importers) == {
+        "api/decision_app.py",
+        "api/routers/staff_quotes.py",
+        "runtime_integrity.py",
+        "runtime_quote_lifecycle.py",
+    }
+    binding_references = {
+        str(p.relative_to(SRC))
+        for p in SRC.rglob("*.py")
+        if p.name != "quote_approval.py"
+        and any(
+            (
+                isinstance(node, ast.Name)
+                and node.id in {"approve_quote", "reject_quote", "release_quote"}
+            )
+            or (
+                isinstance(node, ast.Attribute)
+                and node.attr in {"approve_quote", "reject_quote", "release_quote"}
+            )
+            for node in ast.walk(ast.parse(p.read_text()))
+        )
+    }
+    assert binding_references == {"api/decision_app.py"}
     callers = [
         p.relative_to(SRC) for p in SRC.rglob("*.py")
         if p.name != "quote_approval.py" and any(f"{n}(" in p.read_text() for n in ("release_quote", "assess_release"))

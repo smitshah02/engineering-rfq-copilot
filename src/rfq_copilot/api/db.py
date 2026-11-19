@@ -1,7 +1,8 @@
 """Per-request database sessions for customer-scoped routes.
 
 Reads and writes use separate ``Database`` objects. Read routes keep the read-only one
-described below; only attachment uploads use ``get_write_session``.
+described below; ordinary mutations use ``get_write_session``. The limited staff action
+assessment uses ``get_assessment_session`` for rollback-only row locks.
 
 - The session dependency depends on ``get_principal``, so an unauthenticated request is
   rejected before any database object is created or touched.
@@ -102,5 +103,26 @@ async def get_write_session(
     try:
         async with database.session() as session:
             yield session
+    except DatabaseError:
+        raise unavailable() from None
+
+
+async def get_assessment_session(
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Any, Depends(get_write_database)],
+) -> AsyncIterator["AsyncSession"]:
+    """Rollback-only assessment session, allowing SELECT FOR SHARE on quotations.
+
+    K2's reviewed column UPDATE privileges already permit these locks. SQL READ ONLY
+    forbids them, so this dependency is limited to the staff action assessment route.
+    It calls only assessment services, disables autoflush, and never commits. Ordinary
+    read routes continue using get_read_session, unchanged.
+    """
+    from rfq_copilot.database import DatabaseError
+
+    try:
+        async with database.session() as session:
+            with session.no_autoflush:
+                yield session
     except DatabaseError:
         raise unavailable() from None
