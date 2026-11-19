@@ -1,4 +1,4 @@
--- K2 (Day 54A) least-privilege runtime roles. REVIEW ONLY: never executed by Claude, by
+-- K2 (integrity) least-privilege runtime roles. REVIEW ONLY: never executed by Claude, by
 -- migrations or by application code. No password appears here; set it interactively.
 --
 -- Roles (cluster level, created once by a superuser):
@@ -55,7 +55,7 @@ GRANT INSERT ON business.rfq_attachments, business.idempotency_records, business
 GRANT INSERT ON business.pricing_calculations TO :"app";
 GRANT UPDATE (current_version, status, row_version) ON business.quotes TO :"app";
 GRANT UPDATE (is_current) ON business.quote_versions TO :"app";
--- K4 (Day 54D) submission and K5 (Day 55) clearing a rejection on revision. Approve,
+-- K4 (integrity) submission and K5 (human decision) clearing a rejection on revision. Approve,
 -- reject, release, approval_valid and request resolution belong to the decision role only
 -- (docs/database/k5_decision_roles.sql), and the k5_* triggers refuse them for this role.
 -- No semicolon may appear inside this block's comments: the test fixture splits on it.

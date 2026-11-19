@@ -1,4 +1,4 @@
--- K5 (Day 55) human-decision database authority. REVIEW ONLY: never executed by Claude, by
+-- K5 (human decision) human-decision database authority. REVIEW ONLY: never executed by Claude, by
 -- migrations or by application code. No password appears here; set it interactively.
 --
 -- Roles (cluster level, created once by a superuser):

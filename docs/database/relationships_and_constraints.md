@@ -1,6 +1,14 @@
-# Relationships, constraints and query indexes
+# Relationships, constraints and indexes
 
-**Proposed design only; no DDL or query execution against PostgreSQL occurred.** Column-level authority is [table specifications](table_schemas.md). Relationships here and in the [ER diagrams](er_diagram.md) derive from the same logical catalog. Source-to-target/import authority is [mapping](dataset_to_database_mapping.md).
+The numbered tables retain the parser-sensitive source-derived baseline used by independent
+ORM/migration tests. Current extensions add customer bindings, assignments, revocations,
+calculation provenance, immutable history and durable queue/drafting state. Current column
+inventory is in [table contracts](table_schemas.md); exact active definitions and guard
+bodies are pinned by `schema_contract.py` at revision `20261118_01`. Baseline index rows
+remain unchanged; tests account for subsequent indexes and trigger constraints separately.
+
+
+**Proposed design only; no DDL or query execution against PostgreSQL occurred.** Column-level authority is [table specifications](table_schemas.md). Relationships here and in the [ER diagrams](database_architecture.md) derive from the same logical catalog. Source-to-target/import authority is [mapping](dataset_to_database_mapping.md).
 
 ## 1. Primary and alternate keys
 
@@ -140,7 +148,7 @@ Important composite targets: inventory(material_id,thickness_mm)→material_thic
 | Idempotency replay | UNIQUE(actor_id,customer_id,operation,idempotency_key) | Digest compare; result/receipt/business/audit same commit; no earlier committed receipt | Stable server logical key across delegation/resume; internal reconciliation only | max_autonomous_write_retry_count=0 |
 | Statuses and transitions | CHECK vocabulary in every state-bearing table | Check old→new transition under row lock and CAS; invalid transitions fail | No direct agent status updates | workflow-v1.0 exact graph; RFQ/run statuses are separate application vocabularies |
 | Rule/snapshot versions | FK version/snapshot existence; unique kind/hash | Verify FK kind, snapshot applicability and hashes; never update pinned evidence | Backend-only artifact refs/credentials | Immutable config and contracts; no thresholds duplicated in CHECKs |
-| Evaluation and cross-customer isolation | No evaluation tables in proposed schema; normal FKs do not provide tenant isolation | Customer-chain validation for every nested object/calculation/handoff | Separate storage/credentials; agent cannot query hidden labels | Harness controls split exposure; labels scorer-only |
+| Evaluation and cross-customer isolation | No evaluation tables in the managed schemas; normal FKs do not provide tenant isolation | Customer-chain validation for every nested object/calculation/handoff | Separate storage/credentials; agent cannot query hidden labels | Harness controls split exposure; labels scorer-only |
 
 Common finite/type/nonempty and local CHECKs are exhaustively listed with each table. No CHECK claims to validate cross-table price aggregates, role membership, current-flag/pointer agreement, actual commercial clearance or authenticated humanity. Cross-table concurrency/security depends on the specified backend credential boundary and transaction protocol, not unrestricted SQL clients. CHECKs are necessary defense in depth, not standalone approval authorization.
 
@@ -184,7 +192,7 @@ Success audit is atomic with its mutation. A denied/rolled-back attempt is logge
 
 ## 5. Index catalog
 
-All proposed indexes are B-tree. PostgreSQL automatically supplies indexes for each PK and nonpartial UNIQUE; these are listed first and **must not be duplicated**. FK declarations alone do not create child indexes. Indexes improve the stated access path in a future realistic workload; 731 source rows do not justify benchmark claims. Every additional index consumes storage/WAL and mutation work. No GIN is proposed: no required JSON containment/path query is established. Quote JSON is retrieved by relational version keys.
+Baseline indexes are B-tree. PostgreSQL automatically supplies indexes for each PK and nonpartial UNIQUE; these are listed first and **must not be duplicated**. FK declarations alone do not create child indexes. Indexes improve the stated access path in a future realistic workload; 731 source rows do not justify benchmark claims. Every additional index consumes storage/WAL and mutation work. No GIN is required: no required JSON containment/path query is established. Quote JSON is retrieved by relational version keys.
 
 ### 5.1 Constraint-backed indexes (automatic)
 

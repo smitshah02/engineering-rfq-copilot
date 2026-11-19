@@ -1,12 +1,42 @@
-# Engineering RFQ Multi-Agent Copilot — Business Workflow
+# Manufacturing RFQ business workflow
 
-**Document:** `docs/architecture/business_workflow.md`  
-**Document status:** Reference design for review; not a claim of implemented functionality  
-**Dataset baseline:** Approved synthetic RFQ dataset `v1.1.0`  
-**Simulated manufacturer:** Meridian Fabrication Lab (fictional)  
-**Units:** millimetres (mm), kilograms (kg), business days, US dollars (USD)
+The demonstrated local application covers customer submission through authorized quotation
+release for flat-panel and L-bracket requests. Production deployment remains outside the
+accepted local workflow.
 
-## 1. Business objective
+## Persisted customer-to-quotation lifecycle
+
+1. An authenticated customer submits an RFQ once through the React portal. FastAPI validates
+   structured parts and optional notes, resolves customer identity, and commits the RFQ,
+   lines, receipt, audit event and queued workflow together when the activated queue is enabled.
+2. The continuous worker claims PostgreSQL work with a lease and generation fence. It loads
+   the scoped persisted source, trusted rules and the provisioned customer service identity.
+3. A LangGraph Supervisor executes Intake extraction/validation, manufacturing, supply,
+   pricing and quotation review. Structured persisted fields without notes do not require
+   model re-extraction; free text is extracted by local Ollama and checked against source spans.
+4. Only an eligible ready-for-draft result reaches the independent drafter. It recomputes
+   deterministic business results from stored requirements and persists an internal draft.
+5. Staff inspect the stored quotation and submit its exact current version for review.
+6. An authorized independent human approves or rejects it. Approval requires explicit
+   context attestation; required unverified engineering review is refused.
+7. A separately authorized actor, different from the approver, explicitly releases the
+   approved version. Customer RFQ history then exposes its released selling-price projection.
+
+Clarification, review, source conflicts, unsupported work and exhausted technical retries
+are distinct terminal/escalation outcomes. Customers do not receive internal agent evidence
+or an approval bypass. Release records availability; it does not dispatch email or reserve
+manufacturing resources.
+
+See [specialist contracts](specialized_agent_integration.md),
+[Supervisor execution](supervisor_langgraph_architecture.md), and
+[continuous operation](../development/background_processing.md).
+
+
+
+## Engineering RFQ Multi-Agent Copilot — Business Workflow
+
+<a id="business-workflow-1-business-objective"></a>
+### 1. Business objective
 
 Build an internal engineering RFQ copilot that helps a fictional sheet-metal manufacturer transform customer requests into traceable, technically assessed, consistently priced **draft quotations** for authorized human review and release.
 
@@ -14,15 +44,18 @@ The system should reduce repetitive extraction and coordination work, while prot
 
 **Core principle:** AI agents organize and explain work; validated business rules and authorized people control consequential decisions.
 
-### What is an RFQ?
+<a id="business-workflow-what-is-an-rfq"></a>
+#### What is an RFQ?
 
 - **Request for Quotation (RFQ):** A customer's request for an offer based on stated technical and commercial requirements.
 - **Quotation:** The manufacturer's proposed offer, including price, scope, lead-time estimate, assumptions, exclusions, and commercial terms.
 - **Purchase Order (PO):** A later customer order; purchase-order fulfillment is **outside this project's primary scope**.
 
-## 2. Scope and boundaries
+<a id="business-workflow-2-scope-and-boundaries"></a>
+### 2. Scope and boundaries
 
-### In scope
+<a id="business-workflow-in-scope"></a>
+#### In scope
 
 1. Receive an RFQ and the specific customer-provided attachments referenced by that RFQ.
 2. Extract and normalize part and order requirements; preserve their document provenance.
@@ -34,7 +67,8 @@ The system should reduce repetitive extraction and coordination work, while prot
 8. Route additional commercial/managerial reviews when required and enforce **human-only approval for every customer-facing release**.
 9. Preserve decisions, input references, business-rule versions, identities, approvals, and failure/retry information for audit and evaluation.
 
-### Out of scope for this baseline
+<a id="business-workflow-out-of-scope-for-this-baseline"></a>
+#### Out of scope for this baseline
 
 - Actual CAD geometry interpretation or CAM/toolpath generation.
 - Industrial-grade cost calibration or binding real-world manufacturing commitments.
@@ -44,7 +78,8 @@ The system should reduce repetitive extraction and coordination work, while prot
 
 **Dataset limitation:** Simulated workcentre capacity is organized by week, with Friday-of-week planning estimates. It is **not** a confirmed shipment date or reserved production slot. Prices exclude tax, shipping, and freight in the approved dataset model.
 
-## 3. Business actors and responsibilities
+<a id="business-workflow-3-business-actors-and-responsibilities"></a>
+### 3. Business actors and responsibilities
 
 | Actor | Responsibility | Authority boundary |
 |---|---|---|
@@ -59,7 +94,8 @@ The system should reduce repetitive extraction and coordination work, while prot
 
 A single employee may fill multiple operational roles in the fictional organization, but authorization requirements and separation-of-duty checks must still be enforced.
 
-## 4. Approved agent responsibilities
+<a id="business-workflow-4-approved-agent-responsibilities"></a>
+### 4. Approved agent responsibilities
 
 | Agent | Business responsibility | Output / handoff |
 |---|---|---|
@@ -72,11 +108,13 @@ A single employee may fill multiple operational roles in the fictional organizat
 
 **Design rule:** Specialist agents do not receive unrestricted direct database write privileges; their authorized business operations should go through controlled tool/services boundaries (planned FastAPI, secure MCP, and PostgreSQL implementation). These components are **planned**, not already deployed.
 
-## 5. Main business workflow (successful path)
+<a id="business-workflow-5-main-business-workflow-successful-path"></a>
+### 5. Main business workflow (successful path)
 
 The sequence below shows business dependencies, not a requirement that every technical operation execute strictly one after another. The supervisor may permit independent work only when its prerequisites and safety checks are satisfied.
 
-### Step 1 — RFQ intake and registration
+<a id="business-workflow-step-1--rfq-intake-and-registration"></a>
+#### Step 1 — RFQ intake and registration
 
 - Receive the customer's request, submitted identity/scope, and references to any attached PDF, CSV BOM or Markdown technical description.
 - Establish the RFQ identity and an auditable workflow instance.
@@ -85,7 +123,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Result:** An identifiable, authorized RFQ ready for information extraction.
 
-### Step 2 — Extract and validate requirements
+<a id="business-workflow-step-2--extract-and-validate-requirements"></a>
+#### Step 2 — Extract and validate requirements
 
 - Extract customer and part information: part(s), material/grade, finish, quantity, dimensions (mm), tolerances, delivery needs and applicable commercial terms.
 - For multi-part RFQs, preserve each part and its quantity separately.
@@ -95,7 +134,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Decision:** If a critical omission or contradiction prevents a defensible quotation, record `clarification_required`, identify the exact question, and pause the affected decision path. Do not invent an answer.
 
-### Step 3 — Engineering feasibility
+<a id="business-workflow-step-3--engineering-feasibility"></a>
+#### Step 3 — Engineering feasibility
 
 - Check requested material/grade and finish against the supported fictional manufacturing catalog.
 - Check size envelopes, process constraints, dimensions/tolerances and technical conflicts using the dataset's defined reference rules.
@@ -104,7 +144,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Decision:** Unsupported work may be `unsupported_declined`; unresolved technical matters may be `engineering_review_required`. A different material or design is **not** an automatic substitute.
 
-### Step 4 — Supply and scheduling assessment
+<a id="business-workflow-step-4--supply-and-scheduling-assessment"></a>
+#### Step 4 — Supply and scheduling assessment
 
 - Evaluate required material mass versus available inventory **in kg**; do not confuse kg with finished-unit counts.
 - Examine relevant sourcing/replenishment information where represented in the dataset.
@@ -114,7 +155,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Decision:** A supply shortage does not by itself authorize a substitution or a delivery promise. Raise the issue, consider supported alternatives and obtain required technical/customer authorization before changing specifications.
 
-### Step 5 — Deterministic pricing
+<a id="business-workflow-step-5--deterministic-pricing"></a>
+#### Step 5 — Deterministic pricing
 
 - Use validated engineering and supply inputs plus the applicable pinned pricing rules (`price-v1.0` in dataset v1.1.0).
 - Invoke deterministic reference calculations (including the documented material, operations, setup, finish and packaging assumptions), using decimal arithmetic.
@@ -123,7 +165,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Decision:** If required inputs, pricing evidence or commercial authorization are missing, do not create a falsely definitive price; flag the appropriate review or clarification route.
 
-### Step 6 — Draft the quotation
+<a id="business-workflow-step-6--draft-the-quotation"></a>
+#### Step 6 — Draft the quotation
 
 - Check `draft_creation_allowed` before writing a draft.
 - Assemble customer/part scope, per-line and total pricing, planning lead time, validity/terms when supported, assumptions, technical notes and exclusions.
@@ -132,7 +175,8 @@ The sequence below shows business dependencies, not a requirement that every tec
 
 **Result:** A traceable draft, eligible for the required reviews.
 
-### Step 7 — Human review and approval gates
+<a id="business-workflow-step-7--human-review-and-approval-gates"></a>
+#### Step 7 — Human review and approval gates
 
 Three separate policy concepts exist in approved dataset v1.1.0:
 
@@ -146,13 +190,15 @@ Three separate policy concepts exist in approved dataset v1.1.0:
 - Enforce the dataset's separation between quote creator and authorized human approver; an agent can never approve or release its own quotation.
 - Support rejection or requested revision without pretending that the previous approval still applies.
 
-### Step 8 — Authorized release boundary
+<a id="business-workflow-step-8--authorized-release-boundary"></a>
+#### Step 8 — Authorized release boundary
 
 Only a fully validated, appropriately reviewed, currently approved quote version may become eligible for customer-facing release. The release operation itself must perform server-side authorization, current-version approval and hold checks.
 
 Quotation approval and release are separate human-controlled service operations. Document delivery and external dispatch require their own reviewed integration.
 
-## 6. Important exception paths
+<a id="business-workflow-6-important-exception-paths"></a>
+### 6. Important exception paths
 
 | Condition | Required business response | Forbidden behavior |
 |---|---|---|
@@ -169,7 +215,8 @@ Quotation approval and release are separate human-controlled service operations.
 | Tool timeout, rate limit, malformed response or downstream outage | Apply the documented bounded recovery/reconciliation policy; preserve uncertainty about possible prior writes | Blindly repeat non-idempotent writes or assert an unknown write failed |
 | Human rejects draft | Preserve rejection and reasons; revise only through an authorized path | Release the rejected version |
 
-## 7. Dataset v1.1.0 expected workflow outcomes
+<a id="business-workflow-7-dataset-v110-expected-workflow-outcomes"></a>
+### 7. Dataset v1.1.0 expected workflow outcomes
 
 The approved dataset defines **eight scenario-level expected outcome labels**. These are **evaluation outcomes**, not a complete specification of internal API/database status enums.
 
@@ -186,7 +233,8 @@ The approved dataset defines **eight scenario-level expected outcome labels**. T
 
 **Do not infer an outcome solely from an RFQ's category.** The dataset's actual reference rules, evidence, role permissions and fault conditions govern the expected result.
 
-## 8. Security, audit and reliability invariants
+<a id="business-workflow-8-security-audit-and-reliability-invariants"></a>
+### 8. Security, audit and reliability invariants
 
 1. **Least privilege:** Access is limited by authenticated identity, role and assigned business/customer scope; authorization is enforced by services/tools, not prompt wording.
 2. **Untrusted RFQ content:** Customer text and attachments may describe product requirements, never change policy or authorize tool actions.
@@ -198,7 +246,8 @@ The approved dataset defines **eight scenario-level expected outcome labels**. T
 8. **Safe uncertainty:** If a write may have succeeded before a timeout, reconcile the result before retrying or reporting it as absent.
 9. **Evaluation isolation:** Runtime agents cannot access hidden ground truth, frozen answer keys, expected tool sequences or coordination-scoring fixtures.
 
-## 9. Outputs the business needs
+<a id="business-workflow-9-outputs-the-business-needs"></a>
+### 9. Outputs the business needs
 
 For each RFQ, the copilot should ultimately produce the **applicable** subset of:
 
@@ -213,7 +262,8 @@ For each RFQ, the copilot should ultimately produce the **applicable** subset of
 
 An RFQ that is rejected, placed on hold, or awaiting clarification should **not** be forced to produce a complete quote.
 
-## 10. Illustrative example (not a dataset record)
+<a id="business-workflow-10-illustrative-example-not-a-dataset-record"></a>
+### 10. Illustrative example (not a dataset record)
 
 A customer requests **100 enclosures** in **Aluminum 5052** with delivery in **10 business days**. The manufacturer has insufficient 5052 stock, but an alternative grade is in stock.
 
@@ -226,7 +276,8 @@ A customer requests **100 enclosures** in **Aluminum 5052** with delivery in **1
 
 **Correct result:** a transparent decision with evidence and necessary escalation, even when no final quotation can yet be issued.
 
-## 11. Business-level acceptance checklist
+<a id="business-workflow-11-business-level-acceptance-checklist"></a>
+### 11. Business-level acceptance checklist
 
 - An RFQ is distinguishable from a quotation and a later purchase order.
 - Each actor and agent has a clearly bounded responsibility.
@@ -239,9 +290,10 @@ A customer requests **100 enclosures** in **Aluminum 5052** with delivery in **1
 - Exception/failure paths can stop, clarify, decline, review or safely recover.
 - Audit, least privilege, duplicate-write prevention and hidden-label isolation are required.
 
-## 12. Authoritative references and implementation boundary
+<a id="business-workflow-12-authoritative-references-and-implementation-boundary"></a>
+### 12. Authoritative references and implementation boundary
 
-This design uses the **approved v1.1.0 dataset**, not the discarded preliminary synthetic dataset. When implementing the app, align with the packaged sources of truth:
+The protected v1.1.0 package defines the baseline reference data. The following code-formatted paths are relative to that private package:
 
 - `README.md` — scope, simulated units, agents, data visibility and limitations.
 - `docs/business_rules.md` — exact manufacturing, pricing, capacity and approval policies.
@@ -252,6 +304,5 @@ This design uses the **approved v1.1.0 dataset**, not the discarded preliminary 
 - `config/` — versioned reference policies, including pricing version `price-v1.0`.
 
 The backend includes PostgreSQL persistence, FastAPI, secure MCP, the LangGraph Supervisor,
-five specialized agents, and a separate human-decision application. Browser integration
-and production deployment remain separate acceptance requirements. See the
+five specialized agents, the customer/staff browser workflow and a separate human-decision application. The full local workflow is demonstrated; production deployment remains a separate acceptance requirement. See the
 [project overview](../../README.md) for current capabilities and limitations.

@@ -1,10 +1,54 @@
-# Proposed PostgreSQL table specifications
+# Database table contracts
 
-Design baseline: synthetic dataset v1.1.0, verified 2026-11-07. **Documentation only: no database, DDL, models, migrations, imports, or seeding executed.** These 33 logical tables supersede the provisional Component 2 registry. Source facts and application proposals are identified per table and column. Read [architecture](database_architecture.md), [relationships and indexes](relationships_and_constraints.md), and [field mapping](dataset_to_database_mapping.md) together.
+The parser-sensitive 33-table baseline below defines independent regression expectations. The implemented ORM extends it to 36 tables under CURRENT revision `20261118_01`; current columns are listed separately below. Baseline definitions are preserved rather than silently reinterpreted as the complete active schema. Source facts and application proposals are identified per table and column. Read [architecture](database_architecture.md), [relationships and indexes](relationships_and_constraints.md), and [field mapping](dataset_to_database_mapping.md) together.
+
+## Current ORM column inventory
+
+This current inventory is separate from the parser-sensitive baseline below. Types, constraints,
+defaults, guard bodies and revision identity remain authoritative in models/migrations/contracts.
+
+| Current table | Columns |
+| --- | --- |
+| business.approval_history | approval_id, quote_id, quote_version, action, actor_id, action_at, reason, approval_request_id |
+| business.approval_requests | approval_request_id, quote_id, quote_version, requested_by, requested_at, required_role, status, approval_rule_version, resolved_by, resolved_at |
+| business.audit_events | event_id, occurred_at, actor_id, agent_name, customer_id, rfq_id, quote_id, quote_version, operation, outcome, correlation_id, event_data |
+| business.business_rule_versions | rule_version, rule_kind, sha256, document, source_path, registered_at |
+| business.contacts | contact_id, customer_id, contact_name, email, phone, is_primary |
+| business.customers | customer_id, company_name, industry, city, state, country, region, account_status, payment_terms, credit_limit_usd, credit_exposure_usd, preferred_shipping, restrictions, created_date, approval_requirement |
+| business.data_snapshots | snapshot_id, snapshot_kind, dataset_version, as_of_date, sha256, artifact_ref, registered_at |
+| business.finish_material_categories | finish_id, material_category |
+| business.finishes | finish_id, display_name, pricing_rule_version |
+| business.idempotency_records | receipt_id, actor_id, customer_id, operation, idempotency_key, request_sha256, result_json, correlation_id, committed_at |
+| business.material_finish_compatibility | material_id, finish_id |
+| business.material_inventory | inventory_id, material_id, thickness_mm, stock_form, quantity_kg, reserved_kg, unit, warehouse, reorder_threshold_kg, supplier_id, supplier_lead_business_days, expected_replenishment_date, snapshot_date, available_kg, snapshot_id, row_version |
+| business.material_supported_operations | material_id, operation_id |
+| business.material_thickness_options | material_id, thickness_mm |
+| business.materials | material_id, category, grade, density_kg_m3, cost_usd_per_kg, min_bend_radius_factor, availability_class, pricing_rule_version |
+| business.operation_routing | routing_id, part_type, operation_id, sequence, required_when, workcentre_id |
+| business.operations | operation_id, display_name, is_quoted, notes |
+| business.permissions | permission |
+| business.pricing_calculations | calculation_id, rfq_id, created_by, created_at, requirement_sha256, parts, lines, quote_total_usd, pricing_rule_version, manufacturing_rule_version, source_snapshot_versions, calculation_record_id, content_sha256 |
+| business.procurement_records | procurement_id, inventory_id, supplier_id, quantity_kg, ordered_date, expected_receipt_date, status |
+| business.production_capacity | capacity_id, workcentre_id, week_start, nominal_hours, downtime_hours, scheduled_hours, available_hours, remaining_hours, utilization_fraction, snapshot_id, row_version |
+| business.quote_line_items | quote_line_id, quote_id, quote_version, line_number, part_id, part_json, cost_breakdown_json, quantity, line_total_usd |
+| business.quote_versions | quote_version_id, quote_id, version, created_by, created_at, is_current, approval_valid, currency, total_usd, pricing_rule_version, manufacturing_rule_version, approval_rule_version, workflow_rule_version, expiry_date, estimated_lead_business_days, source_snapshot_versions, calculation_id, snapshot_completeness, created_xact, rfq_id, calculation_record_id, rfq_source_sha256, evaluation_fingerprint, rules_sha256, horizon_start, requested_delivery_date |
+| business.quotes | quote_id, rfq_id, current_version, status, created_by, created_at, submitted_by, approved_version, approver_id, approval_timestamp, rejection_reason, legacy_idempotency_key, row_version, released_by, released_at |
+| business.rfq_assignments | rfq_id, user_id, assigned_by, created_at, revoked_at |
+| business.rfq_attachments | attachment_id, rfq_id, filename, storage_ref, revision, document_type, source_role, is_trusted_instruction, sha256 |
+| business.rfq_line_items | rfq_line_id, rfq_id, line_number, part_id, part_type, material_id, finish_id, length_mm, width_mm, height_mm, thickness_mm, tolerance_mm, bend_radius_mm, weld_length_mm, quantity, hole_count, source_evidence, requirement_revision |
+| business.rfqs | rfq_id, customer_id, submitted_at, raw_request, source_type, part_ids, status, created_by, row_version |
+| business.role_permissions | role, permission, allowed |
+| business.roles | role |
+| business.suppliers | supplier_id, company_name, email, normal_lead_business_days |
+| business.token_revocations | revocation_id, user_id, token_sha256, not_before, expires_at, created_by, reason, created_at |
+| business.user_customer_bindings | user_id, customer_id, created_at, revoked_at |
+| business.users | user_id, display_name, role, email, active, assigned_region, authentication_subject |
+| business.workcentres | workcentre_id, operation_id, shift_calendar, weekly_nominal_hours, downtime_hours_per_week, planning_horizon_weeks |
+| orchestration.workflow_runs | workflow_run_id, customer_id, rfq_id, initiated_by, correlation_id, external_workflow_id, status, graph_version, rule_versions, source_snapshot_versions, checkpoint_ref, created_at, updated_at, lease_owner, lease_expires_at, attempt_count, claim_generation, disposition, last_error, draft_attempt_count, quote_id |
 
 ## 1. Conventions applying to every table
 
-- Tables are plural snake_case. All tables are in proposed `business` schema except `orchestration.workflow_runs`; short names below are unambiguous. No hidden-label tables exist in either schema.
+- Tables are plural snake_case. All tables are in `business` schema except `orchestration.workflow_runs`; short names below are unambiguous. No hidden-label tables exist in either schema.
 - `NULL? No` means NOT NULL, including every PK component. `Default none` means the caller/importer must supply the value; it does not mean an implicit empty string or zero. Explicit source values always override proposed live defaults. No default is inferred for a missing historical fact.
 - Established IDs remain exact case-sensitive `TEXT`, checked nonblank and length 1–64 for business entity identifiers. Choose TEXT consistently rather than mixing VARCHAR and UUID references. New business IDs use a prefix plus application-generated UUIDv4 text, e.g. `RFQ-<UUID>`; technical IDs use native UUIDv4. Neither strategy changes legacy identifiers. Version/permission/role/correlation tokens are nonblank TEXT; opaque identity subjects are not limited to 64 characters.
 - Every NUMERIC value must be finite: add `column <> 'NaN'::numeric` to each numeric column's CHECK; fixed precision disallows infinity. Nullable numeric checks allow NULL. Reject excessive source scale/overflow in preflight rather than relying on PostgreSQL's implicit rounding. Source Decimal strings never pass through binary floats.

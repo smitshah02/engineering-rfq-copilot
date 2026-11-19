@@ -1,268 +1,262 @@
-# Engineering RFQ Multi-Agent Copilot
+# RFQ_CoPilot — Manufacturing RFQ Platform
 
-An engineering quotation backend for sheet-metal manufacturers. It combines five specialized
-agents with deterministic services for material suitability, manufacturing feasibility,
-inventory, production capacity, lead time, costing, and pricing.
+RFQ_CoPilot turns a manufacturing Request for Quotation into an engineering assessment
+and a controlled customer quotation. It brings customer intake, feasibility checks,
+supply planning, pricing, and staff review into one application, reducing manual
+coordination while keeping commercial decisions under human authority.
 
-The language model assists extraction and proposes tool calls. Versioned Python services
-compute business results with exact decimal arithmetic. Quotation persistence recomputes
-those results from stored requirements; authorized humans approve, reject, and release
-specific quotation versions.
+**Status:** a complete local development application, demonstrated from customer
+submission through automatic processing, independent approval, authorized release,
+and customer quotation viewing with flat-panel and L-bracket RFQs. Production deployment
+and operational acceptance remain outstanding.
 
-**Status:** the backend is implemented, including the LangGraph Supervisor and persistent
-quotation lifecycle. This is a development project: frontend integration and production
-hardening remain open, and production deployment has not been approved.
+## Customer and staff workflows
 
-## Capabilities
+Customers can submit structured RFQs, add free-text requirements, upload PDF or CSV BOM
+attachments, follow their RFQ history, and view quotations released to their account.
+Internal drafts and approval information stay outside customer responses.
 
-- **PostgreSQL foundation:** async SQLAlchemy models, guarded Alembic migrations, private
-  synthetic-data seeding, schema contracts, and integrity checks.
-- **Deterministic business services:** materials, manufacturing, inventory, capacity,
-  lead time, costing, pricing, multi-part quotation evaluation, and approval-policy checks.
-  Business rules are pinned by version and verified against trusted hashes.
-- **Authenticated FastAPI reads and uploads:** customer-scoped RFQs, customer profiles,
-  catalog reads, released quotations, and validated PDF/CSV BOM attachment uploads.
-- **Secure MCP infrastructure:** manufacturing, supply, and pricing servers expose ten
-  read-only tools through an independently authenticated gateway. Identity and grants come
-  from the database, with separate REST/MCP token audiences.
-- **Five specialized agents:** Intake and Validation; Manufacturing Feasibility; Supply
-  and Scheduling; Pricing; Quotation and Review.
-- **LangGraph Supervisor:** validated handoffs, deterministic routing, bounded parallel
-  manufacturing checks, clarification/escalation, process-local recovery, and optional
-  privacy-controlled Langfuse telemetry.
-- **Persistent quotations:** drafts, immutable versions, calculation provenance, governed
-  validity, revision, submission, rejection/resubmission, and transactional idempotency.
-- **Controlled human decisions:** approval, rejection, and release through a separate
-  FastAPI process and restricted decision credential, backed by PostgreSQL integrity guards.
+Staff can browse quotations in their authorized customer/assignment scope, inspect stored
+manufacturing specifications and commercial totals, submit a version for review, and
+perform permitted approval, rejection, or release actions. The server assesses available
+actions and rechecks authorization, version, evidence, and policy when an action is confirmed.
+
+1. **Submit:** the ordinary FastAPI service stores the RFQ, parts, idempotency receipt,
+   audit event, and queued workflow in one transaction when automatic processing is enabled.
+2. **Validate intake:** the worker loads the current persisted requirements and verifies
+   part ownership, completeness, source evidence, catalog references, and contradictions.
+3. **Evaluate:** a LangGraph Supervisor coordinates manufacturing feasibility, inventory,
+   capacity, scheduling, pricing, and quotation review through authenticated MCP tools.
+4. **Draft automatically:** a separate consumer claims eligible results and recomputes a
+   deterministic internal quotation from the stored RFQ and trusted business rules.
+5. **Review:** authorized staff submit the exact quotation version for independent human review.
+6. **Approve and release:** an eligible independent approver records a context attestation;
+   a separately authorized actor releases the approved version. The releaser must differ
+   from the approver.
+7. **View:** the customer discovers the released quotation through RFQ history and opens
+   its selling-price projection.
+
+Missing information, conflicting evidence, unsupported manufacturing requirements, or
+required engineering review stop or redirect processing. A successful agent run alone
+does not authorize a customer quotation.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    Staff[Authenticated operator] --> API[FastAPI reads and uploads]
-    Context[Trusted Python application context] --> Supervisor[LangGraph Supervisor]
-    Supervisor --> A1[A1: Intake and Validation]
-    A1 --> A2[A2: Manufacturing Feasibility]
-    A2 --> A3[A3: Supply and Scheduling]
-    A3 --> A4[A4: Pricing]
-    A4 --> A5[A5: Quotation and Review]
-    A1 --> LLM[Injected chat model]
-    Supervisor -- Principal-bound MCP execution --> Gateway[Authenticated MCP gateway]
-    Gateway --> Tools[Manufacturing / Supply / Pricing tools]
-    Tools --> Services[Deterministic business services]
-    Services --> DB[(PostgreSQL)]
-    API --> DB
-    Writer[Trusted draft / revision / submission services] --> DB
-    Staff --> Decisions[Separate human decision FastAPI process]
+    Customer[Customer] --> Portal[React customer and staff portal]
+    Staff[Authorized staff] --> Portal
+    Portal --> API[Ordinary FastAPI service]
+    API --> DB[(PostgreSQL: RFQs, queue, quotations, audit)]
+    DB -- Claim queued work --> Worker[Continuous workflow worker]
+    Worker --> Supervisor[LangGraph Supervisor and five specialists]
+    Supervisor -- Unstructured extraction --> Ollama[Local Ollama model]
+    Supervisor -- Principal-bound tool calls --> MCP[Authenticated MCP gateway]
+    MCP --> Services[Deterministic manufacturing, supply and pricing services]
+    Services --> DB
+    Worker -- Settle evaluation --> DB
+    DB -- Claim eligible outcome --> Drafter[Continuous quotation drafter]
+    Drafter -- Recompute stored RFQ --> Services
+    Drafter -- Persist internal draft --> DB
+    Portal -- Human approval, rejection and release --> Decisions[Separate decision FastAPI service]
     Decisions --> DB
+    API -- Released quotation projection --> Portal
 ```
 
-The diagram separates implemented Python components from the HTTP surface. There is no
-HTTP route that starts or streams a Supervisor workflow yet. The Supervisor produces a
-non-binding assessment; persistent drafts are recomputed by the quotation services rather
-than accepting serialized agent evidence as business authority.
+### Supervisor and specialists
 
-The Supervisor has six internal stages: A1 extraction and validation, then A2 through A5.
-Human approval and release are outside the agent tool set.
+The Supervisor uses validated handoffs, deterministic routing, bounded parallel part
+checks, clarification/escalation, and process-local evidence custody. Its five specialists are:
 
-Read the [Supervisor foundation](docs/architecture/supervisor_foundation.md),
-[delegation](docs/architecture/supervisor_delegation.md),
-[recovery](docs/architecture/supervisor_recovery.md),
-[specialized-agent integration](docs/architecture/specialized_agent_integration.md),
+| Specialist | Responsibility |
+| --- | --- |
+| Intake and Validation | Extract or render requirements, verify provenance, resolve catalog references, identify missing or conflicting facts |
+| Manufacturing Feasibility | Check material/process compatibility, dimensions, tolerances, finishes, and supported geometry |
+| Supply and Scheduling | Assess inventory, procurement delay, workcentre capacity, and a feasible planning window |
+| Pricing | Verify evidence and request deterministic costing and selling-price calculations |
+| Quotation and Review | Check the combined assessment and identify policy or human-review requirements |
+
+**Structured intake** uses the backend's current, customer-scoped persisted part fields
+when there are no free-text notes. It renders exact values and source offsets without
+asking a model to extract those fields again. These provisional facts still pass validation
+and business checks. **Unstructured intake** uses local Ollama extraction; proposed fields
+must be supported by their own source evidence. A worker-side SourceGate rejects invented
+part identities and conflicts with stated persisted values before tool execution.
+
+Manufacturing, inventory, capacity, lead-time, costing, and pricing results come from
+versioned Python services using exact decimal arithmetic. Three MCP server families expose
+ten read-only tools through an independently authenticated gateway. Model output cannot
+set prices, change grants, or approve/release quotations.
+
+See [specialist integration](docs/architecture/specialized_agent_integration.md),
+[Supervisor delegation](docs/architecture/supervisor_langgraph_architecture.md),
 [MCP architecture](docs/architecture/mcp_architecture.md), and
-[tool contracts](docs/architecture/mcp_tool_contracts.md) for the implementation boundaries.
+[tool contracts](docs/architecture/mcp_architecture.md).
 
-## Security and authority
+### Continuous processing and persistence
 
-- JWT verification checks the configured asymmetric algorithm, key, issuer, audience,
-  lifetime, and subject. Permissions and customer bindings are resolved from the database;
-  role claims, browser fields, and model output do not grant authority.
-- SQL queries enforce customer scope and, when configured, RFQ assignments. Existing users
-  are staff/operator identities acting for a bound customer; a distinct external-customer
-  identity policy has not been implemented.
-- MCP enforces policy v2 and token revocation. REST revocation, permission-policy selection,
-  assignment enforcement, and upload idempotency must be configured explicitly.
-- MCP business tools use read-only, repeatable-read transactions and strict typed contracts.
-  The browser must communicate with authenticated FastAPI routes, not PostgreSQL or MCP.
-- Customer quotation responses select selling-price fields explicitly and require human
-  release. Internal costs, margins, raw evidence, and credentials are not part of that DTO.
-- Human decisions recheck the active actor, grants, customer binding, expected version,
-  policy assessment, and required separation of duties. The approver differs from the
-  creator/requester; the releaser differs from the approver.
-- K2/K3/K4/K5 database guards protect history, calculation consistency, lifecycle transitions,
-  and decision authority. The active development contract is K5, revision `20261116_04`.
-  Proposed multi-customer migrations remain deferred.
-- The decision credential belongs only to the human decision process. It must never be
-  supplied to agent context/state, generic MCP tools, or the main API process.
+PostgreSQL stores the durable processing queue. Independent workflow and drafting consumers
+use row claims, leases, heartbeats, generation fences, bounded attempts, and idempotent writes.
+The drafter accepts only eligible outcomes and re-evaluates persisted requirements instead
+of accepting stored model conclusions as pricing authority.
 
-Consistency hashes and database enforcement do not establish authenticated cryptographic
-specialist authorship. Durable signed evidence remains incomplete. Secret screening is
-pattern-based and cannot recognize every possible credential format.
+Quotation versions, calculation provenance, review requests, decisions, releases, and
+operation receipts are persisted with audit records. Queue recovery can repeat an interrupted
+evaluation; process-local Supervisor evidence is not a durable continuation checkpoint.
 
-## HTTP surface
+The [background-processing guide](docs/development/background_processing.md) covers
+configuration, startup, retry behavior, verification, and shutdown.
 
-All protected routes require a bearer JWT, a database identity/customer binding, and the
-applicable permission. Customer-scoped RFQ operations also honor configured assignments.
+## Authorization and integrity
 
-| Application | Method / path | Purpose |
-| --- | --- | --- |
-| Main API | `GET /health/live` | Public process liveness; no dependency-readiness guarantee |
-| Main API | `GET /api/v1/system/info` | Public service metadata |
-| Main API | `GET /api/v1/customers/me` | Bound customer profile |
-| Main API | `GET /api/v1/rfqs`, `GET /api/v1/rfqs/{rfq_id}` | Scoped RFQ reads |
-| Main API | `GET /api/v1/materials` | Filtered, paginated catalog |
-| Main API | `GET /api/v1/materials/{material_id}/specification` | Mounted only with explicit MCP integration |
-| Main API | `GET /api/v1/quotes/{quote_id}` | Released quotation selling-price projection |
-| Main API | `GET`, `POST /api/v1/rfqs/{rfq_id}/attachments` | Attachment metadata and PDF/CSV upload |
-| Decision API | `POST /api/v1/quote-decisions/{quote_id}/approval` | Human approval of the pending version |
-| Decision API | `POST /api/v1/quote-decisions/{quote_id}/rejection` | Human rejection with a reason |
-| Decision API | `POST /api/v1/quote-decisions/{quote_id}/release` | Controlled release of an approved version |
+- Asymmetric JWT verification checks issuer, audience, signature, lifetime, and subject.
+  Active identities, permissions, and customer bindings are resolved from PostgreSQL.
+- Separate customer permissions restrict customer operations. Staff quotation reads also
+  require a trusted staff role; customer scope and optional RFQ assignments are enforced in SQL.
+- MCP has a dedicated token audience, database-derived grants, enforced revocation,
+  typed contracts, and read-only evaluation transactions.
+- The ordinary API, workflow worker, drafter, and human-decision service use separately
+  restricted database authority. Owner credentials belong to reviewed administration.
+- Submission, decisions, and release check the exact version and current policy.
+  Approval requires separation from the quotation creator/requester, and release requires
+  separation from the approver. Required unverified engineering review fails closed.
+- Customer quotation DTOs select released selling-price fields explicitly. Browser
+  identity changes clear cached data and reject stale responses from previous sessions.
+- Database guards protect immutable history, calculation provenance, lifecycle transitions,
+  and decision authority. Source hashes, rule fingerprints, schema contracts, and runtime
+  integrity checks detect unexplained changes.
 
-Development-mode OpenAPI/Swagger documentation is available when configured. There is no
-login/token-issuance route, RFQ submission/correction route, Supervisor job/progress route,
-or complete operator quotation/version/review API. The decision application is served
-separately; the main API does not mount its routes.
+The current schema contract is defined in
+[`schema_contract.py`](src/rfq_copilot/schema_contract.py), with active revision
+`20261118_01`. Multi-customer staff migrations remain deferred. Consistency hashes do not
+establish cryptographically signed specialist authorship.
+
+See [authentication](docs/development/authentication.md),
+[database architecture](docs/database/database_architecture.md), and the
+[runtime](docs/database/k2_runtime_roles.sql),
+[decision](docs/database/k5_decision_roles.sql),
+[worker](docs/database/a1_workflow_role.sql), and
+[drafter](docs/database/a4_drafter_role.sql) provisioning references.
 
 ## Technology and repository layout
 
-Python 3.12 · uv · PostgreSQL 18 · SQLAlchemy async/asyncpg · Alembic · FastAPI · Pydantic ·
-LangGraph · LangChain Core · MCP · PyJWT · pytest · Ruff · GitHub Actions.
+| Area | Stack |
+| --- | --- |
+| Browser | React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS |
+| API and persistence | Python 3.12, FastAPI, Pydantic, SQLAlchemy async, asyncpg, PostgreSQL 18, Alembic |
+| Agent execution | LangGraph, LangChain Core, local Ollama, authenticated MCP |
+| Engineering checks | Decimal calculations, versioned rules, provenance and integrity verification |
+| Development verification | uv, pytest, Ruff, Vitest, Testing Library, GitHub Actions |
 
 ```text
+frontend/              customer and staff portal, browser tests, development proxy
 src/rfq_copilot/
-  api/                main API, separate decision app, authentication, schemas
-  mcp/                contracts, servers, authenticated gateway and client
-  services/           deterministic business calculations
-  repositories/       scoped queries and trusted rule loading
-  models/             SQLAlchemy models
-  seeding/            guarded dataset, rule and policy registration
-  supervisor.py       routing, custody and A1–A5 execution
-  recovery.py         process-local workflow recovery
-  intake.py           A1 extraction (validation in intake_validation.py)
-  manufacturing_agent.py / supply_agent.py / pricing_agent.py / quotation_agent.py
-  quote_drafts.py / quote_versions.py / quote_approval_policy.py / quote_approval.py
-  quote_evidence.py    calculation and quotation evidence checks
-  graph.py / llm.py    conversational agent and model abstraction
-  schema_contract.py  active/deferred schema contracts and migration hash pins
-alembic/              active and proposed/deferred migrations
-tests/                unit, integration, security and opt-in live checks
-docs/                 public architecture, schema and operational guidance
+  api/                 ordinary API, separate decision app, authentication, DTOs
+  mcp/                 gateway, contracts, servers and client
+  services/            deterministic engineering and commercial calculations
+  models/              SQLAlchemy domain models
+  repositories/        scoped queries and trusted rule loading
+  seeding/             guarded private-source import and rule/policy registration
+  policies/ / rules/   versioned authorization and business documents
+  supervisor.py        specialist routing, handoffs and custody
+  workflow_*.py        durable queue, evaluation worker and quotation drafter
+  background.py        consumer polling, backoff and shutdown lifecycle
+  quote_*.py           drafts, versions, evidence, review and human decisions
+  *integrity.py        frozen baseline and explained runtime-state verification
+alembic/               active and proposed/deferred migrations
+scripts/dev_env.sh     process-specific local environment launcher
+tests/                 backend regression, security, database and opt-in live checks
+docs/                  architecture, database and operational references
 ```
 
 ## Local setup
 
-Prerequisites are Python 3.12, [uv](https://docs.astral.sh/uv/), and PostgreSQL 18 on loopback.
-The current guarded development/test database names are `rfq_copilot_dev` and
-`rfq_copilot_test`. Keep the dataset private and never use development data as a test target.
+Use Python 3.12, uv, PostgreSQL 18 on loopback, an installed Ollama model, and Node.js
+matching `frontend/package.json` (`^20.19.0 || >=22.12.0`). The shell launcher and guarded
+filesystem operations target a POSIX local environment. Run commands from the repository root.
 
 ```bash
 uv sync --locked
-# Preserve an existing .env; otherwise create a private copy of the placeholder template.
+npm --prefix frontend ci
+# Preserve an existing private configuration.
 test -e .env || (umask 077; cp .env.example .env)
-chmod 600 .env
 ```
 
-Configure credentials privately. The template contains placeholders only. Database settings
-are read from process variables or an explicitly selected dotenv file; API/MCP settings use
-process variables. Do not print URLs or export a shared file containing decision credentials
-into the main API or agent/MCP process.
+The [environment template](.env.example) contains placeholders and non-secret local defaults.
+Replace credential, key-path, and model placeholders privately. Serving processes read
+process variables; the launcher loads only the selected process's settings. Do not export
+the complete private file into every service or put secrets in browser configuration.
 
-| Configuration | Intended authority |
+The synthetic dataset is private and supplied separately to authorized developers. The
+full setup requires its frozen archive under `data/`, extracted sources under
+`data/rfq_synthetic_data/`, and protected snapshot artifacts. Preserve all applied migrations,
+registered rule bytes, manifests, and snapshots.
+
+A fresh database additionally requires reviewed migrations, baseline seeding, current rule
+and RBAC registrations, restricted roles, customer/staff/service identities and bindings,
+any required assignments, and explicit queue activation. Dependency installation and
+copying the template do not perform this provisioning. For an existing demonstrated
+environment, reuse its approved configuration and state.
+
+Consult [migrations](docs/development/local_development.md),
+[seeding](docs/development/local_development.md), and the
+[background-processing prerequisites and launch commands](docs/development/background_processing.md).
+The current customer workflow selects API policy v3 with the registered RBAC v4 overlay.
+
+| Local process | Default address |
 | --- | --- |
-| `DATABASE_URL`, `TEST_DATABASE_URL` | Owner access for reviewed migrations, seeding, administration and tests |
-| `APP_DATABASE_URL`, `TEST_APP_DATABASE_URL` | Restricted application role |
-| `DECISION_DATABASE_URL`, `TEST_DECISION_DATABASE_URL` | Separate restricted human-decision role |
-| `TEST_DATABASE_NAME` | Explicit test database identity ending in `_test` |
-| `RFQ_API_*` | JWT trust, API security profile and attachment storage |
-| `RFQ_MCP_*`, `RFQ_MCP_HOST_*` | MCP trust, destination and ingress policy |
+| React portal | `http://127.0.0.1:5173` |
+| Ordinary API | `http://127.0.0.1:8000` |
+| Separate human-decision API | `http://127.0.0.1:8001` |
+| MCP gateway | `http://127.0.0.1:8765` |
+| Ollama | `http://127.0.0.1:11434` |
 
-Authorized developers obtain synthetic dataset v1.1.0 separately, keep its ZIP under `data/`,
-and extract it to `data/rfq_synthetic_data/`. Frozen evaluation inputs/answers are excluded
-from iterative application development. Snapshot artifacts under `data/rfq_seed_snapshots/`
-remain private and must be preserved when referenced by the database.
-
-For a new database, review the [migration guide](docs/development/database_migrations.md)
-and [seeding guide](docs/development/database_seeding.md). Provision the separate roles using
-[K2 runtime grants](docs/database/k2_runtime_roles.sql) and
-[K5 decision grants](docs/database/k5_decision_roles.sql); these are reviewed operator
-artifacts, not automatic startup scripts. Preserve all applied migration files byte for byte.
-
-Fresh baseline seeding is not full runtime bootstrap: subject/customer bindings, assignments,
-runtime RFQ lines, and approvals are not created by the frozen dataset import. Approved
-post-baseline rules (`approval-v1.2`, `workflow-v1.1`, `workflow-v1.2`) and the
-`rbac-policy-v2` overlay have separate guarded registration CLIs in
-[`seeding/rules.py`](src/rfq_copilot/seeding/rules.py) and
-[`seeding/policy.py`](src/rfq_copilot/seeding/policy.py). Review and provision them explicitly
-for the intended environment; do not change the frozen dataset to supply runtime state.
-
-## Development entry points
-
-These commands describe separate loopback processes. Supply reviewed, process-specific
-settings first; none creates identities, runs migrations, or initializes a workflow.
-
-```bash
-# Main API; development mode enables interactive API documentation.
-RFQ_API_ENVIRONMENT=development uv run uvicorn --factory rfq_copilot.api.app:create_app --host 127.0.0.1 --port 8000
-
-# Human decision API, with its own environment and decision credential.
-RFQ_API_ENVIRONMENT=development uv run uvicorn --factory rfq_copilot.api.decision_app:create_decision_app --host 127.0.0.1 --port 8001
-
-# MCP gateway, configured independently; never a direct browser destination.
-uv run uvicorn --factory rfq_copilot.mcp.host:create_app_from_env --host 127.0.0.1 --port 8765 --no-proxy-headers --workers 1
-```
-
-Protected operations fail closed when trust configuration, grants, bindings, storage, or
-required credentials are missing. A working liveness response does not establish readiness.
-Serving factories select only their restricted application or decision URL and target
-metadata, without owner-credential loading or dotenv discovery. Each restricted session
-checks live database authority before yielding. Supply process-specific credentials and
-matching `DEVELOPMENT_DATABASE_NAME`, `DATABASE_HOST`, and `DATABASE_PORT`; test serving
-also requires `TEST_DATABASE_NAME`. These entry points do not establish production readiness.
-
-The [Supervisor](src/rfq_copilot/supervisor.py) and
-[conversational agent](docs/architecture/langgraph_foundation.md) are Python integration
-components. Their caller supplies the verified Principal, trusted rules/planning policy,
-model, and principal-bound MCP executor. A runtime delegated-credential provider is not
-shipped; test-only issuers/providers are not a production authentication solution.
+Start the two continuous consumers alongside these services using the operational guide.
+The Vite development proxy sends ordinary API traffic and human decisions to their respective
+processes. Local sign-in uses manually supplied, short-lived development JWTs for provisioned
+identities; no production login or public registration service is provided.
 
 ## Verification
 
-The public, dataset-free smoke selection is maintained in
-[`.github/workflows/smoke.yml`](.github/workflows/smoke.yml). It is a subset of the regression.
+The [public smoke workflow](.github/workflows/smoke.yml) defines the dataset-free backend
+selection and its lint/lock checks. It covers a subset of the regression suite. Frontend
+tests use mocked HTTP requests; database and live integration checks have separate prerequisites.
 
-| Manual command | Requirements / purpose |
+| Manual command | Scope / prerequisites |
 | --- | --- |
-| `uv run pytest -q` | Private dataset, configured test credentials/roles and PostgreSQL; full regression |
-| `uv run ruff check .` | Lint |
-| `uv run ruff format --check src tests alembic` | Python formatting |
-| `uv lock --check` | Dependency-lock consistency |
+| `uv run pytest -q` | Full backend regression; private dataset, PostgreSQL, and guarded test credentials/roles required |
+| `uv run ruff check .` | Python lint |
+| `uv run ruff format --check src tests alembic` | Python formatting verification |
+| `uv lock --check` | Dependency lock consistency |
+| `npm --prefix frontend run test:run` | Frontend regression tests |
+| `npm --prefix frontend run build` | TypeScript checking and production asset compilation |
 
-Integration fixtures own the guarded `rfq_copilot_test` lifecycle and restore its expected
-empty state. K5 tests require the distinct restricted test decision role. Never point the
-test configuration at development or production, or run a second database suite concurrently.
-Live MCP, Ollama, and Langfuse checks are explicitly opt-in and require their corresponding
-services and settings. The Ollama dependency is in the development group; Langfuse is an
-optional extra. Do not interpret mocked-model or offline results as a live demonstration.
+Run database suites serially against the isolated `rfq_copilot_test` target; their fixtures
+manage schema/data and must not share a concurrent test instance. Explicit development
+integrity checks are read-only. Live Ollama, MCP, and optional Langfuse checks require
+opt-in configuration. Offline or mocked tests do not establish live integration success.
 
-## Current limitations
+## Demonstration screenshots
 
-- No React frontend or complete browser-to-backend workflow exists yet. Authentication
-  issuance, RFQ writes, workflow execution/progress, and operator review APIs need integration.
-- Staff identities are customer-bound; external-customer authorization and multi-customer
-  staff activation remain separate policy/schema decisions.
-- Supervisor recovery and conversation memory are process-local. Cross-worker/restart
-  continuation with durable specialist evidence is not implemented.
-- Signed durable specialist authorship is incomplete. Stored calculation consistency and
-  human context attestation are distinct from cryptographic source authentication.
-- Automatic expiry/supersession transitions and verified engineering-review completion are
-  incomplete. Human approval/release checks fail closed where required evidence is absent.
-- Owner-free serving configuration, serialized decision-receipt replay, and authenticated
-  decision HTTP/database tests have been added and await manual verification. API contract
-  gaps and broader integration coverage remain follow-up work.
-- Production identity provisioning, observability, deployment and operational acceptance
-  remain pending. Production deployment is not approved.
+Real demonstration screenshots can be linked in this section after capture and privacy
+review. Suggested views are customer RFQ submission, the automatically created staff draft,
+independent human approval/release, and the customer's released quotation. Include the
+demonstrated flat-panel and L-bracket examples without tokens or private contact information.
 
-See the [current limitations register](docs/development/technical_debt.md) for component
-references and the distinction between local-demo integration and production requirements.
-Keep internal development logs, audit narratives, review bundles, and historical execution
-receipts private; they are not required reading for the public project.
+## Production limitations
+
+- Local foreground processes require manual startup/restart. Deployment supervision,
+  TLS, secrets distribution, monitoring, and operational acceptance remain outstanding.
+- Development JWT issuance and the worker's local signing-key provider require replacement
+  with a production identity and delegated-credential design.
+- Restart recovery re-evaluates queued work; durable signed specialist evidence and
+  cross-process continuation of trusted Supervisor custody remain incomplete.
+- Inventory and weekly capacity checks provide planning estimates, without reserving
+  stock, production slots, or shipment dates. Source freshness must be managed explicitly.
+- Required engineering-review completion still needs verified evidence; approval refuses
+  unsupported cases. Automatic expiry/supersession state transitions remain incomplete.
+- The full regression and reproduction environment depend on separately supplied private
+  data and reviewed database provisioning. Building frontend assets alone is not a deployment.
+
+Detailed component limitations are recorded in
+[technical debt and deferred decisions](docs/development/technical_debt.md).
