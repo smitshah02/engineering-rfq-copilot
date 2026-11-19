@@ -236,12 +236,111 @@ manage schema/data and must not share a concurrent test instance. Explicit devel
 integrity checks are read-only. Live Ollama, MCP, and optional Langfuse checks require
 opt-in configuration. Offline or mocked tests do not establish live integration success.
 
-## Demonstration screenshots
+### End-to-End Application Demo
 
-Real demonstration screenshots can be linked in this section after capture and privacy
-review. Suggested views are customer RFQ submission, the automatically created staff draft,
-independent human approval/release, and the customer's released quotation. Include the
-demonstrated flat-panel and L-bracket examples without tokens or private contact information.
+These genuine screenshots show a successfully demonstrated local development workflow
+using synthetic engineering RFQ data: one customer submission, automatic evaluation and
+drafting, independent human approval, authorized release, and customer quotation viewing.
+
+| Demonstrated example | Verified value |
+| --- | --- |
+| RFQ | `RFQ-1ba58316823e4733bede2e3ca1aa894e` |
+| Quotation | `QUOTE-F9ADC0BBFE3640CF80551A61BFB82BC2` |
+| Part / material / quantity | `P-TEST-BRACKET-003` · L-bracket · `MAT-001` · 20 units |
+| Total / estimated lead time | **146.46 USD** · **4 business days** |
+| Quotation version / final status | **1** · **Released** |
+
+Images scale to the available width; open an image to inspect the original resolution.
+
+### Actors and Separation of Duties
+
+| Actor | Verified role/authority | Demonstrated responsibility |
+| --- | --- | --- |
+| Customer | Authenticated customer with account-scoped RFQ submission and released-quotation access | Submitted the RFQ once; viewed the final quotation after release |
+| `USER-004` | `sales_manager`; granted `request_approval` and `release_quote`, subject to server checks | Submitted version 1 for review, then released it after USER-010's independent approval |
+| `USER-010` | `sales_manager`; granted `approve_quote`, subject to server checks | Reviewed and explicitly approved version 1 independently; did not perform final release |
+
+The staff role assignments and grants were verified against the synthetic demo identity
+data. USER-004 and USER-010 are distinct authenticated identities with separately evaluated
+permissions; their user IDs identify actors, while `sales_manager` is their assigned RBAC
+role. Sharing a role does not authorize every action on every quotation.
+
+**Human authorization is enforced by the backend.** It verifies the signed identity,
+resolves current database grants and customer scope, and rechecks the quotation version,
+evidence, policy, and separation of duties when an action is confirmed. USER-004 cannot
+approve the quotation they submitted; USER-010 cannot release the version they approved.
+Changing a displayed name or frontend button does not grant authority. See the
+[authentication implementation](src/rfq_copilot/api/auth.py),
+[decision enforcement](src/rfq_copilot/quote_approval.py), and
+[existing lifecycle tests](tests/test_staff_quote_lifecycle_database.py).
+
+### Customer Submission
+
+The customer enters the L-bracket requirements and quantity in the RFQ form.
+
+![Customer RFQ form with L-bracket part P-TEST-BRACKET-003, material MAT-001, and quantity 20](docs/screenshots/01-customer-rfq-form.png)
+
+Submission succeeds once. The confirmation explains that a quotation becomes available
+only after authorized review, approval, and release.
+
+![Customer submission confirmation with the received RFQ and its L-bracket specifications](docs/screenshots/02-rfq-submitted-successfully.png)
+
+### Automated Multi-Agent Evaluation
+
+The continuous workflow worker picks up the queued RFQ. The LangGraph Supervisor
+coordinates specialist evaluation through authenticated manufacturing, supply, and pricing
+MCP requests; structured intake and business calculations use validated fields and
+deterministic services. The worker log records successful requests and workflow completion.
+
+![Workflow worker logs showing successful manufacturing, supply, and pricing MCP requests and completed evaluation](docs/screenshots/05-langgraph-mcp-workflow.png)
+
+A separate background drafter consumes the eligible result, recomputes the quotation from
+persisted requirements and trusted rules, and stores an internal draft automatically.
+
+![Continuous quotation drafter logs showing work claimed and draft processing completed](docs/screenshots/04-automatic-quotation-drafter.png)
+
+### Internal Quotation Draft
+
+Staff inspect the generated version 1, its manufacturing specifications, total, and
+estimated lead time. The draft is internal and non-binding until authorized release;
+automatic processing grants no approval or customer visibility.
+
+![Internal draft quotation showing version 1, 146.46 USD, four business days, and required human approval](docs/screenshots/07-quotation-draft-details-user-004.png)
+
+### Human Review — USER-004
+
+USER-004 submits the exact draft version for independent human review. This confirmation
+requests review; it does not approve or publish the quotation. The requester cannot
+independently approve their own submission, even with the `sales_manager` role.
+
+![USER-004's review-submission confirmation for version 1, explicitly keeping the quotation unavailable to the customer](docs/screenshots/08-submit-for-human-review-user-004.png)
+
+### Independent Approval — USER-010
+
+USER-010 acts as the independent authorized approver, reviewing the manufacturing and
+commercial details and explicitly confirming the exact quotation version and RFQ source
+context. Approval applies to version 1 and leaves the quotation unavailable to the customer
+until a separate authorized release. USER-010 did not perform that release in this demo.
+
+![USER-010's independent approval confirmation with version 1, RFQ source digest, and explicit review attestations](docs/screenshots/11-human-approval-confirmation-user-010.png)
+
+### Authorized Release — USER-004
+
+After independent approval, USER-004 explicitly releases the approved version only when
+the server authorizes the action. Release is a separate business action from approval:
+it makes the quotation available to the authorized customer without sending an automatic
+email or dispatching manufacturing work.
+
+![USER-004's release confirmation for the independently approved version 1, explaining customer availability and no dispatch](docs/screenshots/14-quotation-release-confirmation-user-004.png)
+
+### Customer Receives Released Quotation
+
+The customer can now open the final **Released** quotation: version 1, **146.46 USD**, and
+an estimated lead time of **4 business days**. Internal drafts, pending approvals, and
+approved-but-unreleased quotations were unavailable to the customer before authorized
+release; the customer API enforces this visibility boundary.
+
+![Customer view of the released quotation with version 1, total 146.46 USD, four business days, and quantity 20](docs/screenshots/17-customer-released-quotation.png)
 
 ## Production limitations
 
