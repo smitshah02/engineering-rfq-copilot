@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Day 50: opt-in telemetry exporter, imported only when RFQ_LANGFUSE_ENABLED=true.
+# telemetry: opt-in telemetry exporter, imported only when RFQ_LANGFUSE_ENABLED=true.
 langfuse = ["langfuse>=5,<6"]
 
 [tool.ruff]

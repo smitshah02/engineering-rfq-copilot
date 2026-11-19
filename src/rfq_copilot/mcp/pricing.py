@@ -1,4 +1,4 @@
-"""Pricing MCP server (Day 26): costs, price and multi-part quotation evaluation.
+"""Pricing MCP server (supply and pricing tool): costs, price and multi-part quotation evaluation.
 
 Read-only, in-process, nothing persisted, approved or released. Each call recomputes its
 prerequisites inside ONE snapshot session: inventory (server-selected snapshot) then

@@ -50,7 +50,7 @@ class ApiSettings(BaseModel):
     # Longest accepted exp - iat. Tokens with a longer declared lifetime are rejected.
     jwt_max_lifetime_seconds: Annotated[int, Field(ge=60, le=3600)] = 900
 
-    # Phase 3.5 authorization foundations. Every default keeps the approved behaviour; each
+    # authorization hardening authorization foundations. Every default keeps the approved behaviour; each
     # other value needs head 20261111_06 applied to the target database (and, for v2, the
     # rbac-policy-v2 overlay) and fails closed (403/401/503) without it.
     # v1: catalog, quotes and uploads use view_assigned_rfqs / create_rfq (current grants).
@@ -73,8 +73,8 @@ class ApiSettings(BaseModel):
     # (head 20261117_02 and ``python -m rfq_copilot.workflow_queue activate`` required;
     # without the activation, submissions answer 503). off = the pre-A1 behaviour.
     workflow_queue: Literal["off", "enabled"] = "off"
-    # Day 28 (F1/F2): "hardened" is the deployment profile. It refuses to start unless the
-    # secure Phase 3.5 controls are selected; "standard" keeps the approved defaults.
+    # gateway (F1/F2): "hardened" is the deployment profile. It refuses to start unless the
+    # secure authorization hardening controls are selected; "standard" keeps the approved defaults.
     deployment_profile: Literal["standard", "hardened"] = "standard"
 
     @field_validator("attachment_dir", "jwt_public_key_file")

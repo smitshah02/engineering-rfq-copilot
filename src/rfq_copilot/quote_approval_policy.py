@@ -1,4 +1,4 @@
-"""Day 53: what approval of one persisted quotation version requires. Assessment only.
+"""approval policy: what approval of one persisted quotation version requires. Assessment only.
 
     Principal + quote id + expected current version
         -> assess_quote_approval -> QuoteApprovalAssessment (frozen, non-binding)
@@ -8,13 +8,13 @@ request, release, audit event or version change. ``ready_for_binding_approval``,
 ``approval_decision`` and ``released`` are typed ``Literal[False]`` / ``Literal["none"]`` to
 document intent only: Python does not enforce annotations, and any caller can construct
 this dataclass. The security property is architectural instead. An assessment is output,
-never input: no module accepts one (a test enforces it), and Day 54 must recompute it
+never input: no module accepts one (a test enforces it), and integrity must recompute it
 itself, inside its own approval transaction and lock, and must never accept an assessment
 object, its fingerprint or any serialized copy from a caller, agent or earlier request as
 approval authority.
 
 Authority: ``view_assigned_rfqs``, the established read permission for quotes (TD-014),
-re-read from the database with the customer binding (as Day 51/52). Assessing is not
+re-read from the database with the customer binding (as draft persistence/52). Assessing is not
 approving, so ``approve_quote`` is neither required nor implied.
 
 Binding: only the quotation's current version is assessed. The quote row is locked FOR
@@ -22,7 +22,7 @@ SHARE, so no revision can commit until the caller's transaction ends, and the ve
 lines and audit facts read afterwards belong to that version. A different
 ``expected_version`` is ``stale_version``; a pointer that disagrees with ``is_current`` is
 ``version_inconsistent``. The result carries the assessed version, the quote's
-``row_version`` and an ``assessment_fingerprint`` for Day 54 to compare.
+``row_version`` and an ``assessment_fingerprint`` for integrity to compare.
 
 Policy: never re-derived here. The stored RFQ is re-evaluated by ``evaluate_stored_rfq``
 under the server-pinned, manifest-verified rules (``approval-v1.2``), which must equal the
@@ -42,7 +42,7 @@ evaluation context is application-supplied, not authenticated evidence (L04/L21/
 is a ``binding_approval_blockers`` code derived from the data, so a valid policy assessment
 is never presented as approval-ready evidence. Agent or Supervisor output is never read.
 
-Day 54B (K3). A ``complete`` version keeps its evidence in its own K2-protected columns:
+integrity (K3). A ``complete`` version keeps its evidence in its own K2-protected columns:
 its evaluation fingerprint, calculation id, horizon and requested delivery date are read
 from the version (the audit event is still parsed, and must agree: ``EVIDENCE_MISMATCH``).
 Its calculation record is re-read and compared with today's recomputation
@@ -150,7 +150,7 @@ class QuoteApprovalAssessment:
     rfq_id: str
     customer_id: str
     assessed_version: int
-    quote_row_version: int  # freshness: Day 54 must find the same version and row_version
+    quote_row_version: int  # freshness: integrity must find the same version and row_version
     quote_status: Literal["draft", "revised_draft", "pending_approval", "approved"]
     rule_versions: tuple[str, ...]  # manufacturing, pricing, approval, workflow (recorded)
     approval_rule_fingerprint: str
@@ -442,9 +442,9 @@ async def _assessed(
 ):
     """The assessment plus the locked quote, its current version and the pending request.
 
-    Day 53 assesses unsubmitted drafts (FOR SHARE, no pending request). Day 54D recomputes
+    approval policy assesses unsubmitted drafts (FOR SHARE, no pending request). integrity recomputes
     the same assessment inside its decision transaction (FOR NO KEY UPDATE, status
-    ``pending_approval``, exactly one pending request for the expected version). Day 55
+    ``pending_approval``, exactly one pending request for the expected version). human decision
     release recomputes it for an ``approved`` quote (``approved``): the expected version
     must be the approved one, its ``approval_valid`` set and nothing pending.
     """

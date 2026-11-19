@@ -1,4 +1,4 @@
-"""Supply and Scheduling Agent A3 (Day 39): manufacturable parts -> evidence-backed stock,
+"""Supply and Scheduling Agent A3 (supply evidence): manufacturable parts -> evidence-backed stock,
 capacity and lead-time assessment. Not price, not approval, not a delivery commitment.
 
     ManufacturingAssessment (A2, feasible) + trusted horizon_start [+ IntakeResult]
@@ -7,7 +7,7 @@ capacity and lead-time assessment. Not price, not approval, not a delivery commi
 - Input gate: A2's assessment must be ``feasible`` with every part ``feasible`` and backed by a
   ``valid`` ``mfg-v1.0`` tool result; otherwise ``not_evaluated`` and no tool is called.
 - Dates: ``horizon_start`` is the trusted planning policy (a Monday), never customer text. A
-  requested delivery date is used only when the Day 36 ``IntakeResult`` of the same source
+  requested delivery date is used only when the intake extraction ``IntakeResult`` of the same source
   holds exactly one ``verified`` ``requested_delivery_date``; a stated but unverified one is
   ``needs_clarification`` and nothing is called.
 - Authority: three read-only MCP tools (RBAC v2 ``view_assigned_rfqs``) on the specifications
@@ -119,7 +119,7 @@ def _delivery(extraction: IntakeResult | None, a2: ManufacturingAssessment):
 
 
 def _bound(p: PartFeasibility) -> bool:
-    """A2's evidence belongs to this part's unchanged specification (D39-01): same part_id,
+    """A2's evidence belongs to this part's unchanged specification (supply evidence control): same part_id,
     the exact arguments A2 sent (sha256), and a result A2's own checks accept for it."""
     request = PartCheckInput(part=p.specification)
     digest = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
@@ -179,7 +179,7 @@ def _inconsistent(
     covered = [part_id for line in lines for part_id in line.part_ids]
     if sorted(covered) != sorted(specs):
         return True
-    # One line per (material, thickness): parts sharing stock share its line (D39-02).
+    # One line per (material, thickness): parts sharing stock share its line (supply evidence control).
     if len({(line.material_id, line.thickness_mm) for line in lines}) != len(lines):
         return True
     for line in lines:
@@ -194,11 +194,11 @@ def _inconsistent(
         return True
     if cap.result not in ("feasible", "infeasible") or cap.start_week != lead.start_week:
         return True
-    # Dates (D39-03): the start follows from the procurement delay counted from the trusted
+    # Dates (supply evidence control): the start follows from the procurement delay counted from the trusted
     # horizon, and no planned capacity week lies before the horizon's start week.
     if lead.earliest_start_date != add_business_days(horizon, lead.procurement_business_days):
         return True
-    # D42-A3-01: the delay and start week are the lead-time service's plan_start of these stock
+    # cross-agent evidence control: the delay and start week are the lead-time service's plan_start of these stock
     # lines. Its default delay is a reference constant of the pinned pricing rule only; under
     # rule drift the evidence is kept for review (_status) without this check.
     if inv.pricing_rule_version == PRICING_RULE_VERSION:
@@ -216,7 +216,7 @@ def _inconsistent(
     if ready is None or final is None or not cap.weeks:
         return True
     if final != max(w.week_start for w in cap.weeks) or ready != max(final + FRIDAY_OFFSET, lead.earliest_start_date):  # fmt: skip
-        return True  # not the last planned Friday, or the start if later (D42-A3-01)
+        return True  # not the last planned Friday, or the start if later (cross-agent evidence control)
     if lead.lead_business_days != business_days_between(horizon, ready):
         return True
     if delivery is not None and ready is not None and lead.delivery_feasible != (ready <= delivery):
@@ -236,7 +236,7 @@ def _inconsistent(
 
 def _line_impossible(line: InventoryLineOutput) -> bool:
     """The stock service's own semantics for one line: positive demand, shortage =
-    max(required - available, 0), and status from available versus required (D39-02)."""
+    max(required - available, 0), and status from available versus required (supply evidence control)."""
     required, available = line.required_kg, line.available_kg
     if required <= 0 or line.shortage_kg != max(required - available, Decimal(0)):
         return True
@@ -297,7 +297,7 @@ async def evaluate_supply(
     """Stock, capacity and lead time for A2's manufacturable parts.
 
     ``execute`` must be a trusted, principal-bound executor (``graph.mcp_executor``);
-    ``horizon_start`` the application's planning policy; ``extraction`` the Day 36 result of
+    ``horizon_start`` the application's planning policy; ``extraction`` the intake extraction result of
     the same source (only its verified requested delivery date is used)."""
     if not isinstance(a2, ManufacturingAssessment):
         raise ValueError("evaluate_supply needs a ManufacturingAssessment")

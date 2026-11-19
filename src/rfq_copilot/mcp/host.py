@@ -1,4 +1,4 @@
-"""MCP host (Day 28): one ASGI process, three SDK Streamable HTTP apps, a guarded edge.
+"""MCP host (gateway): one ASGI process, three SDK Streamable HTTP apps, a guarded edge.
 
 Endpoints (exact paths; no trailing-slash variants, no other routes):
     POST /mcp/manufacturing   /mcp/supply   /mcp/pricing

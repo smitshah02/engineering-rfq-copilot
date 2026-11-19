@@ -25,7 +25,7 @@ from rfq_copilot.services.costing import CostEstimate, LineCost, display_costs, 
 
 PriceResult = Literal["priced", "needs_clarification", "not_manufacturable"]
 CALCULATION_PREFIX = "CALC-"
-# K3 (Day 54B): the reusable pricing-content fingerprint of a persisted calculation record.
+# K3 (integrity): the reusable pricing-content fingerprint of a persisted calculation record.
 CALCULATION_CONTENT_VERSION = "calculation-content-v1"
 _UNROUNDED = (
     "material_cost_per_unit",

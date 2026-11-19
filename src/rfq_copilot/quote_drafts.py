@@ -1,4 +1,4 @@
-"""Day 51: persist one validated, non-binding quotation draft for a verified actor.
+"""draft persistence: persist one validated, non-binding quotation draft for a verified actor.
 
     Principal + stored RFQ + trusted evaluation inputs
         -> create_quote_draft -> quotes / quote_versions / quote_line_items
@@ -31,7 +31,7 @@ immediately. Inside the savepoint that one pointer is deferred, the quote and ve
 inserted, and the pointer is checked immediately again before anything else is written.
 
 Drafts are ``status='draft'``, version 1, ``approval_valid=False``, never submitted,
-approved or released. Day 54B (K3): new drafts record ``workflow-v1.2``, whose
+approved or released. integrity (K3): new drafts record ``workflow-v1.2``, whose
 ``quote_validity`` makes version 1 ``complete``. Inside the savepoint the service inserts
 (or reuses, verified column by column) the RFQ's calculation record, then the version with
 its evidence columns and ``expiry_date`` (UTC creation date + validity - 1, from the pinned
@@ -76,7 +76,7 @@ from rfq_copilot.services.pricing import canonical_part, display_quote
 
 OPERATION = "create_quote_draft"  # idempotency_records rule_01 and the dataset permission
 # New drafts only. A revision keeps the workflow rule its quotation already records, unless
-# it is an explicit one-way adoption of this rule (quote_versions, Day 54B R8).
+# it is an explicit one-way adoption of this rule (quote_versions, integrity R8).
 WORKFLOW_RULE_VERSION = "workflow-v1.2"
 AUDIT_OPERATION = "quote_draft.create"
 REQUEST_VERSION = "create-quote-draft-v1"
@@ -86,7 +86,7 @@ REQUEST_VERSION = "create-quote-draft-v1"
 CURRENT_VERSION_FK = "business.fk_quotes_quote_id_current_version_quote_versions"
 QUOTE_PER_RFQ = "uq_quotes_rfq_id"
 # The declared name (op.f, 69 characters) exceeds PostgreSQL's 63, so SQLAlchemy stored it
-# truncated with an md5 suffix (Day 5 verification evidence); 23505 errors name this one.
+# truncated with an md5 suffix (database verification verification evidence); 23505 errors name this one.
 RECEIPT_KEY = "uq_idempotency_records_actor_id_customer_id_operation_i_fd7c"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -99,18 +99,18 @@ Reason = Literal[
     "evaluation_changed",
     "invalid_evaluation",
     "idempotency_key_conflict",
-    # Day 52 revisions (rfq_copilot.quote_versions)
+    # versioning revisions (rfq_copilot.quote_versions)
     "stale_version",
     "revision_not_allowed",
     "rule_version_changed",
     "provenance_missing",
     "unchanged",
-    # Day 53 approval-policy assessments (rfq_copilot.quote_approval_policy)
+    # approval policy approval-policy assessments (rfq_copilot.quote_approval_policy)
     "not_assessable",
     "version_inconsistent",
-    # Day 54B K3: a stored calculation record under this key holds other content
+    # integrity K3: a stored calculation record under this key holds other content
     "calculation_record_mismatch",
-    # Day 54D human decisions (rfq_copilot.quote_approval)
+    # integrity human decisions (rfq_copilot.quote_approval)
     "not_submittable",
     "not_pending",
     "separation_of_duties",
@@ -118,7 +118,7 @@ Reason = Literal[
     "review_unverified",
     "quote_expired",
     "not_approvable",
-    # Day 55 lifecycle (rfq_copilot.quote_approval)
+    # human decision lifecycle (rfq_copilot.quote_approval)
     "not_releasable",
     "resubmission_blocked",
 ]

@@ -1,4 +1,4 @@
-"""Day 4 source projections, historical joins and metadata-derived insertion order."""
+"""schema baseline source projections, historical joins and metadata-derived insertion order."""
 
 import hashlib
 from dataclasses import dataclass, field
@@ -35,8 +35,8 @@ EMPTY_TABLES = frozenset(
         "audit_events",
         "workflow_runs",
         "user_customer_bindings",  # TD-012: provisioned explicitly, never seeded
-        "rfq_assignments",  # Phase 3.5 (20261111_02): provisioned explicitly, never seeded
-        "token_revocations",  # Phase 3.5 (20261111_03): operator-written, never seeded
+        "rfq_assignments",  # authorization hardening (20261111_02): provisioned explicitly, never seeded
+        "token_revocations",  # authorization hardening (20261111_03): operator-written, never seeded
     }
 )
 DERIVED_COUNTS = {
@@ -183,7 +183,7 @@ def build_plan(bundle: SourceBundle, snapshot_dir: Path) -> SeedPlan:
         "handoff contract",
         "version mismatch",
     )
-    # The Day 4 business_constraints version label belongs to the handoff schema.
+    # The schema baseline business_constraints version label belongs to the handoff schema.
     require(
         "version" not in bundle.json("contracts/business_constraints.json"),
         "business constraints",

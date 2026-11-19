@@ -71,7 +71,7 @@ class McpAuthSettings(BaseModel):
         return cls(rest_audience=environ.get("RFQ_API_JWT_AUDIENCE"), **values)
 
     def auth_settings(self) -> AuthSettings:
-        # Day 30: one shared protected resource. The audience check in ``verify_token``
+        # MCP verification: one shared protected resource. The audience check in ``verify_token``
         # (strict ``aud`` == the MCP audience) is the binding, so the SDK's resource check
         # is off, as the SDK prescribes for verifiers that validate the audience themselves.
         # The previous True compared a value this verifier copied from its own settings, so

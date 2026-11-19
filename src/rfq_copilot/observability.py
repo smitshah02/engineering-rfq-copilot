@@ -1,4 +1,4 @@
-"""Opt-in, privacy-safe Supervisor telemetry (Day 50, L07).
+"""Opt-in, privacy-safe Supervisor telemetry (telemetry, L07).
 
     emit(sink, "stage_finished", run=..., stage="manufacturing", status="feasible", ...)
 

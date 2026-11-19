@@ -1,6 +1,6 @@
-"""Approved Day 4 identity mappings, plus approved later additions; metadata only.
+"""Approved schema baseline identity mappings, plus approved later additions; metadata only.
 
-TD-012 (20261110_01): user_customer_bindings. Phase 3.5 (20261111_02/03/06):
+TD-012 (20261110_01): user_customer_bindings. authorization hardening (20261111_02/03/06):
 rfq_assignments, token_revocations and the identity_operator role value.
 """
 
@@ -33,12 +33,12 @@ if TYPE_CHECKING:
 
 
 class Role(Base):
-    """Approved Day 4 table roles; database constraints are applied by later migrations."""
+    """Approved schema baseline table roles; database constraints are applied by later migrations."""
 
     __tablename__ = "roles"
     __table_args__ = (
         CheckConstraint(
-            # identity_operator: approved Phase 3.5 D3 (20261111_06); the role row and its two
+            # identity_operator: approved authorization hardening D3 (20261111_06); the role row and its two
             # operator permissions come only from the pinned rbac-policy-v2 overlay.
             # customer: approved Milestone 2 Step 1 (20261117_01); row and grants only from
             # the pinned rbac-policy-v3 overlay. rfq_workflow_agent: Checkpoint A2 internal
@@ -85,7 +85,7 @@ class Role(Base):
 
 
 class Permission(Base):
-    """Approved Day 4 table permissions; database constraints are applied by later migrations."""
+    """Approved schema baseline table permissions; database constraints are applied by later migrations."""
 
     __tablename__ = "permissions"
     __table_args__ = (
@@ -108,7 +108,7 @@ class Permission(Base):
 
 
 class RolePermission(Base):
-    """Approved Day 4 table role_permissions; database constraints are applied by later migrations."""
+    """Approved schema baseline table role_permissions; database constraints are applied by later migrations."""
 
     __tablename__ = "role_permissions"
     __table_args__ = (
@@ -156,7 +156,7 @@ class RolePermission(Base):
 
 
 class User(Base):
-    """Approved Day 4 table users; database constraints are applied by later migrations."""
+    """Approved schema baseline table users; database constraints are applied by later migrations."""
 
     __tablename__ = "users"
     __table_args__ = (
@@ -391,7 +391,7 @@ class UserCustomerBinding(Base):
 
 
 class RfqAssignment(Base):
-    """Approved Phase 3.5 table (revision 20261111_02): per-RFQ staff assignment.
+    """Approved authorization hardening table (revision 20261111_02): per-RFQ staff assignment.
 
     Narrows customer-scoped RFQ reads when RFQ_API_RFQ_ASSIGNMENTS=required; never widens
     them. Rows are provisioned explicitly (nothing is backfilled or inferred). Active
@@ -454,7 +454,7 @@ class RfqAssignment(Base):
 
 
 class TokenRevocation(Base):
-    """Approved Phase 3.5 table (revision 20261111_03): relying-party token revocation.
+    """Approved authorization hardening table (revision 20261111_03): relying-party token revocation.
 
     One row revokes either one token (SHA-256 of the exact token string; the token is
     never stored) or every token of a user issued before ``not_before``. Written only by

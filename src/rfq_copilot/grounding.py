@@ -1,4 +1,4 @@
-"""Deterministic answers and argument provenance for the agent (Day 35, Phase 5 final).
+"""Deterministic answers and argument provenance for the agent (grounding, conversational graph final).
 
 Pure functions, no model, no I/O.
 

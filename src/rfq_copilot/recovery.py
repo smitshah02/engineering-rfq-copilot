@@ -1,4 +1,4 @@
-"""Supervisor checkpointing and recovery (Day 49): pause at a stage boundary, continue the same
+"""Supervisor checkpointing and recovery (recovery): pause at a stage boundary, continue the same
 attempt from its original evidence, restart as a new attempt, retrieve, cancel, refuse.
 
     SupervisorRecovery.start(context, pause_before=stage) -> RecoveryResult(paused, id, gen)
@@ -31,7 +31,7 @@ attempt from its original evidence, restart as a new attempt, retrieve, cancel, 
 - Retention: paused custody (internal evidence) is released on access, insertion, ``prune()``
   or ``close()``, not by a timer at the exact TTL. A running entry is never pruned while its
   task may still run; one whose task ended abruptly or whose loop is closed is settled
-  (``_reap``, D50-01) and dropped. A pending task on a loop that is stopped but never closed
+  (``_reap``, telemetry control) and dropped. A pending task on a loop that is stopped but never closed
   cannot be told apart from a slow one and keeps its slot (process-local boundary).
 - Retries: none automatic. A restart is the only re-execution, explicit, a new attempt, at
   most ``MAX_RESTARTS`` per lineage. Cancelled, failed, expired or superseded attempts never
@@ -165,7 +165,7 @@ class RecoveryResult(BaseModel):
         return self
 
     def customer_outcome(self):
-        """Day 48's customer projection of a finished attempt, or None (nothing concluded)."""
+        """escalation's customer projection of a finished attempt, or None (nothing concluded)."""
         return self.result.customer_outcome() if self.result is not None else None
 
 
@@ -179,7 +179,7 @@ class _Entry:
     cancel_requested: bool = False  # set under the lock; a later result is never published
 
 
-# Approved recovery telemetry vocabularies (pre-Phase 8, Task 2). ``RecoveryResult.code`` is a
+# Approved recovery telemetry vocabularies (pre-recovery hardening, Task 2). ``RecoveryResult.code`` is a
 # free ``str``: it carries refusal codes, Supervisor admission codes, lifecycle codes and, for a
 # failed run, the run's error or route reason, so all of those vocabularies are admitted.
 _CODES = frozenset(get_args(Refusal)) | sv._TELEMETRY_CODES["error"] | sv._TELEMETRY_CODES["reason"]
@@ -196,7 +196,7 @@ def _refused(operation: Operation, code: str, recovery_id=None) -> RecoveryResul
 
 
 def _reported(method):
-    """Day 50: report each operation's RecoveryResult as one ``recovery`` telemetry event
+    """telemetry: report each operation's RecoveryResult as one ``recovery`` telemetry event
     (operation, outcome, fixed code, generation, attempt id), after the transition is made.
     Never the recovery id (a resumable handle), owner hash, identity or result contents."""
     is_async = inspect.iscoroutinefunction(method)
@@ -266,7 +266,7 @@ class SupervisorRecovery:
         RecoveryRecord.model_validate(entry.record.model_dump())  # never store an invalid one
 
     def _reap(self, entry: _Entry) -> bool:
-        """D50-01: settle a ``running`` entry whose task can never run again: the task is
+        """telemetry control: settle a ``running`` entry whose task can never run again: the task is
         done without having published (it ended abruptly), or its event loop is closed. Only
         then is custody cleared, because nothing can still use it. A pending task on an open
         loop is never touched, however long it runs (its own deadline bounds it). The entry
@@ -286,7 +286,7 @@ class SupervisorRecovery:
         return True
 
     def _request_cancel(self, entry: _Entry) -> bool:
-        """D50-02: record the cancellation of a running entry and deliver it to the task's
+        """telemetry control: record the cancellation of a running entry and deliver it to the task's
         own loop. A closed loop cannot take the callback (``RuntimeError``): the intent stays
         recorded and the entry is settled by ``_reap``, since that task can never run again.
         Returns True when the entry settled here; False means requested, not yet settled.
@@ -358,7 +358,9 @@ class SupervisorRecovery:
             raise
         except Exception:
             result = None
-        except BaseException:  # D50-01: abrupt teardown (GeneratorExit, ...): never left running
+        except (
+            BaseException
+        ):  # telemetry control: abrupt teardown (GeneratorExit, ...): never left running
             with self._lock:
                 entry.task = entry.loop = None
                 if entry.record.lifecycle == "running":
@@ -485,7 +487,7 @@ class SupervisorRecovery:
             if (new_identity.customer_id, new_identity.rfq_id) != (rec.identity.customer_id, rec.identity.rfq_id):  # fmt: skip
                 return _refused("restart", "identity_mismatch", recovery_id)
             entry = self._new(owner, admitted, context, restarts=rec.restarts + 1)
-            entry.custody.previous_attempt = rec.attempt_id  # telemetry lineage only (Day 50)
+            entry.custody.previous_attempt = rec.attempt_id  # telemetry lineage only (telemetry)
             if not self._insert(entry):
                 return _refused("restart", "recovery_capacity", recovery_id)
             self._set(old, "superseded", code="superseded")
@@ -517,7 +519,7 @@ class SupervisorRecovery:
         proof the task stopped; cancellation is cooperative). Once requested, the attempt can
         only end ``cancelled``: a late result or pause is discarded and custody is cleared
         when the task settles. Safe from any thread: the task is cancelled on its own loop.
-        If that loop is already closed (D50-02) the task can never run again, so the attempt
+        If that loop is already closed (telemetry control) the task can never run again, so the attempt
         settles ``cancelled`` at once (``code=None``); nothing is raised."""
         try:
             owner = _owner(principal)

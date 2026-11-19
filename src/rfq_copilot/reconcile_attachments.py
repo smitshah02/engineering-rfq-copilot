@@ -37,7 +37,7 @@ Safety:
   document contents. ``--list-missing`` additionally lists the server-generated
   attachment ids whose row names a file that is not in storage (no filenames, customers
   or contents). Those rows are never changed here: remediation is a manual, audited
-  operator decision (see the runbook in phase_3_technical_debt_resolution.md).
+  operator decision (see the runbook in backend_technical_debt_resolution.md).
 """
 
 import argparse

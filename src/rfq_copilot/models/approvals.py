@@ -1,4 +1,4 @@
-"""Approved Day 4 approvals mappings; metadata definitions only."""
+"""Approved schema baseline approvals mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class ApprovalRequest(Base):
-    """Approved Day 4 table approval_requests; database constraints are applied by later migrations."""
+    """Approved schema baseline table approval_requests; database constraints are applied by later migrations."""
 
     __tablename__ = "approval_requests"
     __table_args__ = (
@@ -183,7 +183,7 @@ class ApprovalRequest(Base):
 
 
 class ApprovalHistory(Base):
-    """Approved Day 4 table approval_history; database constraints are applied by later migrations."""
+    """Approved schema baseline table approval_history; database constraints are applied by later migrations."""
 
     __tablename__ = "approval_history"
     __table_args__ = (

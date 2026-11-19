@@ -16,7 +16,7 @@
    ``business.role_permissions`` rows with ``allowed = true`` for ``users.role``. Nothing
    is cached, so a grant, role, binding or ``active`` change applies to the next request.
 
-Authorization (Day 21): every protected route depends on ``require_permission(name)``,
+Authorization (authorization): every protected route depends on ``require_permission(name)``,
 which runs ``get_principal`` and answers 403 unless the permission was granted. It never
 compares role names. Customer scoping stays in each route's queries (cross-customer: 404).
 One scope rule (Milestone 2 Step 1) reads ``users.role``: a ``customer`` account is exempt
@@ -203,7 +203,7 @@ CUSTOMER_VIEW_QUOTE = "customer_view_quote"
 CUSTOMER_ATTACH_RFQ_DOCUMENT = "customer_attach_rfq_document"
 
 # The one table of route operation -> required permission, per policy version. v1 is the
-# approved Day 21 matrix; v2 activates only with RFQ_API_PERMISSION_POLICY=v2.
+# approved authorization matrix; v2 activates only with RFQ_API_PERMISSION_POLICY=v2.
 ROUTE_PERMISSIONS: dict[str, dict[str, str]] = {
     "v1": {
         "customer_profile": VIEW_CUSTOMER,

@@ -1,4 +1,4 @@
-"""Approved Day 4 quotations mappings; metadata definitions only."""
+"""Approved schema baseline quotations mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ ischema_names.setdefault("xid8", Xid8)
 
 
 class PricingCalculation(Base):
-    """Approved Day 4 table pricing_calculations, re-keyed by K3 (20261116_01).
+    """Approved schema baseline table pricing_calculations, re-keyed by K3 (20261116_01).
 
     One persisted calculation record per (RFQ, RFQ source digest, calculation content):
     ``calculation_record_id`` is the record's identity, ``calculation_id`` the unchanged
@@ -198,7 +198,7 @@ class PricingCalculation(Base):
 
 
 class Quote(Base):
-    """Approved Day 4 table quotes; database constraints are applied by later migrations."""
+    """Approved schema baseline table quotes; database constraints are applied by later migrations."""
 
     __tablename__ = "quotes"
     __table_args__ = (
@@ -428,7 +428,7 @@ class Quote(Base):
 
 
 class QuoteVersion(Base):
-    """Approved Day 4 table quote_versions; database constraints are applied by later migrations."""
+    """Approved schema baseline table quote_versions; database constraints are applied by later migrations."""
 
     __tablename__ = "quote_versions"
     __table_args__ = (
@@ -743,7 +743,7 @@ class QuoteVersion(Base):
 
 
 class QuoteLineItem(Base):
-    """Approved Day 4 table quote_line_items; database constraints are applied by later migrations."""
+    """Approved schema baseline table quote_line_items; database constraints are applied by later migrations."""
 
     __tablename__ = "quote_line_items"
     __table_args__ = (

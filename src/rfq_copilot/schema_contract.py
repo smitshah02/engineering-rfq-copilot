@@ -6,34 +6,33 @@ active contract from here.
 
 - ``CURRENT`` (Checkpoint A4, written 2026-11-18): head ``20261118_01``, WORKFLOW plus the
   quotation-drafting state on ``workflow_runs`` (``drafting``, ``draft_attempt_count``, the
-  ``quote_id`` link, three CHECKs, two indexes). Same overlays as WORKFLOW. Its digest is
-  UNMEASURED (fails closed) until measured on the guarded test database (contract-pins test).
+  ``quote_id`` link, three CHECKs, two indexes). Same overlays as WORKFLOW. Its measured digest and catalog counts are pinned below and verified by the guarded test lifecycle.
 - ``WORKFLOW`` (Checkpoints A1/A2, 2026-11-17): head ``20261117_02``, the workflow queue
   columns, CHECKs and active-run index and the ``rfq_workflow_agent`` role value; accepts
   ``rbac-policy-v2``, ``-v3`` and ``-v4``. Measured; kept as a record.
 - ``CUSTOMER`` (Milestone 2 Step 1): head ``20261117_01``, K5 plus the ``customer`` role
   value; accepts ``rbac-policy-v2`` and ``rbac-policy-v3``. Kept as a record.
-- ``K5`` (Day 55, measured 2026-11-17): head ``20261116_04`` (decision-authority
+- ``K5`` (human decision, measured 2026-11-17): head ``20261116_04`` (decision-authority
   guards: decisions only by the ``rfq_quote_decision`` group, actor entitlement and
   separation, expiry, commit-time history/request binding, rejected-quote resubmission).
   Its two constraint triggers change the shape digest. Kept as a record; its guards remain
   the active guard allowlist.
-- ``K4`` (Day 54D, kept as a record): head ``20261116_03`` (human lifecycle
+- ``K4`` (integrity, kept as a record): head ``20261116_03`` (human lifecycle
   guards: submit, approve, reject, release) on top of K3. K4 adds no table, column,
   constraint or index, so K3's measured shape digest and catalog counts hold by
   construction (the migration lifecycle test re-measures them). Guards: K2, K3 and K4, each
   file pinned independently in ``GUARD_FILE_SHA256``; a later guard revision may drop an
   earlier trigger (``DROPPED_TRIGGERS``). NEXT's digest is still unmeasured (fails closed).
-- ``K3`` (Day 54B, measured 2026-11-16): head ``20261116_01``, kept as a record.
-- ``K2`` (Day 54A, measured 2026-11-16): head ``20261115_01``, kept as a record.
-- ``ACTIVATED_06`` (active 2026-11-11 to Day 54A): head ``20261111_06`` (rfq_assignments,
+- ``K3`` (integrity, measured 2026-11-16): head ``20261116_01``, kept as a record.
+- ``K2`` (integrity, measured 2026-11-16): head ``20261115_01``, kept as a record.
+- ``ACTIVATED_06`` (active 2026-11-11 to integrity): head ``20261111_06`` (rfq_assignments,
   token_revocations, the upload-idempotency operation, the identity_operator role value),
   the ORM models (36 tables), and the SHA-256-pinned ``rbac-policy-v2`` overlay
   (``seeding/policy.py``) as the only accepted post-seed permission data. Kept as a record.
-- ``PREVIOUS``: the contract before the Phase 3.5 activation (head ``20261110_01``), kept as
+- ``PREVIOUS``: the contract before the authorization hardening activation (head ``20261110_01``), kept as
   a record and for tests; it accepts no overlay.
 - ``NEXT``: the deferred multi-customer revision ``20261111_05`` (original parent
-  ``20261111_06``) joined with K3 by the schema-free merge ``20261116_02``. Not active.
+  ``20261111_06``) joined with CURRENT by the schema-free merge ``20261116_02``. Not active.
 
 A database whose revision differs from the active contract's reports "Alembic revision is
 not current" until its upgrade is separately authorized and applied.
@@ -200,8 +199,8 @@ CURRENT = SchemaContract(
 )
 
 # Deferred 20261111_05 (multi-customer staff), integrated and verified by
-# tests/test_multi_customer_lifecycle.py but NOT active. Day 54B restored its original
-# parent 20261111_06 and joins it with K3 through the schema-free merge 20261116_02
+# tests/test_multi_customer_lifecycle.py but NOT active. integrity restored its original
+# parent 20261111_06 and joins it with CURRENT through the schema-free merge 20261116_02
 # (alembic/proposed/deferred). Activating it means moving both revisions into
 # alembic/versions/, dropping the index from the UserCustomerBinding model, setting
 # _ACTIVE = NEXT (with version_locations=(VERSIONS,)) and updating the schema tests.

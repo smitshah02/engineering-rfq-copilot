@@ -48,7 +48,7 @@ async def material_page(session: Any, query: MaterialListQuery) -> MaterialPage:
     )
 
 
-# Day 29: mounted only when create_app(mcp=...) has a trusted credential provider.
+# delegation: mounted only when create_app(mcp=...) has a trusted credential provider.
 mcp_router = APIRouter(
     prefix="/materials", tags=["materials"], responses=VALIDATION_ERROR_RESPONSES
 )

@@ -1,4 +1,4 @@
-"""Quotation and Review Agent A5 (Day 41): a verified, non-persisted quotation draft and the
+"""Quotation and Review Agent A5 (quotation evidence): a verified, non-persisted quotation draft and the
 review it needs under the pinned approval policy. Never an approval, a release or a record.
 
     ManufacturingAssessment (A2) + SupplyAssessment (A3) + PricingAssessment (A4)
@@ -132,7 +132,7 @@ class CustomerQuotationDraft(BaseModel):
     estimated_ready_date: date | None  # an estimate, not a delivery commitment
     requested_delivery_date: date | None
     delivery_feasible: bool | None
-    # D41-02: True while anything beyond ordinary human approval and release is open: a review
+    # quotation evidence control: True while anything beyond ordinary human approval and release is open: a review
     # reason, a mandatory manager review, or a policy check A5 could not evaluate (customer
     # account status and credit always are, today). False means only that approval by the
     # approver role remains; it is never approval itself (see notice).
@@ -249,7 +249,7 @@ def _inconsistent(q: QuotationOutput, a2: ManufacturingAssessment, a3, a4) -> bo
         return True
     if [line.part_id for line in q.lines] != [p.part_id for p in a2.parts]:
         return True
-    # D41-01: a line's procurement delay is the lead-time service's procurement_business_days
+    # quotation evidence control: a line's procurement delay is the lead-time service's procurement_business_days
     # of the stock line covering that part (assemble_quotation keys it by material and
     # thickness, so parts sharing stock share it); the RFQ delay is their maximum (plan_start).
     # A3's per-part stock line, re-verified by the A4 replay, is the authority. The service

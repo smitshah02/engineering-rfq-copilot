@@ -1,4 +1,4 @@
-"""Approved Day 4 reliability mappings; metadata definitions only."""
+"""Approved schema baseline reliability mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 class IdempotencyRecord(Base):
-    """Approved Day 4 table idempotency_records; database constraints are applied by later migrations."""
+    """Approved schema baseline table idempotency_records; database constraints are applied by later migrations."""
 
     __tablename__ = "idempotency_records"
     __table_args__ = (
@@ -51,7 +51,7 @@ class IdempotencyRecord(Base):
             match="SIMPLE",
         ),
         CheckConstraint(
-            # attach_rfq_document: approved Phase 3.5 upload idempotency (20261111_04).
+            # attach_rfq_document: approved authorization hardening upload idempotency (20261111_04).
             "operation IN ('create_rfq','create_quote_draft','request_approval','approve_quote','reject_quote','release_quote','edit_quote_draft','attach_rfq_document')",
             name="rule_01",
         ),
@@ -104,7 +104,7 @@ class IdempotencyRecord(Base):
 
 
 class AuditEvent(Base):
-    """Approved Day 4 table audit_events; database constraints are applied by later migrations."""
+    """Approved schema baseline table audit_events; database constraints are applied by later migrations."""
 
     __tablename__ = "audit_events"
     __table_args__ = (
@@ -249,7 +249,7 @@ class AuditEvent(Base):
 
 
 class WorkflowRun(Base):
-    """Approved Day 4 table workflow_runs; database constraints are applied by later migrations."""
+    """Approved schema baseline table workflow_runs; database constraints are applied by later migrations."""
 
     __tablename__ = "workflow_runs"
     __table_args__ = (

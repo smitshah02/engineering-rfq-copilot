@@ -1,4 +1,4 @@
-"""Approved Day 4 supply mappings; metadata definitions only."""
+"""Approved schema baseline supply mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 class MaterialInventory(Base):
-    """Approved Day 4 table material_inventory; database constraints are applied by later migrations."""
+    """Approved schema baseline table material_inventory; database constraints are applied by later migrations."""
 
     __tablename__ = "material_inventory"
     __table_args__ = (
@@ -163,7 +163,7 @@ class MaterialInventory(Base):
 
 
 class ProcurementRecord(Base):
-    """Approved Day 4 table procurement_records; database constraints are applied by later migrations."""
+    """Approved schema baseline table procurement_records; database constraints are applied by later migrations."""
 
     __tablename__ = "procurement_records"
     __table_args__ = (
@@ -245,7 +245,7 @@ class ProcurementRecord(Base):
 
 
 class ProductionCapacity(Base):
-    """Approved Day 4 table production_capacity; since 20261109_01 a week is unique per snapshot."""
+    """Approved schema baseline table production_capacity; since 20261109_01 a week is unique per snapshot."""
 
     __tablename__ = "production_capacity"
     __table_args__ = (

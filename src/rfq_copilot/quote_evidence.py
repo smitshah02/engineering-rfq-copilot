@@ -1,4 +1,4 @@
-"""K3 (Day 54B): deterministic version evidence, calculation records and quotation validity.
+"""K3 (integrity): deterministic version evidence, calculation records and quotation validity.
 
     pinned rules + trusted evaluation + stored RFQ lines + database time
         -> calculation record (insert or verified reuse) + version evidence + expiry_date

@@ -1,4 +1,4 @@
-"""Pricing Agent A4 (Day 40): evidence-backed manufacturing cost and selling price for the
+"""Pricing Agent A4 (pricing evidence): evidence-backed manufacturing cost and selling price for the
 parts A2 found manufacturable and A3 scheduled. Not a quote, not approval, not release.
 
     ManufacturingAssessment (A2) + SupplyAssessment (A3, available | constrained)

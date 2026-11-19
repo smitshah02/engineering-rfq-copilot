@@ -1,4 +1,4 @@
-"""Supply MCP server (Day 26): inventory, capacity and lead time. Read-only, in-process.
+"""Supply MCP server (supply and pricing tool): inventory, capacity and lead time. Read-only, in-process.
 
 Agents never supply upstream results. Each call recomputes what its service needs inside
 ONE snapshot session, using the existing orchestration: ``select_snapshots`` (trusted

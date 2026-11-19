@@ -1,1 +1,1 @@
-"""MCP layer (Phase 4). Day 24: tool contracts only; servers arrive on Days 25-26."""
+"""MCP layer (MCP). tool contract: tool contracts only; servers arrive on manufacturing tool."""

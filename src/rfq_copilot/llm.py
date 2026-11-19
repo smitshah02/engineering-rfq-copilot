@@ -1,4 +1,4 @@
-"""LLM foundation (Day 31): provider-neutral model access for the future LangGraph agents.
+"""LLM foundation (model interface): provider-neutral model access for the future LangGraph agents.
 
 No provider is selected and nothing here executes a tool.
 
@@ -11,7 +11,7 @@ No provider is selected and nothing here executes a tool.
   refused.
 - A model tool call is a *proposal*. ``inspect_tool_calls`` validates it against the MCP
   contract input model (``extra="forbid"``, so no identity, customer, role or permission
-  field can pass) and returns it unexecuted. Execution (Day 34) goes through
+  field can pass) and returns it unexecuted. Execution (tool execution) goes through
   ``mcp.client`` with the authenticated runtime credential, which re-checks everything.
 - Planning tools (contract inputs with ``parts``) are shown to the model as a flat view: the
   contract's own fields plus one part's fields at top level, no ``null`` branches, no nested

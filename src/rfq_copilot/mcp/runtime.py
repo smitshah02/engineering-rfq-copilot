@@ -6,7 +6,7 @@
 - ``to_parts``: the only place argument data becomes ``entities.Part``; its ValueErrors
   are input errors (INVALID_INPUT). Anywhere else a ValueError is a defect (INTERNAL).
 - ``build_server``: registers one logical server's tools from ``contracts.TOOLS``, each
-  wrapped by ``_authorized`` (the single enforcement point, Day 27): the request-scoped
+  wrapped by ``_authorized`` (the single enforcement point, MCP authentication): the request-scoped
   ``McpPrincipal`` from the SDK auth context must exist and hold the tool's v2 permission
   before the handler runs; otherwise UNAUTHENTICATED / PERMISSION_DENIED and no business
   snapshot is opened. An in-memory ``mcp.Client`` without HTTP bearer auth therefore gets
@@ -132,7 +132,7 @@ def _authorized(contract: ToolContract, handler: Handler) -> Callable:
 def build_server(
     server: str, handlers: Mapping[str, Handler], verifier: McpTokenVerifier | None = None
 ) -> MCPServer:
-    """``verifier`` arms the SDK HTTP bearer layer (Day 28 host). Without it the server
+    """``verifier`` arms the SDK HTTP bearer layer (gateway host). Without it the server
     still fails closed: no request can carry an ``McpPrincipal``."""
     contracts = [tool for tool in TOOLS if tool.server == server]
     if {tool.name for tool in contracts} != set(handlers):

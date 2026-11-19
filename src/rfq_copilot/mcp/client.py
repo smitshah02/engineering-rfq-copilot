@@ -1,4 +1,4 @@
-"""MCP client for the backend (Day 29): the ten approved tools on the Day 28 host only.
+"""MCP client for the backend (delegation): the ten approved tools on the gateway host only.
 
 - Destinations come from ``contracts.TOOLS`` (tool -> server) and the fixed ``SERVER_PATHS``
   on one configured base URL. Callers never supply a URL or an unknown tool name.

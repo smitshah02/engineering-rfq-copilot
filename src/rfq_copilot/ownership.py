@@ -1,7 +1,7 @@
-"""Principal ownership (moved verbatim from the Phase 5 conversation graph, Day 49 D49-03).
+"""Principal ownership (moved verbatim from the conversational graph conversation graph, recovery recovery control).
 
-One implementation of the pseudonymous owner key shared by Phase 5 conversation threads and
-Day 49 Supervisor recovery, so neither application module needs the raw LangGraph module.
+One implementation of the pseudonymous owner key shared by conversational graph conversation threads and
+recovery Supervisor recovery, so neither application module needs the raw LangGraph module.
 The conversation graph re-exports both names unchanged (same objects).
 """
 

@@ -1,13 +1,13 @@
-"""Manufacturing MCP server (Day 25): four read-only catalog and feasibility tools.
+"""Manufacturing MCP server (manufacturing tool): four read-only catalog and feasibility tools.
 
 Every tool requires a verified ``McpPrincipal`` holding ``view_catalog`` (enforced once in
-``runtime.build_server``). No listener is created here; the Day 28 host passes the
+``runtime.build_server``). No listener is created here; the gateway host passes the
 ``McpTokenVerifier`` that arms SDK bearer authentication.
 
 Each call opens one session from ``snapshot`` (production: ``Database.snapshot_session``,
 REPEATABLE READ + READ ONLY), loads the server-pinned manufacturing rules through the
 sha256-checked ``get_rule_version``, calls the existing service once, and maps its frozen
-result into the Day 24 output model. Business rejections are normal results.
+result into the tool contract output model. Business rejections are normal results.
 """
 
 from mcp.server import MCPServer

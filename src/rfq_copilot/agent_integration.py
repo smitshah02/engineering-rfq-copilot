@@ -1,4 +1,4 @@
-"""Specialized-agent integration (Day 43): one RFQ evaluation through A1 -> A5 with fixed,
+"""Specialized-agent integration (specialist integration): one RFQ evaluation through A1 -> A5 with fixed,
 observable handoffs. Not a Supervisor, not a planner, not approval or release.
 
     customer text + trusted source_id / rfq_id + intake graph + trusted ToolExecutor

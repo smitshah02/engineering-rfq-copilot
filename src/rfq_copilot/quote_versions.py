@@ -1,4 +1,4 @@
-"""Day 52: a new immutable version of an existing quotation, for a verified actor.
+"""versioning: a new immutable version of an existing quotation, for a verified actor.
 
     Principal + quote id + expected current version + trusted evaluation inputs
         -> revise_quote -> quote_versions (n + 1) / quote_line_items
@@ -14,7 +14,7 @@ versions the revision is refused (``rule_version_changed``): no policy says when
 may move to new rules. Agent or Supervisor output is never read.
 
 Authority: the dataset permission ``edit_quote_draft`` (sales_representative, estimator),
-re-read from the database as in Day 51; ``create_quote_draft`` is not used. Receipts use
+re-read from the database as in draft persistence; ``create_quote_draft`` is not used. Receipts use
 the approved idempotency operation ``edit_quote_draft`` (``idempotency_records`` rule_01).
 
 State: only ``draft`` and ``revised_draft`` quotations are revised, and only while no
@@ -25,7 +25,7 @@ also lists revised_draft -> revised_draft. The new version records that same rul
 ``workflow-v1.0`` quotation is never moved to ``workflow-v1.1`` (no adoption mechanism is
 approved). A missing recorded rule is ``provenance_missing``; one that is not a manifest
 workflow entry raises ``RuleIntegrityError``. The other pins must equal the recorded ones.
-Day 55: a ``rejected`` quotation is revised too, where its recorded workflow rule lists
+human decision: a ``rejected`` quotation is revised too, where its recorded workflow rule lists
 ``rejected -> revised_draft`` (workflow-v1.0 to v1.2 do; K4 ``k4_quotes_guard`` allows it).
 Its rejected request and history stay as they are; K5 clears the quote's ``submitted_by``
 and ``rejection_reason`` so the new version can be resubmitted. Approved, pending,
@@ -44,7 +44,7 @@ content, lines and provenance stay untouched), the new version and its lines are
 then ``quotes.current_version`` moves to the new version, which already exists. The
 service never commits and never logs.
 
-Day 54B (K3): a revision of a ``workflow-v1.2`` quotation is ``complete``: it inserts or
+integrity (K3): a revision of a ``workflow-v1.2`` quotation is ``complete``: it inserts or
 reuses (verified) the RFQ's calculation record, writes its own evidence and its own
 validity window (from its own database creation time), and forces the deferred
 line-completeness triggers IMMEDIATE inside the savepoint. A revision of a v1.0/v1.1
@@ -85,12 +85,12 @@ from rfq_copilot.repositories.rule_manifest import TRUSTED_RULES
 
 OPERATION = "edit_quote_draft"  # idempotency_records rule_01 and the dataset permission
 AUDIT_OPERATION = "quote_version.create"
-ADOPT_OPERATION = "quote_version.adopt_workflow"  # Day 54B R8; audit_events.operation is text
+ADOPT_OPERATION = "quote_version.adopt_workflow"  # integrity R8; audit_events.operation is text
 ADOPTABLE_FROM = frozenset({"workflow-v1.1"})  # never v1.0 or an unrecorded rule
 # Success events that record a version's creation (draft, revision, adoption).
 CREATION_OPERATIONS = (drafts.AUDIT_OPERATION, AUDIT_OPERATION, ADOPT_OPERATION)
 REQUEST_VERSION = "revise-quote-v1"
-REVISABLE = frozenset({"draft", "revised_draft", "rejected"})  # rejected: Day 55
+REVISABLE = frozenset({"draft", "revised_draft", "rejected"})  # rejected: human decision
 REVISED = "revised_draft"
 # Revision 20261108_01: a lost race on the version number, its derived primary key
 # (``{quote_id}-V{n}``) or the current flag.
@@ -285,7 +285,7 @@ async def revise_quote(
     )
     if versions[:3] != recorded[:3] or (target == workflow_version and versions != recorded):
         raise DraftRefused("rule_version_changed")
-    # Also proves a Day 51+ quotation: a seeded legacy one has no creation event.
+    # Also proves a draft persistence+ quotation: a seeded legacy one has no creation event.
     previous = await _recorded_fingerprint(session, quote_id, expected_version)
     if adopt_workflow_rule is None and previous == evaluation.evaluation_fingerprint:
         raise DraftRefused("unchanged")  # adoption alone may keep the same evaluation

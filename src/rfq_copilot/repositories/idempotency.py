@@ -1,5 +1,5 @@
 """Idempotency receipts in ``business.idempotency_records``: uploads (revision 20261111_04)
-and quote drafts (``create_quote_draft``, approved since the initial schema, Day 51).
+and quote drafts (``create_quote_draft``, approved since the initial schema, draft persistence).
 
 Receipts are scoped by (actor, customer, operation, key), the table's unique constraint,
 so one customer's key never replays another's result. Callers own sessions and commits;

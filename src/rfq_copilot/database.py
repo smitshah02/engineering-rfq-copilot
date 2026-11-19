@@ -37,7 +37,7 @@ class PrivilegedRuntimeRole(DatabaseError):
 
 
 # The only columns the runtime role may UPDATE (K2/K4/K5, docs/database/k2_runtime_roles.sql):
-# the Day 52 revision pointer, the superseded-version flag, submission (K4) and the K5
+# the versioning revision pointer, the superseded-version flag, submission (K4) and the K5
 # clearing of a rejection on revision. Decisions are not here (K5: DECISION_UPDATABLE).
 RUNTIME_UPDATABLE = frozenset(
     {
@@ -49,7 +49,7 @@ RUNTIME_UPDATABLE = frozenset(
         "quotes.rejection_reason",
     }
 )
-# K5 (Day 55): the NOLOGIN group whose members alone may record human decisions
+# K5 (human decision): the NOLOGIN group whose members alone may record human decisions
 # (docs/database/k5_decision_roles.sql), and what it may write. Bound by the k5_* triggers.
 DECISION_GROUP = "rfq_quote_decision"
 DECISION_UPDATABLE = frozenset(
@@ -82,7 +82,7 @@ RUNTIME_INSERTABLE = frozenset(
         "quote_versions",
         "quote_line_items",
         "pricing_calculations",
-        # K4 (Day 54D): one pending request per version and its append-only history.
+        # K4 (integrity): one pending request per version and its append-only history.
         "approval_requests",
         "approval_history",
         # Milestone 2 Step 2: POST /api/v1/rfqs (rfq_submission).

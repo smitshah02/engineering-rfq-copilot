@@ -1,4 +1,4 @@
-"""Approved Day 4 customers mappings; metadata definitions only."""
+"""Approved schema baseline customers mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class Customer(Base):
-    """Approved Day 4 table customers; database constraints are applied by later migrations."""
+    """Approved schema baseline table customers; database constraints are applied by later migrations."""
 
     __tablename__ = "customers"
     __table_args__ = (
@@ -120,7 +120,7 @@ class Customer(Base):
 
 
 class Contact(Base):
-    """Approved Day 4 table contacts; database constraints are applied by later migrations."""
+    """Approved schema baseline table contacts; database constraints are applied by later migrations."""
 
     __tablename__ = "contacts"
     __table_args__ = (

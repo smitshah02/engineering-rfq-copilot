@@ -23,7 +23,7 @@ ELIGIBLE_ACCOUNT_STATUSES = frozenset(
 async def find_active_user(session: AsyncSession, subject: str) -> User | None:
     """The active user whose ``authentication_subject`` equals ``subject`` exactly.
 
-    Returned detached (Day 30): callers (REST ``get_principal``, the MCP verifier) read it
+    Returned detached (MCP verification): callers (REST ``get_principal``, the MCP verifier) read it
     after their session block, and ``Database.session()`` ends with a rollback, which
     expires attached instances whatever ``expire_on_commit`` says; a later ``user.user_id``
     then refreshed a detached object and raised. Loaded columns stay readable.

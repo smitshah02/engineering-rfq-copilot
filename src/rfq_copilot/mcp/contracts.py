@@ -1,7 +1,7 @@
 """MCP tool contracts: names, typed inputs and outputs, permissions and the error model.
 
 Contracts only. Nothing here registers a tool, opens a session or calls a service; the
-Day 25-26 adapters do that, inside one ``Database.snapshot_session()`` per call.
+manufacturing tool adapters do that, inside one ``Database.snapshot_session()`` per call.
 
 Security rules the shapes enforce (``extra="forbid"`` everywhere):
 - No input carries identity, role, permission or customer scope. The customer comes only
@@ -309,7 +309,7 @@ SAFE_MESSAGES: dict[ErrorCode, str] = {
 
 
 def tool_failure(code: ErrorCode) -> ToolError:
-    """The SDK-native exception for a failure; Day 25+ adapters raise it.
+    """The SDK-native exception for a failure; manufacturing tool+ adapters raise it.
 
     Every code is a tool execution error (``is_error=True``) with a fixed "CODE: message"
     text, matching mcp 2.3.0: its high-level server reports argument-validation failures
@@ -332,7 +332,7 @@ class ToolContract:
     input_model: type[BaseModel]
     output_model: type[BaseModel]
     permission: str  # rbac-policy-v2 name; MCP runs under v2 only (F1)
-    service: str  # the existing entry point Day 25/26 calls
+    service: str  # the existing entry point manufacturing tool/26 calls
     rfq_scoped: bool  # rfq_id is ownership-checked against the principal's customer
 
 

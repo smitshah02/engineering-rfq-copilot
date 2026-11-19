@@ -1,4 +1,4 @@
-"""Approved Day 4 rules mappings; metadata definitions only."""
+"""Approved schema baseline rules mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 class BusinessRuleVersion(Base):
-    """Approved Day 4 table business_rule_versions; database constraints are applied by later migrations."""
+    """Approved schema baseline table business_rule_versions; database constraints are applied by later migrations."""
 
     __tablename__ = "business_rule_versions"
     __table_args__ = (
@@ -136,7 +136,7 @@ class BusinessRuleVersion(Base):
 
 
 class DataSnapshot(Base):
-    """Approved Day 4 table data_snapshots; database constraints are applied by later migrations."""
+    """Approved schema baseline table data_snapshots; database constraints are applied by later migrations."""
 
     __tablename__ = "data_snapshots"
     __table_args__ = (

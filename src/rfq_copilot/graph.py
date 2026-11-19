@@ -1,4 +1,4 @@
-"""LangGraph workflow (Days 32-34): a bounded, acyclic pass over the Day 31 LLM helpers,
+"""LangGraph workflow (graph execution): a bounded, acyclic pass over the model interface LLM helpers,
 with optional checkpointed conversation memory and read-only MCP tool execution.
 
     START -> prepare_input -> invoke_llm -> inspect_response -> END   (answer / proposal)
@@ -6,7 +6,7 @@ with optional checkpointed conversation memory and read-only MCP tool execution.
                                                    +-> execute_tools -> respond -> END
               (any node) ------------------------------------------> safe_error -> END
 
-- Day 34: proposals execute only when the caller supplies a trusted ``ToolExecutor`` through
+- tool execution: proposals execute only when the caller supplies a trusted ``ToolExecutor`` through
   the LangGraph run *context* (never state, never checkpointed). ``mcp_executor`` builds one
   from a verified ``Principal`` and ``api.mcp_integration.McpIntegration``, so every call goes
   through the delegated MCP credential and the authenticated gateway, which re-verifies the
@@ -30,13 +30,13 @@ with optional checkpointed conversation memory and read-only MCP tool execution.
   that principal and checks ownership before every read or resume. Each turn runs on a graph
   with no checkpointer. Only after a successful turn is the new ``history`` saved, owner
   bound. A failed, cancelled or limit-exceeded turn persists nothing.
-- Phase 5 final answers (``rfq_copilot.grounding``): model text is never shown. A turn with
+- conversational graph final answers (``rfq_copilot.grounding``): model text is never shown. A turn with
   no tool result answers with the fixed ``GUIDANCE``; a turn with results answers with the
   deterministic rendering of this turn's validated results (money display-rounded by the
   pinned pricing rule's ``MoneyDisplay``). The model only proposes tools; ``respond`` makes no
   model call. ``GraphResult.results`` keeps the exact results; ``message`` maps errors to
   fixed text.
-- Phase 5 final arguments (``_inspect``): the planning horizon is the trusted policy value
+- conversational graph final arguments (``_inspect``): the planning horizon is the trusted policy value
   (``TurnContext.horizon_start``) or one explicitly labelled user horizon ("planning start
   YYYY-MM-DD"); both present and different, or several labelled, fails closed as
   ``clarification_required``. A model value must equal it; a missing one is filled with it.
@@ -81,7 +81,7 @@ DEFAULT_HISTORY_TURNS = 10
 DEFAULT_TURN_TIMEOUT = 120.0  # seconds, model and tool calls included
 MAX_TOOL_CALLS = 3
 
-# Verified read-only (Day 34): every handler runs inside Database.snapshot_session(), a
+# Verified read-only (tool execution): every handler runs inside Database.snapshot_session(), a
 # REPEATABLE READ, READ ONLY transaction that PostgreSQL enforces; rfq_copilot.mcp issues
 # no writes; all are registered with READ_ONLY annotations. Listed by name so a future
 # contract is never executable by default.
@@ -541,7 +541,7 @@ class Conversations:
         # Persistence only: read snapshots and save completed history. Never invokes the model.
         self._graph = build_graph(model, instructions, checkpointer=saver)
         self._recursion_limit = recursion_limit
-        # Without an integration, tool calls stay unexecuted proposals (Days 32-33).
+        # Without an integration, tool calls stay unexecuted proposals (graph execution).
         self._mcp, self._timeout = mcp, turn_timeout_seconds
         # ponytail: one lock per thread, never evicted; bounded by the saver's own lifetime.
         self._locks: dict[str, asyncio.Lock] = {}

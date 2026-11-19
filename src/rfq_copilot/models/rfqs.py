@@ -1,4 +1,4 @@
-"""Approved Day 4 rfqs mappings; metadata definitions only."""
+"""Approved schema baseline rfqs mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 
 class RFQ(Base):
-    """Approved Day 4 table rfqs; database constraints are applied by later migrations."""
+    """Approved schema baseline table rfqs; database constraints are applied by later migrations."""
 
     __tablename__ = "rfqs"
     __table_args__ = (
@@ -174,7 +174,7 @@ class RFQ(Base):
 
 
 class RFQLineItem(Base):
-    """Approved Day 4 table rfq_line_items; database constraints are applied by later migrations."""
+    """Approved schema baseline table rfq_line_items; database constraints are applied by later migrations."""
 
     __tablename__ = "rfq_line_items"
     __table_args__ = (
@@ -301,7 +301,7 @@ class RFQLineItem(Base):
 
 
 class RFQAttachment(Base):
-    """Approved Day 4 table rfq_attachments; database constraints are applied by later migrations."""
+    """Approved schema baseline table rfq_attachments; database constraints are applied by later migrations."""
 
     __tablename__ = "rfq_attachments"
     __table_args__ = (

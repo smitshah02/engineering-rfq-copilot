@@ -1,4 +1,4 @@
-"""backend integration backend integration: public checks (no PostgreSQL, no dataset, no credentials).
+"""Backend integration: public checks (no PostgreSQL, no dataset, no credentials).
 
 Fills the two gaps left by API foundation and authorization hardening: the OpenAPI matrix test cannot see a
 route registered with include_in_schema=False, and nothing started a real Uvicorn process.

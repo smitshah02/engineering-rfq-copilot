@@ -1,4 +1,4 @@
-"""REST -> MCP delegation (Day 29).
+"""REST -> MCP delegation (delegation).
 
 The REST bearer token is never forwarded: its audience is the REST API, and the MCP host
 refuses it. A ``McpCredentialProvider`` must obtain a short-lived token for the MCP

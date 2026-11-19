@@ -1,4 +1,4 @@
-"""Approved Day 4 manufacturing mappings; metadata definitions only."""
+"""Approved schema baseline manufacturing mappings; metadata definitions only."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class Material(Base):
-    """Approved Day 4 table materials; database constraints are applied by later migrations."""
+    """Approved schema baseline table materials; database constraints are applied by later migrations."""
 
     __tablename__ = "materials"
     __table_args__ = (
@@ -123,7 +123,7 @@ class Material(Base):
 
 
 class Finish(Base):
-    """Approved Day 4 table finishes; database constraints are applied by later migrations."""
+    """Approved schema baseline table finishes; database constraints are applied by later migrations."""
 
     __tablename__ = "finishes"
     __table_args__ = (
@@ -189,7 +189,7 @@ class Finish(Base):
 
 
 class Operation(Base):
-    """Approved Day 4 table operations; database constraints are applied by later migrations."""
+    """Approved schema baseline table operations; database constraints are applied by later migrations."""
 
     __tablename__ = "operations"
     __table_args__ = (
@@ -228,7 +228,7 @@ class Operation(Base):
 
 
 class Workcentre(Base):
-    """Approved Day 4 table workcentres; database constraints are applied by later migrations."""
+    """Approved schema baseline table workcentres; database constraints are applied by later migrations."""
 
     __tablename__ = "workcentres"
     __table_args__ = (
@@ -305,7 +305,7 @@ class Workcentre(Base):
 
 
 class Supplier(Base):
-    """Approved Day 4 table suppliers; database constraints are applied by later migrations."""
+    """Approved schema baseline table suppliers; database constraints are applied by later migrations."""
 
     __tablename__ = "suppliers"
     __table_args__ = (
@@ -345,7 +345,7 @@ class Supplier(Base):
 
 
 class MaterialThicknessOption(Base):
-    """Approved Day 4 table material_thickness_options; database constraints are applied by later migrations."""
+    """Approved schema baseline table material_thickness_options; database constraints are applied by later migrations."""
 
     __tablename__ = "material_thickness_options"
     __table_args__ = (
@@ -392,7 +392,7 @@ class MaterialThicknessOption(Base):
 
 
 class MaterialFinishCompatibility(Base):
-    """Approved Day 4 table material_finish_compatibility; database constraints are applied by later migrations."""
+    """Approved schema baseline table material_finish_compatibility; database constraints are applied by later migrations."""
 
     __tablename__ = "material_finish_compatibility"
     __table_args__ = (
@@ -444,7 +444,7 @@ class MaterialFinishCompatibility(Base):
 
 
 class MaterialSupportedOperation(Base):
-    """Approved Day 4 table material_supported_operations; database constraints are applied by later migrations."""
+    """Approved schema baseline table material_supported_operations; database constraints are applied by later migrations."""
 
     __tablename__ = "material_supported_operations"
     __table_args__ = (
@@ -497,7 +497,7 @@ class MaterialSupportedOperation(Base):
 
 
 class FinishMaterialCategory(Base):
-    """Approved Day 4 table finish_material_categories; database constraints are applied by later migrations."""
+    """Approved schema baseline table finish_material_categories; database constraints are applied by later migrations."""
 
     __tablename__ = "finish_material_categories"
     __table_args__ = (
@@ -534,7 +534,7 @@ class FinishMaterialCategory(Base):
 
 
 class OperationRouting(Base):
-    """Approved Day 4 table operation_routing; database constraints are applied by later migrations."""
+    """Approved schema baseline table operation_routing; database constraints are applied by later migrations."""
 
     __tablename__ = "operation_routing"
     __table_args__ = (

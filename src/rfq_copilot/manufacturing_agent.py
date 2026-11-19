@@ -1,10 +1,10 @@
-"""Manufacturing Feasibility Agent A2 (Day 38): Intake-ready parts -> evidence-backed
+"""Manufacturing Feasibility Agent A2 (manufacturing evidence): Intake-ready parts -> evidence-backed
 manufacturing feasibility. Not inventory, capacity, price or approval.
 
-    IntakeValidation (Day 37, ready) + trusted ToolExecutor
+    IntakeValidation (intake validation, ready) + trusted ToolExecutor
         -> evaluate_manufacturing_feasibility -> ManufacturingAssessment
 
-- Input is the Day 37 ``IntakeValidation``. Unless it and every part are
+- Input is the intake validation ``IntakeValidation``. Unless it and every part are
   ``ready_for_manufacturing_evaluation`` with a built ``PartSpecification``, the result is
   ``not_evaluated`` and no tool is called. The specification is passed unchanged.
 - Authority: one read-only MCP tool, ``check_manufacturing_feasibility`` (it runs the material
@@ -12,7 +12,7 @@ manufacturing feasibility. Not inventory, capacity, price or approval.
   server-pinned ``mfg-v1.0``). It is called once per part through the caller's trusted executor
   (``graph.mcp_executor``: delegated credential, authenticated gateway, RBAC v2
   ``view_catalog``), once each, with no retries, inside one timeout. Sequential by default;
-  a trusted caller may allow up to ``MAX_CONCURRENCY`` simultaneous part checks (Day 47).
+  a trusted caller may allow up to ``MAX_CONCURRENCY`` simultaneous part checks (parallel execution).
 - No model is involved. Feasibility, findings and routing are the tool's; the explanation is
   rendered from finding codes by fixed templates. A part is ``feasible`` only with a validated,
   internally consistent tool result; anything else is an explicit error or blocker.
@@ -20,7 +20,7 @@ manufacturing feasibility. Not inventory, capacity, price or approval.
   version throughout, be self-consistent (``valid`` has a route and no findings, and so on) and
   carry only known finding codes, else ``invalid_evidence``. A rule version or fingerprint
   differing from the one Intake validated against -> ``requires_review``.
-- Parallel part checks (Day 47, L01): each part's check is one read-only call on that part
+- Parallel part checks (parallel execution, L01): each part's check is one read-only call on that part
   alone (own token, HTTP client, MCP session and READ ONLY snapshot; nothing shared, nothing
   written), and its result depends on no other part, so parts are independent work items.
   ``max_concurrency`` > 1 runs them under a semaphore in one task group. Fan-in (``_join``)
@@ -183,7 +183,9 @@ def _forged(out: ManufacturingFeasibilityOutput, spec: PartSpecification) -> boo
     if out.result == "needs_clarification":
         return bool(out.operations)
     if out.result == "valid":  # a positive conclusion needs complete, matching evidence
-        minimum = out.min_bend_radius_mm  # A5's borderline-bend input (D42-A2-01)
+        minimum = (
+            out.min_bend_radius_mm
+        )  # A5's borderline-bend input (cross-agent evidence control)
         return (
             catalog is None
             or not out.operations
