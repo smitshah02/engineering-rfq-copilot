@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { Fragment, createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "./api";
 
@@ -40,19 +40,29 @@ function saveDevToken(t: string | null) {
   } catch { /* storage blocked: memory only */ }
 }
 
-interface Auth { token: string | null; signIn: (t: string) => void; signOut: () => void }
+interface Auth { token: string | null; sessionId: number; signIn: (t: string) => void; signOut: () => void; isCurrent: (id: number) => boolean }
 const AuthContext = createContext<Auth | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(loadDevToken);
+  const [sessionId, setSessionId] = useState(0);
+  const generation = useRef(0);
   const queryClient = useQueryClient();
   // Clearing the cache on every identity change keeps one customer's data from ever
   // rendering under another customer's token.
   const value = useMemo<Auth>(() => {
-    const swap = (t: string | null) => { queryClient.clear(); saveDevToken(t); setToken(t); };
-    return { token, signIn: (t) => swap(t.trim()), signOut: () => swap(null) };
-  }, [token, queryClient]);
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    const swap = (t: string | null) => {
+      generation.current += 1;
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      saveDevToken(t);
+      setSessionId(generation.current);
+      setToken(t);
+    };
+    return { token, sessionId, signIn: (t) => swap(t.trim()), signOut: () => swap(null), isCurrent: (id) => generation.current === id };
+  }, [token, sessionId, queryClient]);
+  // Unmount query observers and page-local data as well as clearing the shared cache.
+  return <AuthContext.Provider value={value}><Fragment key={sessionId}>{children}</Fragment></AuthContext.Provider>;
 }
 
 export function useAuth(): Auth {
@@ -63,17 +73,21 @@ export function useAuth(): Auth {
 
 /** API caller bound to the current token; a 401 drops the token and returns to sign-in. */
 export function useApi() {
-  const { token, signOut } = useAuth();
+  const { token, sessionId, signOut, isCurrent } = useAuth();
   return useCallback(
     async <T,>(path: string, init?: RequestInit) => {
       if (!token) throw new ApiError(401, "Not signed in.");
       try {
-        return await apiRequest<T>(token, path, init);
+        const result = await apiRequest<T>(token, path, init);
+        if (!isCurrent(sessionId)) throw new DOMException("Session changed", "AbortError");
+        return result;
       } catch (e) {
+        // A late result/401 from the previous identity must not affect the new session.
+        if (!isCurrent(sessionId)) throw new DOMException("Session changed", "AbortError");
         if (e instanceof ApiError && e.status === 401) signOut();
         throw e;
       }
     },
-    [token, signOut],
+    [token, sessionId, signOut, isCurrent],
   );
 }

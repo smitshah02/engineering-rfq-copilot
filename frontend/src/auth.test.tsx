@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useQueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -76,5 +77,52 @@ describe("development token persistence", () => {
     signedIn();
     renderWithProviders(<App />, "/rfqs/new");
     expect(screen.getByRole("heading", { name: "New RFQ" })).toBeInTheDocument();
+  });
+
+  it.each([200, 401])("discards an old HTTP %s response after an identity change", async (status) => {
+    const oldToken = signedIn();
+    const newToken = fakeToken(Math.floor(Date.now() / 1000) + 1200);
+    let finish!: (response: Response) => void;
+    let oldResult: unknown;
+    mockFetch(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    function SwitchProbe() {
+      const { token, signIn } = useAuth();
+      const api = useApi();
+      return <>
+        <span>{token === newToken ? "new identity" : token === oldToken ? "old identity" : "signed out"}</span>
+        <button onClick={() => { void api("/staff/quotes").then(() => { oldResult = "unexpected data"; }, (error: unknown) => { oldResult = error; }); }}>Start read</button>
+        <button onClick={() => signIn(newToken)}>Switch</button>
+      </>;
+    }
+    renderWithProviders(<SwitchProbe />);
+    await userEvent.click(screen.getByText("Start read"));
+    await userEvent.click(screen.getByText("Switch"));
+    await act(async () => finish(json(status, { items: ["private old quotation"] })));
+    await waitFor(() => expect(oldResult).toBeInstanceOf(DOMException));
+    expect((oldResult as DOMException).name).toBe("AbortError");
+    expect(screen.getByText("new identity")).toBeInTheDocument();
+    expect(sessionStorage.getItem(DEV_TOKEN_KEY)).toBe(newToken);
+  });
+
+  it("clears both customer and staff caches on every identity change", async () => {
+    signedIn();
+    function CacheProbe() {
+      const client = useQueryClient();
+      const { signIn } = useAuth();
+      const empty = !client.getQueryData(["me"]) && !client.getQueryData(["staff-quote", "QUOTE-1"])
+        && !client.getQueryData(["customer-quote", 0, "QUOTE-1"]);
+      return <>
+        <span>{empty ? "empty customer and staff caches" : "old cached data"}</span>
+        <button onClick={() => {
+          client.setQueryData(["me"], { company_name: "Previous customer" });
+          client.setQueryData(["staff-quote", "QUOTE-1"], { total_usd: "123.40" });
+          client.setQueryData(["customer-quote", 0, "QUOTE-1"], { total_usd: "123.40" });
+          signIn(fakeToken(Math.floor(Date.now() / 1000) + 1200));
+        }}>Change account</button>
+      </>;
+    }
+    renderWithProviders(<CacheProbe />);
+    await userEvent.click(screen.getByText("Change account"));
+    expect(screen.getByText("empty customer and staff caches")).toBeInTheDocument();
   });
 });

@@ -28,15 +28,74 @@ export interface RfqSubmissionRequest {
   raw_request?: string | null;
 }
 export interface RfqReceipt { rfq_id: string; status: "draft" }
-export interface RfqSummary { rfq_id: string; status: string; submitted_at: string }
+export interface ReleasedQuoteReference {
+  quote_id: string; version: number; released_at: string; expiry_date: string | null;
+}
+export interface RfqSummary { rfq_id: string; status: string; submitted_at: string; released_quote?: ReleasedQuoteReference | null }
 export interface RfqPage { items: RfqSummary[]; limit: number; offset: number; has_more: boolean }
-export interface RfqDetail { rfq_id: string; status: string; submitted_at: string; lines: { line_number: number; part: PartSpecification }[] }
+export interface RfqDetail extends RfqSummary { lines: { line_number: number; part: PartSpecification }[] }
+// Customer contract only; no staff snapshots, costs, decisions or audit information.
+export interface ReleasedQuote {
+  quote_id: string; rfq_id: string; status: "released"; released_at: string; version: number;
+  currency: string; total_usd: string; expiry_date: string | null;
+  estimated_lead_business_days: number | null;
+  lines: { line_number: number; part_id: string; quantity: number; line_total_usd: string }[];
+}
 export interface CustomerProfile {
   customer_id: string; company_name: string; industry: string; city: string; state: string;
   country: string; payment_terms: string; preferred_shipping: string;
   contacts: { contact_name: string; email: string; phone: string; is_primary: boolean }[];
 }
 export interface ValidationIssue { field: string; code: string; message: string }
+
+// Mirrors api/schemas/staff_quotes.py. These contracts never enter customer dashboards.
+export const QUOTE_STATUSES = [
+  "draft", "revised_draft", "pending_approval", "approved", "rejected", "expired",
+  "clarification_required", "blocked", "released",
+] as const;
+export type QuoteStatus = typeof QUOTE_STATUSES[number];
+export interface StaffQuoteSummary {
+  quote_id: string; rfq_id: string; status: QuoteStatus; current_version: number;
+  created_at: string; expiry_date: string | null; currency: string; total_usd: string | null;
+}
+export interface StaffQuotePage { items: StaffQuoteSummary[]; limit: number; offset: number; has_more: boolean }
+export interface StaffQuoteDetail extends Omit<StaffQuoteSummary, "total_usd"> {
+  total_usd: string; quote_version_id: string; version_created_at: string;
+  estimated_lead_business_days: number | null; rfq: RfqSummary;
+  lines: { line_number: number; part_id: string; quantity: number; line_total_usd: string; part: PartSpecification }[];
+}
+
+export type QuoteAction = "request_approval" | "approve_quote" | "reject_quote" | "release_quote";
+export interface StaffQuoteActions {
+  quote_id: string; expected_version: number;
+  actions: Record<QuoteAction, { allowed: boolean; reason: string | null }>;
+  attestation_context: { rfq_source_sha256: string; requested_delivery_date: string | null } | null;
+  reviews: { kind: string; reasons: string[] }[];
+}
+export interface QuoteActionResult {
+  quote_id: string; version: number; action: "submitted" | "approved" | "rejected" | "released";
+  status: QuoteStatus; replayed: boolean;
+}
+
+const ACTION_ERRORS: Record<string, string> = {
+  stale_version: "The quotation version changed. Refresh and review the current version.",
+  idempotency_key_conflict: "This action key was already used with different information. Refresh the quotation.",
+  separation_of_duties: "An independent authorized person must perform this action.",
+  quote_expired: "This quotation has expired. A new revision is required.",
+  review_unverified: "Required engineering review has not been verified.",
+  not_approvable: "Approval is blocked by policy or changed evidence. Review the current quotation.",
+  not_submittable: "This quotation cannot be submitted under the current policy and evidence.",
+  not_releasable: "Release is blocked by policy or changed evidence.",
+  not_assessable: "This action is unavailable for the current quotation state.",
+  not_pending: "This version is no longer pending review.",
+  resubmission_blocked: "This rejected quotation requires an eligible revision before resubmission.",
+  attestation_mismatch: "The attestation does not match the current quotation. Refresh and review it again.",
+  permission_denied: "Your account is not permitted to do this.",
+  not_found: "Not found.",
+  invalid_request: "The action request was invalid.",
+};
+export const quoteActionReason = (reason: string | null) =>
+  reason ? ACTION_ERRORS[reason] ?? "This action is unavailable. Review the current quotation." : "";
 
 // Mirrors src/rfq_copilot/api/schemas/attachments.py.
 export interface AttachmentMetadata {
@@ -102,6 +161,8 @@ export async function apiRequest<T>(
   try {
     res = await fetch(`/api/v1${path}`, {
       ...init,
+      // Authenticated data must be fetched again after logout or identity changes.
+      cache: "no-store",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...init.headers },
     });
   } catch {
@@ -109,15 +170,18 @@ export async function apiRequest<T>(
   }
   if (res.ok) return { data: (await res.json()) as T, headers: res.headers };
 
-  let body: { message?: unknown; reason?: unknown; details?: unknown; issues?: unknown } = {};
+  let body: { message?: unknown; reason?: unknown; detail?: unknown; details?: unknown; issues?: unknown } = {};
   try { body = await res.json(); } catch { /* non-JSON error body */ }
   // Only the structured RFQ/validation contracts carry customer-facing text; for anything
   // else (e.g. FastAPI's plain {"detail": ...}) use our own fixed message.
-  const structured = typeof body.message === "string";
+  const structured = !path.startsWith("/staff/quotes") && typeof body.message === "string";
+  const lifecycle = path.startsWith("/staff/quotes/") || path.startsWith("/quote-decisions/");
+  const actionReason = lifecycle && typeof body.detail === "string" && Object.hasOwn(ACTION_ERRORS, body.detail)
+    ? body.detail : undefined;
   throw new ApiError(
     res.status,
-    structured ? (body.message as string) : FALLBACK[res.status] ?? `Request failed (${res.status}).`,
-    typeof body.reason === "string" ? body.reason : undefined,
+    actionReason ? ACTION_ERRORS[actionReason] : structured && !lifecycle ? (body.message as string) : FALLBACK[res.status] ?? `Request failed (${res.status}).`,
+    actionReason ?? (typeof body.reason === "string" ? body.reason : undefined),
     Array.isArray(body.details) ? (body.details as ValidationIssue[]) : [],
     Array.isArray(body.issues) ? (body.issues as BomIssue[]) : [],
   );

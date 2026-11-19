@@ -7,7 +7,11 @@ import { ErrorPanel, Loading, PageHeader, RfqTable } from "../ui";
 export default function Dashboard() {
   const api = useApi();
   const profile = useQuery({ queryKey: ["me"], queryFn: async () => (await api<CustomerProfile>("/customers/me")).data });
-  const recent = useQuery({ queryKey: ["rfqs", 0, 5], queryFn: async () => (await api<RfqPage>("/rfqs?limit=5&offset=0")).data });
+  const recent = useQuery({
+    queryKey: ["rfqs", 0, 5],
+    queryFn: async ({ signal }) => (await api<RfqPage>("/rfqs?limit=5&offset=0", { signal })).data,
+    refetchInterval: 30_000,
+  });
 
   return (
     <>

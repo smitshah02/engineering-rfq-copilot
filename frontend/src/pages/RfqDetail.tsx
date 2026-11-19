@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError, listAttachments, uploadAttachment, type BomIssue, type PartSpecification, type RfqDetail as Detail } from "../api";
 import { useApi } from "../auth";
-import { ErrorPanel, Loading, PageHeader, StatusBadge, formatDateTime, statusLabel } from "../ui";
+import { ErrorPanel, Loading, PageHeader, ReleasedQuotationLink, StatusBadge, formatDateTime, statusLabel } from "../ui";
 
 const COLUMNS: [keyof PartSpecification, string][] = [
   ["part_id", "Part"], ["part_type", "Type"], ["material_id", "Material"], ["finish_id", "Finish"],
@@ -18,7 +18,8 @@ export default function RfqDetail() {
   const flash = useLocation().state as { submitted?: boolean; replayed?: boolean } | null;
   const q = useQuery({
     queryKey: ["rfq", rfqId],
-    queryFn: async () => (await api<Detail>(`/rfqs/${encodeURIComponent(rfqId)}`)).data,
+    queryFn: async ({ signal }) => (await api<Detail>(`/rfqs/${encodeURIComponent(rfqId)}`, { signal })).data,
+    refetchInterval: 30_000,
   });
 
   return (
@@ -39,6 +40,7 @@ export default function RfqDetail() {
             Status: <span className="font-medium text-slate-800">{statusLabel(q.data.status)}</span>.{" "}
             A quotation is shared with you only after it has been approved by our team and released.
           </p>
+          {q.data.released_quote && <div className="mb-4"><ReleasedQuotationLink quote={q.data.released_quote} /></div>}
           <section className="card overflow-x-auto" aria-labelledby="parts-h">
             <h2 id="parts-h" className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">Parts</h2>
             {q.data.lines.length === 0 ? (

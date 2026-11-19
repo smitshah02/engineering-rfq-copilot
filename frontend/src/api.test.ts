@@ -11,6 +11,7 @@ describe("apiRequest", () => {
     expect(data.ok).toBe(true);
     expect(fetch.mock.calls[0][0]).toBe("/api/v1/x");
     expect((fetch.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe("Bearer T");
+    expect(fetch.mock.calls[0][1].cache).toBe("no-store");
   });
 
   it("uses the structured backend message and keeps reason, details and issues", async () => {
@@ -31,10 +32,26 @@ describe("apiRequest", () => {
     expect(e.message).not.toContain("internal");
   });
 
+  it("always uses fixed text for staff failures, including structured exception messages", async () => {
+    mockFetch(() => json(503, { message: "internal SQL exception", detail: "credentials" }));
+    const e = await fail(apiRequest("T", "/staff/quotes?limit=20"));
+    expect(e.message).toBe("The service is temporarily unavailable. Try again shortly.");
+  });
+
   it("reports a network failure as status 0", async () => {
     mockFetch(() => { throw new TypeError("offline"); });
     const e = await fail(apiRequest("T", "/x"));
     expect(e.status).toBe(0);
+  });
+
+  it("maps fixed lifecycle refusal codes without reflecting arbitrary decision errors", async () => {
+    mockFetch(() => json(409, { detail: "separation_of_duties", message: "secret SQL" }));
+    const refused = await fail(apiRequest("T", "/quote-decisions/Q-1/approval"));
+    expect(refused.reason).toBe("separation_of_duties");
+    expect(refused.message).toContain("independent authorized person");
+    mockFetch(() => json(409, { detail: "secret SQL", message: "secret credential" }));
+    const unknown = await fail(apiRequest("T", "/quote-decisions/Q-1/release"));
+    expect(unknown.message).not.toContain("secret");
   });
 });
 

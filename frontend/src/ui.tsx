@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "./api";
+import { ApiError, type ReleasedQuoteReference, type RfqSummary } from "./api";
 
 // The one customer-facing presentation of the stored RFQ status (business.rfqs rule_01).
 // It describes the RFQ record only: never workflow, agent, approval or quotation progress.
@@ -65,13 +65,27 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-export function RfqTable({ items }: { items: { rfq_id: string; status: string; submitted_at: string }[] }) {
+// Date-only validity is inclusive through the stated UTC calendar date.
+export const quoteExpired = (expiry: string | null) => expiry !== null && expiry < new Date().toISOString().slice(0, 10);
+export const quoteExpiry = (expiry: string | null) => expiry === null ? "Not specified" :
+  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${expiry}T00:00:00Z`));
+
+export function ReleasedQuotationLink({ quote }: { quote: ReleasedQuoteReference | null | undefined }) {
+  if (!quote) return null;
+  return <div className="flex flex-wrap items-center gap-2">
+    <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">Quotation Available</span>
+    {quoteExpired(quote.expiry_date) && <span className="text-xs text-amber-800">Expired</span>}
+    <Link to={`/quotes/${encodeURIComponent(quote.quote_id)}`} className="whitespace-nowrap text-sm text-indigo-600 hover:underline">View Quotation</Link>
+  </div>;
+}
+
+export function RfqTable({ items }: { items: RfqSummary[] }) {
   if (items.length === 0)
     return <p className="p-6 text-sm text-slate-500">No RFQs yet. <Link to="/rfqs/new" className="text-indigo-600 hover:underline">Submit your first RFQ</Link>.</p>;
   return (
     <table className="w-full text-left text-sm">
       <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-        <tr><th className="px-4 py-3 font-medium">RFQ</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Submitted</th></tr>
+        <tr><th className="px-4 py-3 font-medium">RFQ</th><th className="px-4 py-3 font-medium">RFQ status</th><th className="px-4 py-3 font-medium">Submitted</th><th className="px-4 py-3 font-medium">Quotation</th></tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
         {items.map((r) => (
@@ -79,6 +93,7 @@ export function RfqTable({ items }: { items: { rfq_id: string; status: string; s
             <td className="px-4 py-3 font-mono"><Link to={`/rfqs/${encodeURIComponent(r.rfq_id)}`} className="text-indigo-600 hover:underline">{r.rfq_id}</Link></td>
             <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
             <td className="px-4 py-3 text-slate-500">{formatDateTime(r.submitted_at)}</td>
+            <td className="px-4 py-3"><ReleasedQuotationLink quote={r.released_quote} /></td>
           </tr>
         ))}
       </tbody>

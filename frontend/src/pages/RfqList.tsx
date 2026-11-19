@@ -12,8 +12,9 @@ export default function RfqList() {
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   const q = useQuery({
     queryKey: ["rfqs", offset, LIMIT],
-    queryFn: async () => (await api<RfqPage>(`/rfqs?limit=${LIMIT}&offset=${offset}`)).data,
+    queryFn: async ({ signal }) => (await api<RfqPage>(`/rfqs?limit=${LIMIT}&offset=${offset}`, { signal })).data,
     placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
   });
   const go = (o: number) => setParams(o ? { offset: String(o) } : {});
 
