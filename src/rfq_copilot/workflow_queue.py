@@ -31,7 +31,7 @@ from rfq_copilot.mcp.contracts import NEW_EVALUATION_APPROVAL_RULE_VERSION
 from rfq_copilot.mcp.runtime import MANUFACTURING_RULE_VERSION, PRICING_RULE_VERSION
 from rfq_copilot.models import RFQ, AuditEvent, User, WorkflowRun
 
-GRAPH_VERSION = "supervisor-execution-v1"  # run_supervisor_workflow (Day 46-50)
+GRAPH_VERSION = "supervisor-execution-v1"  # run_supervisor_workflow (delegation)
 # Server-side pins the worker loads (sha256-checked); never from the request.
 RULE_VERSIONS = {
     "manufacturing": MANUFACTURING_RULE_VERSION,
@@ -48,6 +48,23 @@ SERVICE_ROLE = "rfq_workflow_agent"  # rbac-policy-v4 (operator_admin.SERVICE_RO
 # One audit event per settled attempt (workflow_worker): codes only, never text or evidence.
 ATTEMPT_OPERATION = "workflow.attempt"
 ATTEMPT_KEYS = frozenset({"workflow_run_id", "attempt", "claim_generation", "status", "disposition", "error"})  # fmt: skip
+# Optional, only on a clarification_required settlement; absent on historical events.
+CLARIFICATION_KEY = "clarification_codes"
+
+
+def safe_clarification_codes(codes) -> list[str]:
+    """The distinct structured codes among ``codes`` (invalid ones dropped), bounded."""
+    from rfq_copilot import escalation as esc  # local: keeps this module's import light
+
+    kept = dict.fromkeys(c for c in codes if esc.is_clarification_code(c))
+    return list(kept)[: esc.MAX_QUESTIONS]
+
+
+def clarification_codes_valid(value) -> bool:
+    """Integrity form: a non-empty bounded list of distinct valid codes, nothing else."""
+    return isinstance(value, list) and bool(value) and safe_clarification_codes(value) == value
+
+
 # Settled status -> the dispositions it may carry (ck_workflow_runs_rule_06 vocabulary).
 STATUS_DISPOSITIONS = {
     "queued": {None},  # waiting for a (re)claim; a retry keeps last_error

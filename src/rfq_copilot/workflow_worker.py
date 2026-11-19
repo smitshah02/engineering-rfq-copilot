@@ -1,6 +1,7 @@
 """Checkpoint A3: the trusted background worker that runs the Supervisor for queued RFQs.
 
-    python -m rfq_copilot.workflow_worker [--once]
+    python -m rfq_copilot.workflow_worker --target development --continuous
+    python -m rfq_copilot.workflow_worker --once
 
 Customers never reach this: no route, no progress, no evidence. For each claimed run:
 
@@ -17,8 +18,9 @@ Customers never reach this: no route, no progress, no evidence. For each claimed
    never approve/reject/release), and the pinned rules (sha256-checked). The customer's
    JWT is never used: the MCP credential is minted for the service subject.
 4. **Run** the existing ``supervisor.run_supervisor_workflow`` with a server-built
-   ``SupervisorContext``. Every tool call passes the ``SourceGate``: any part specification
-   an agent derived from the text that names a part not in the stored RFQ, or contradicts
+   ``SupervisorContext``. Portal specifications without notes enter A1 as structured facts;
+   requests with notes retain text extraction. Every tool call passes ``SourceGate``: any
+   specification that names a part not in the stored RFQ, or contradicts
    a stored value, is refused and the run is ``blocked`` / ``source_mismatch`` (never
    retried, never priced).
 5. **Settle** (``settle``): one conditional UPDATE (owner + generation + ``running``) and
@@ -31,7 +33,8 @@ Customers never reach this: no route, no progress, no evidence. For each claimed
 
 Nothing here creates, approves, rejects or releases a quotation; the RFQ row is never
 written. No agent reasoning, customer text, MCP evidence, amount or credential is stored or
-logged: only the fixed codes in ``workflow_queue.ATTEMPT_KEYS``. Each claim, heartbeat,
+logged. Attempt audit data uses ``workflow_queue.ATTEMPT_KEYS``; source mismatch logs use
+only static field/category codes, once per attempt. Each claim, heartbeat,
 preparation and settlement opens its own session; nothing is shared between tasks.
 """
 
@@ -41,18 +44,20 @@ import logging
 import os
 import re
 import secrets
-import signal
 import socket
 from collections.abc import Callable
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.orm import raiseload
 
+from rfq_copilot import background
+from rfq_copilot import intake as a1
 from rfq_copilot import supervisor as sv
 from rfq_copilot import workflow_queue as wq
 from rfq_copilot.api.auth import Principal
@@ -108,8 +113,10 @@ class WorkerSettings:
     shutdown_grace_seconds: float = 30.0
     run_timeout_seconds: float = sv.DEFAULT_TIMEOUT
     part_concurrency: int = 2
+    error_backoff_max_seconds: float = 60.0
 
     def __post_init__(self) -> None:
+        background.validate_settings(self)
         if not 1 <= self.concurrency <= 4:
             raise ValueError("concurrency must be 1..4")
         if not 0 < self.heartbeat_seconds * 2 < self.lease_seconds <= 900:
@@ -164,8 +171,9 @@ _SETTLE = text(
 
 
 def _attempt_event(
-    claim: Claim, actor: str | None, status, disposition, error, attempt
+    claim: Claim, actor: str | None, status, disposition, error, attempt, clarification_codes=()
 ) -> AuditEvent:
+    codes = wq.safe_clarification_codes(clarification_codes) if disposition == "clarification_required" else []  # fmt: skip
     return AuditEvent(
         actor_id=actor,
         customer_id=claim.customer_id,
@@ -182,6 +190,7 @@ def _attempt_event(
             "status": status,
             "disposition": disposition,
             "error": error,
+            **({wq.CLARIFICATION_KEY: codes} if codes else {}),
         },
     )
 
@@ -207,7 +216,7 @@ async def heartbeat(database, settings: WorkerSettings, run: Claim) -> bool:
         return renewed.rowcount == 1
 
 
-async def settle(database, settings, run: Claim, actor, status, disposition=None, error=None, external=None, refund=0) -> bool:  # fmt: skip
+async def settle(database, settings, run: Claim, actor, status, disposition=None, error=None, external=None, refund=0, clarification_codes=()) -> bool:  # fmt: skip
     """The fenced terminal (or retry/release) update plus its audit event; False if stale."""
     async with database.session() as session, session.begin():
         changed = await session.execute(
@@ -218,7 +227,7 @@ async def settle(database, settings, run: Claim, actor, status, disposition=None
         )  # fmt: skip
         if changed.rowcount != 1:
             return False  # reclaimed by another worker (newer generation): discard
-        session.add(_attempt_event(run, actor, status, disposition, error, run.attempt_count - refund))  # fmt: skip
+        session.add(_attempt_event(run, actor, status, disposition, error, run.attempt_count - refund, clarification_codes))  # fmt: skip
         return True
 
 
@@ -238,6 +247,14 @@ _FIELDS = (
     ("weld_length_mm", "weld length", " mm"),
     ("hole_count", "hole count", ""),
 )
+# Log vocabulary only; never derive diagnostic names from request data or schema extensions.
+_SOURCE_MISMATCH_FIELDS = frozenset(
+    {
+        "part_id", "quantity", "part_type", "material_id", "finish_id", "length_mm",
+        "width_mm", "height_mm", "thickness_mm", "tolerance_mm", "bend_radius_mm",
+        "weld_length_mm", "hole_count", "specification",
+    }
+)  # fmt: skip
 
 
 def source_text(lines, raw_request: str | None, materials=None, finishes=None) -> str:
@@ -267,7 +284,8 @@ def _plain(value) -> str:
 class SourceGate:
     """Wraps the tool executor: every ``PartSpecification`` an agent sends must name a stored
     part and agree with every value the stored line states. A contradiction or invented part
-    is refused (``invalid_input``) before the tool runs and remembered as ``mismatch``."""
+    is refused (``invalid_input``) before the tool runs and remembered as ``mismatch``.
+    Only the first refusal per gate (one workflow attempt) emits a fixed-vocabulary log."""
 
     def __init__(self, execute: Callable, lines) -> None:
         self._execute, self.mismatch = execute, False
@@ -276,14 +294,26 @@ class SourceGate:
     async def __call__(self, tool: str, request: BaseModel) -> BaseModel:
         for spec in _specs(request):
             line = self._stored.get(spec.part_id)
-            if line is None or any(
-                value is not None
-                and getattr(line, name) is not None
-                and value != getattr(line, name)
-                for name, value in spec.model_dump().items()
-                if name != "part_id"
-            ):
+            conflict = "part_id" if line is None else next(
+                (
+                    name
+                    for name, value in spec.model_dump().items()
+                    if name != "part_id"
+                    and value is not None
+                    and getattr(line, name) is not None
+                    and value != getattr(line, name)
+                ),
+                None,
+            )  # fmt: skip
+            if conflict is not None:
+                first_mismatch = not self.mismatch
                 self.mismatch = True
+                if first_mismatch:
+                    logger.warning(
+                        "event=workflow_source_mismatch field=%s category=%s",
+                        conflict if conflict in _SOURCE_MISMATCH_FIELDS else "specification",
+                        "unknown_part_id" if line is None else "value_conflict",
+                    )
                 raise McpCallError("invalid_input")
         return await self._execute(tool, request)
 
@@ -299,6 +329,7 @@ class Prepared:
     lines: tuple
     text: str = field(repr=False)
     rules: dict = field(repr=False)
+    structured_source: a1.StructuredIntakeSource | None = field(default=None, repr=False)
 
 
 async def prepare(database, run: Claim) -> Prepared:
@@ -314,9 +345,31 @@ async def prepare(database, run: Claim) -> Prepared:
         lines = tuple(details.runtime_lines)
         materials = {m: f"{c} {g}".replace("_", " ") for m, c, g in (await session.execute(select(Material.material_id, Material.category, Material.grade).where(Material.material_id.in_({ln.material_id for ln in lines})))).all()}  # fmt: skip
         finishes = {f: n.lower() for f, n in (await session.execute(select(Finish.finish_id, Finish.display_name).where(Finish.finish_id.in_({ln.finish_id for ln in lines})))).all()}  # fmt: skip
-        text_ = source_text(lines, details.rfq.raw_request, materials, finishes)
         if not lines:
             raise Unavailable("rfq_unavailable")
+        structured_source = None
+        if details.rfq.raw_request is None:
+            # Only current, customer-scoped portal persistence with no free-text
+            # requirements is authoritative structured input. Notes keep the existing
+            # extraction/contradiction/ownership path, with the same strict SourceGate.
+            try:
+                structured_source = a1.StructuredIntakeSource(
+                    specifications=tuple(
+                        PartSpecification(
+                            **{name: getattr(line, name) for name in PartSpecification.model_fields}
+                        )
+                        for line in lines
+                    ),
+                    material_names=tuple(materials.items()),
+                    finish_names=tuple(finishes.items()),
+                )
+            except ValidationError:
+                raise Unavailable(
+                    "invalid_structured_source", disposition="not_evaluated"
+                ) from None
+            text_ = structured_source.render()[0]
+        else:
+            text_ = source_text(lines, details.rfq.raw_request, materials, finishes)
         if len(text_) > MAX_RAW_REQUEST_CHARS:
             # D1: every stored line plus the complete notes exceed what A1 may read. Never
             # truncate (a dropped requirement would be invented by omission): the request is
@@ -328,7 +381,7 @@ async def prepare(database, run: Claim) -> Prepared:
             rules = {name: await pinned_rules(session, version) for name, version in wq.RULE_VERSIONS.items()}  # fmt: skip
         except RuleIntegrityError:
             raise Unavailable("rules_untrusted") from None
-    return Prepared(principal, lines, text_, rules)
+    return Prepared(principal, lines, text_, rules, structured_source)
 
 
 async def service_principal(session, customer_id: str, required: frozenset[str]) -> Principal:
@@ -420,6 +473,8 @@ async def process(database, settings: WorkerSettings, deps: Dependencies, run: C
         rfq_id=run.rfq_id,
         source_id=run.rfq_id,
         source_text=prepared.text,
+        trusted_part_ids=tuple(line.part_id for line in prepared.lines),
+        structured_source=prepared.structured_source,
         manufacturing_rules=prepared.rules["manufacturing"],
         pricing_rules=prepared.rules["pricing"],
         approval_rules=prepared.rules["approval"],
@@ -436,7 +491,7 @@ async def process(database, settings: WorkerSettings, deps: Dependencies, run: C
             try:
                 renewed = await heartbeat(database, settings, run)
             except Exception:  # a transient DB fault: try again; fencing guards the result
-                logger.warning("workflow heartbeat failed; retrying")
+                logger.warning("event=heartbeat_unavailable")
                 continue
             if not renewed:
                 lost.set()
@@ -444,8 +499,8 @@ async def process(database, settings: WorkerSettings, deps: Dependencies, run: C
 
     beating = asyncio.create_task(beat())
     supervised = asyncio.create_task(sv.run_supervisor_workflow(context))
+    watcher = asyncio.create_task(lost.wait())
     try:
-        watcher = asyncio.create_task(lost.wait())
         done, _ = await asyncio.wait(
             {supervised, watcher},
             timeout=settings.run_timeout_seconds + 30,
@@ -456,7 +511,7 @@ async def process(database, settings: WorkerSettings, deps: Dependencies, run: C
             supervised.cancel()
             await asyncio.gather(supervised, return_exceptions=True)  # custody cleared
             if lost.is_set():
-                logger.warning("workflow lease lost; result discarded")
+                logger.warning("event=workflow_lease_lost result=discarded")
                 return "stale"
             return await _settle_failure(database, settings, run, actor, "worker_timeout", True)
         result = supervised.result()
@@ -465,11 +520,16 @@ async def process(database, settings: WorkerSettings, deps: Dependencies, run: C
         raise
     finally:
         beating.cancel()
+        watcher.cancel()
+        if not supervised.done():
+            supervised.cancel()
+        await asyncio.gather(beating, watcher, supervised, return_exceptions=True)
     status, disposition, error = classify(result, gate.mismatch)
     if status == "retry":
         return await _settle_failure(database, settings, run, actor, error, True)
     external = result.attempt_id if result.status == "executed" else None
-    ok = await settle(database, settings, run, actor, status, disposition, error, external)
+    codes = result.disposition.clarification_codes if result.disposition else ()
+    ok = await settle(database, settings, run, actor, status, disposition, error, external, clarification_codes=codes)  # fmt: skip
     return status if ok else "stale"
 
 
@@ -500,26 +560,31 @@ class Worker:
 
     async def run_once(self) -> int:
         """Claim and process up to ``concurrency`` jobs concurrently; returns how many."""
-        claims = []
-        for _ in range(self.settings.concurrency):
-            claimed = await claim(self.database, self.settings)
-            if claimed is None:
-                break
-            claims.append(claimed)
-        await asyncio.gather(*(self._track(c) for c in claims))
-        return len(claims)
+        return await background.run_once(self, claim)
 
     async def _track(self, run: Claim) -> None:
+        from rfq_copilot.database import DatabaseError, PrivilegedRuntimeRole
+
         task = asyncio.create_task(process(self.database, self.settings, self.deps, run))
         self._running[task] = run
         try:
-            await task
+            status = await task
+            logger.info("event=workflow_settled status=%s", status)
         except asyncio.CancelledError:
-            await asyncio.shield(release(self.database, self.settings, run))
+            try:
+                await asyncio.shield(release(self.database, self.settings, run))
+            except DatabaseError:
+                logger.warning("event=workflow_release_unavailable recovery=lease")
             if not self.stopping.is_set():
                 raise
+        except PrivilegedRuntimeRole:
+            raise
+        except DatabaseError:
+            await _settle_failure(
+                self.database, self.settings, run, None, "database_unavailable", True
+            )
         except Exception as error:  # a defect: never crash the loop, never leak its text
-            logger.error("workflow run failed: %s", type(error).__name__)
+            logger.error("event=workflow_processing_error error_type=%s", type(error).__name__)
             await asyncio.shield(_settle_failure(self.database, self.settings, run, None, "internal_error", True))  # fmt: skip
         finally:
             self._running.pop(task, None)
@@ -527,31 +592,10 @@ class Worker:
     async def serve(self) -> None:
         """Poll until ``stopping``; then let in-flight runs finish within the grace period and
         release (attempt refunded) whatever is still running."""
-        active: set[asyncio.Task] = set()
-        stop = asyncio.create_task(self.stopping.wait())
-        try:
-            while not self.stopping.is_set():
-                if len(active) >= self.settings.concurrency:  # wait for a slot or the stop
-                    await asyncio.wait(active | {stop}, return_when=asyncio.FIRST_COMPLETED)
-                    continue
-                claimed = await claim(self.database, self.settings)
-                if claimed is None:
-                    await asyncio.wait({stop}, timeout=self.settings.poll_seconds)
-                    continue
-                task = asyncio.create_task(self._track(claimed))
-                active.add(task)
-                task.add_done_callback(active.discard)
-        finally:
-            stop.cancel()
-        if active:
-            await asyncio.wait(active, timeout=self.settings.shutdown_grace_seconds)
-            for task in list(self._running):
-                task.cancel()  # its _track releases the run (attempt refunded)
-            if active:
-                await asyncio.wait(active)
+        await background.serve(self, claim, logger)
 
 
-def _intake_graph_from_env(environ):
+def _intake_graph_from_env(environ, *, resources: AsyncExitStack | None = None):
     from rfq_copilot.intake import build_intake_graph
 
     provider = environ.get("RFQ_WORKFLOW_LLM", "")
@@ -564,6 +608,11 @@ def _intake_graph_from_env(environ):
         base_url=environ.get("RFQ_WORKFLOW_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
         temperature=0, seed=7, reasoning=False, num_ctx=8192,
     )  # fmt: skip
+    if resources is not None:
+        # ChatOllama has no public close method. Its owned Ollama clients do; keep
+        # this adapter here rather than inspecting the compiled graph at shutdown.
+        resources.callback(model._client.close)
+        resources.push_async_callback(model._async_client.close)
     return build_intake_graph(model)
 
 
@@ -591,31 +640,35 @@ def _mcp_from_env(environ):
 
 
 def main(argv=None) -> int:
-    from rfq_copilot.config import DatabaseConfig
-    from rfq_copilot.database import Database
+    from rfq_copilot.config import DatabaseConfig, DatabaseConfigurationError
+    from rfq_copilot.database import Database, DatabaseError
+    from rfq_copilot.dev_token import DevTokenError
 
     parser = argparse.ArgumentParser(description="Run the RFQ workflow worker.")
-    parser.add_argument("--target", choices=("development", "test"), default="development")
-    parser.add_argument("--once", action="store_true", help="claim at most one batch, then exit")
-    args = parser.parse_args(argv)
+    args = background.arguments(parser, os.environ, "RFQ_WORKFLOW", argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")  # fmt: skip
     environ = os.environ
-    settings = WorkerSettings(concurrency=int(environ.get("RFQ_WORKFLOW_CONCURRENCY", "1")))
-    deps = Dependencies(intake_graph=_intake_graph_from_env(environ), executor=_mcp_from_env(environ))  # fmt: skip
+    settings = background.settings_from_args(parser, args, environ, "RFQ_WORKFLOW", WorkerSettings)
 
     async def run() -> None:
         config = DatabaseConfig.from_serving_env(args.target, workflow=True)
-        async with Database(config) as database:
-            worker = Worker(database, settings, deps)
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, worker.stopping.set)
-            if args.once:
-                await worker.run_once()
-            else:
-                await worker.serve()
+        async with AsyncExitStack() as resources:
+            deps = Dependencies(
+                intake_graph=_intake_graph_from_env(environ, resources=resources),
+                executor=_mcp_from_env(environ),
+            )
+            async with Database(config) as database:
+                worker = Worker(database, settings, deps)
+                await background.run(worker, once=args.once)
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except (DatabaseConfigurationError, DevTokenError, ValueError, KeyError, OSError):
+        logger.error("event=worker_configuration_invalid")
+        return 2
+    except DatabaseError:
+        logger.error("event=worker_database_refused")
+        return 1
     return 0
 
 

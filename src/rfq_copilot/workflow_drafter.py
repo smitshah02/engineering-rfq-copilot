@@ -1,6 +1,7 @@
 """Checkpoint A4: the least-privilege drafter that turns a ready run into an internal draft.
 
-    python -m rfq_copilot.workflow_drafter [--target development] [--once]
+    python -m rfq_copilot.workflow_drafter --target development --continuous
+    python -m rfq_copilot.workflow_drafter --once
 
 A ``completed`` / ``ready_for_draft`` run (Checkpoint A3) is only a trigger, never evidence:
 the worker role could set it on any run. The draft is recomputed from the stored RFQ by the
@@ -40,13 +41,13 @@ import asyncio
 import logging
 import os
 import secrets
-import signal
 import socket
 from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import text
 
+from rfq_copilot import background
 from rfq_copilot import workflow_queue as wq
 from rfq_copilot.models import AuditEvent
 from rfq_copilot.quote_drafts import DraftRefused, create_quote_draft
@@ -71,8 +72,10 @@ class DrafterSettings:
     lease_seconds: float = 120.0
     poll_seconds: float = 5.0
     shutdown_grace_seconds: float = 30.0
+    error_backoff_max_seconds: float = 60.0
 
     def __post_init__(self) -> None:
+        background.validate_settings(self)
         if not 1 <= self.concurrency <= 4:
             raise ValueError("concurrency must be 1..4")
         if not 0 < self.lease_seconds <= 900:
@@ -209,7 +212,7 @@ async def draft(database, settings: DrafterSettings, run: DraftClaim, actor: lis
 
 async def process(database, settings: DrafterSettings, run: DraftClaim) -> str:
     """Draft one claimed run to a fenced settlement; returns the settled status or 'stale'."""
-    from rfq_copilot.database import DatabaseError
+    from rfq_copilot.database import DatabaseError, PrivilegedRuntimeRole
     from rfq_copilot.repositories.queries import RuleIntegrityError
 
     actor: list = []
@@ -224,6 +227,8 @@ async def process(database, settings: DrafterSettings, run: DraftClaim) -> str:
         return await _final(database, settings, run, who, "configuration_error", refused.reason)
     except RuleIntegrityError:  # a pinned rule missing or altered
         return await _final(database, settings, run, actor[0] if actor else None, "configuration_error", "rules_untrusted")  # fmt: skip
+    except PrivilegedRuntimeRole:
+        raise
     except DatabaseError:  # transient: the draft transaction rolled back completely
         return await retry(database, settings, run, "database_unavailable")
 
@@ -254,79 +259,64 @@ class Drafter:
         self._running: dict[asyncio.Task, DraftClaim] = {}
 
     async def run_once(self) -> int:
-        claims = []
-        for _ in range(self.settings.concurrency):
-            claimed = await claim(self.database, self.settings)
-            if claimed is None:
-                break
-            claims.append(claimed)
-        await asyncio.gather(*(self._track(c) for c in claims))
-        return len(claims)
+        return await background.run_once(self, claim)
 
     async def _track(self, run: DraftClaim) -> None:
+        from rfq_copilot.database import DatabaseError, PrivilegedRuntimeRole
+
         task = asyncio.create_task(process(self.database, self.settings, run))
         self._running[task] = run
         try:
-            await task
+            status = await task
+            logger.info("event=draft_settled status=%s", status)
         except asyncio.CancelledError:
-            await asyncio.shield(release(self.database, self.settings, run))
+            try:
+                await asyncio.shield(release(self.database, self.settings, run))
+            except DatabaseError:
+                logger.warning("event=draft_release_unavailable recovery=lease")
             if not self.stopping.is_set():
                 raise
+        except PrivilegedRuntimeRole:
+            raise
+        except DatabaseError:
+            # process already attempted a fenced retry; leave the original lease intact
+            # if that settlement also failed. serve observes this error and backs off.
+            raise
         except Exception as error:  # a defect: never crash the loop, never leak its text
-            logger.error("draft failed: %s", type(error).__name__)
+            logger.error("event=draft_processing_error error_type=%s", type(error).__name__)
             await asyncio.shield(retry(self.database, self.settings, run, "internal_error"))
         finally:
             self._running.pop(task, None)
 
     async def serve(self) -> None:
-        active: set[asyncio.Task] = set()
-        stop = asyncio.create_task(self.stopping.wait())
-        try:
-            while not self.stopping.is_set():
-                if len(active) >= self.settings.concurrency:
-                    await asyncio.wait(active | {stop}, return_when=asyncio.FIRST_COMPLETED)
-                    continue
-                claimed = await claim(self.database, self.settings)
-                if claimed is None:
-                    await asyncio.wait({stop}, timeout=self.settings.poll_seconds)
-                    continue
-                task = asyncio.create_task(self._track(claimed))
-                active.add(task)
-                task.add_done_callback(active.discard)
-        finally:
-            stop.cancel()
-        if active:
-            await asyncio.wait(active, timeout=self.settings.shutdown_grace_seconds)
-            for task in list(self._running):
-                task.cancel()  # its _track releases the run (attempt refunded)
-            if active:
-                await asyncio.wait(active)
+        await background.serve(self, claim, logger)
 
 
 def main(argv=None) -> int:
-    from rfq_copilot.config import DatabaseConfig
-    from rfq_copilot.database import Database
+    from rfq_copilot.config import DatabaseConfig, DatabaseConfigurationError
+    from rfq_copilot.database import Database, DatabaseError
 
     parser = argparse.ArgumentParser(description="Run the internal quotation drafter.")
-    parser.add_argument("--target", choices=("development", "test"), default="development")
-    parser.add_argument("--once", action="store_true", help="claim at most one batch, then exit")
-    args = parser.parse_args(argv)
+    args = background.arguments(parser, os.environ, "RFQ_DRAFTER", argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")  # fmt: skip
-    settings = DrafterSettings(concurrency=int(os.environ.get("RFQ_DRAFTER_CONCURRENCY", "1")))
+    settings = background.settings_from_args(
+        parser, args, os.environ, "RFQ_DRAFTER", DrafterSettings
+    )
 
     async def run() -> None:
         config = DatabaseConfig.from_serving_env(args.target, drafter=True)
         async with Database(config) as database:
             drafter = Drafter(database, settings)
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, drafter.stopping.set)
-            if args.once:
-                await drafter.run_once()
-            else:
-                await drafter.serve()
+            await background.run(drafter, once=args.once)
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except (DatabaseConfigurationError, ValueError, KeyError):
+        logger.error("event=drafter_configuration_invalid")
+        return 2
+    except DatabaseError:
+        logger.error("event=drafter_database_refused")
+        return 1
     return 0
 
 

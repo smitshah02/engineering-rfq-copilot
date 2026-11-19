@@ -169,3 +169,25 @@ def test_drafter_configuration_reads_only_its_own_credential():
         DatabaseConfig.from_serving_env(environ=SelectedKeysOnly(dict(OTHERS)), drafter=True)
     with pytest.raises(Exception, match="one restricted credential"):
         DatabaseConfig.from_serving_env(environ=env, drafter=True, workflow=True)
+
+
+@pytest.mark.asyncio
+async def test_continuous_drafter_recovers_after_a_temporary_database_failure(monkeypatch, settled):
+    drafter = wd.Drafter(None, wd.DrafterSettings(poll_seconds=0.05))
+    attempts = []
+
+    async def claim(*args):
+        attempts.append(1)
+        return wd.DraftClaim(RUN.workflow_run_id, RUN.rfq_id, RUN.customer_id, len(attempts), len(attempts))  # fmt: skip
+
+    async def draft(database, settings, run, actor):
+        if len(attempts) == 1:
+            raise DatabaseError("temporary fault")
+        drafter.stopping.set()
+        return "completed"
+
+    monkeypatch.setattr(wd, "claim", claim)
+    monkeypatch.setattr(wd, "draft", draft)
+    await asyncio.wait_for(drafter.serve(), 1)
+    assert len(attempts) == 2
+    assert settled == [(None, "completed", "ready_for_draft", "database_unavailable", 0)]

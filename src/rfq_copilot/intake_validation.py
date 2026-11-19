@@ -1,7 +1,7 @@
-"""RFQ Intake validation and clarification (Day 37): is the extracted RFQ complete,
+"""RFQ Intake validation and clarification (intake validation): is the extracted RFQ complete,
 consistent and ready to hand to manufacturing evaluation? Not feasibility, not price.
 
-    IntakeResult (Day 36) + source text + pinned manufacturing rules [+ catalog executor]
+    IntakeResult (intake extraction) + source text + pinned manufacturing rules [+ catalog executor]
         -> validate_intake -> IntakeValidation (findings, clarifications, readiness)
 
 - Required fields come only from the pinned manufacturing rule document (``mandatory_fields``,
@@ -15,6 +15,11 @@ consistent and ready to hand to manufacturing evaluation? Not feasibility, not p
 - Contradictions are scanned in the part's own source segment across clauses and sentences.
   Corrections are reported with their evidence and never resolved automatically.
 - Clarification questions are rendered from findings only (no model), one per part and field.
+- The worker may supply current-RFQ persisted IDs for unambiguous resolution of verified
+  labels after source attribution. Original labels, field evidence and scopes are preserved.
+- With a structured portal source, A1's exact output is checked against those persisted
+  facts. Required fields, allowed types and catalog checks still run; prose scanning cannot
+  replace a stored value or invent a missing one. Free-text requests retain every scan.
 - ``ready_for_manufacturing_evaluation`` means complete and catalog-recognized, not feasible.
 """
 
@@ -30,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from rfq_copilot.api.schemas.reads import MAX_OFFSET, MAX_PAGE_SIZE, MaterialListQuery
 from rfq_copilot.api.schemas.rfq import PartSpecification
 from rfq_copilot.grounding import PART_KIND
-from rfq_copilot.intake import (  # the Day 36 rules themselves: one implementation each
+from rfq_copilot.intake import (  # the intake extraction rules themselves: one implementation each
     _CORRECTION,
     _COUNT_TOKEN,
     _COUNTS,
@@ -49,11 +54,15 @@ from rfq_copilot.intake import (  # the Day 36 rules themselves: one implementat
     FieldEvidence,
     IntakePart,
     IntakeResult,
+    StructuredIntakeSource,
     _attribution_problem,
     _clause,
     _context_problem,
     _count,
+    _label_spans,
     _length,
+    _norm,
+    extract_structured_source,
 )
 from rfq_copilot.mcp.client import CONTRACTS
 from rfq_copilot.repositories.results import RuleVersionDetails
@@ -93,7 +102,7 @@ class Finding(BaseModel):
     part_index: int | None  # None: RFQ-level
     field: str | None
     kind: FindingKind
-    detail: str | None = None  # the Day 36 reason code or a fixed code
+    detail: str | None = None  # the intake extraction reason code or a fixed code
     evidence: tuple[str, ...] = ()  # exact source text
     spans: tuple[tuple[int, int], ...] = ()
     action: Literal["clarify", "review"]
@@ -135,7 +144,7 @@ class PartValidation(BaseModel):
     readiness: Readiness
     part_type: str | None = None
     verified: tuple[str, ...] = ()  # intake fields verified and not contradicted
-    # Values the model missed but the part's own segment states exactly once (same Day 36
+    # Values the model missed but the part's own segment states exactly once (same intake extraction
     # attribution, negation and alternative rules): provenance "source_scan", never model text.
     derived: tuple[FieldEvidence, ...] = ()
     findings: tuple[Finding, ...] = ()
@@ -245,7 +254,7 @@ def _codes(table, text: str) -> list[str]:
 
 
 def _scan(field: str, text: str, scope: tuple[int, int]):
-    """Distinct firm values the part's own source attributes to ``field`` (Day 36 rules), and
+    """Distinct firm values the part's own source attributes to ``field`` (intake extraction rules), and
     the spans of values stated only as alternatives ("100 or 150")."""
     signed = text.translate(_MINUS)
     values: dict[object, list[tuple[int, int]]] = {}
@@ -262,7 +271,9 @@ def _scan(field: str, text: str, scope: tuple[int, int]):
             return
         elif problem == "alternatives":
             options.append(span)
-        elif problem == "negated_or_conditional":  # "Do not powder coat" (D37-04)
+        elif (
+            problem == "negated_or_conditional"
+        ):  # "Do not powder coat" (intake validation control)
             negated.setdefault(value, []).append(span)
 
     if field in _COUNTS:
@@ -291,7 +302,7 @@ def _negated(text: str, span: tuple[int, int]) -> bool:
 
 
 def _scan_material(text: str, scope: tuple[int, int]):
-    """Material categories the part's segment states (D37-02), split into firm and negated."""
+    """Material categories the part's segment states (intake validation control), split into firm and negated."""
     values: dict[object, list[tuple[int, int]]] = {}
     negated: dict[object, list[tuple[int, int]]] = {}
     taken: list[tuple[int, int]] = []
@@ -318,7 +329,7 @@ _MATERIAL_NEXT = re.compile(rf"\s*(?:{_MATERIAL_TERM.pattern.removeprefix('(?i)'
 
 
 def _scan_grade(text: str, scope: tuple[int, int], labels: frozenset[str] = frozenset()):
-    """Catalog-shaped grades the part's segment states (D37-03, D37-09). A token counts only
+    """Catalog-shaped grades the part's segment states (intake validation control, intake validation control). A token counts only
     next to a material word, before ("aluminum 6061-T6") or after ("6061-T6 aluminum"), or
     in a clause naming a grade, when it is not a size, a count, a date or a part label
     ("P-100:", "BRK-200", "25 aluminum panels", "300 mm")."""
@@ -348,7 +359,7 @@ def _scan_grade(text: str, scope: tuple[int, int], labels: frozenset[str] = froz
 
 def _unsupported_in_source(text: str, spans, unsupported: set[str]):
     """Unsupported operations (pinned rules) the source requests, independent of the model;
-    negated or prohibited mentions are not requests (D37-01)."""
+    negated or prohibited mentions are not requests (intake validation control)."""
     for name, pattern in _UNSUPPORTED.items():
         if name not in unsupported:
             continue
@@ -358,7 +369,7 @@ def _unsupported_in_source(text: str, spans, unsupported: set[str]):
                     yield name, m.span()
 
 
-# --- RFQ-wide requirements and omitted operation requests (D37-07, D37-08) -------------
+# --- RFQ-wide requirements and omitted operation requests (intake validation control, intake validation control) -------------
 
 _GLOBAL = re.compile(r"(?i)\b(?:all|every|each|both|any)\b")
 _SENTENCE_END = re.compile(r"[!?\n;]|\.(?!\d)")
@@ -435,7 +446,7 @@ _NOT_OPERATIONS = frozenset(
 
 def _operation_requests(text: str, spans, verified_ops: list[str]):
     """Explicit operation requests in the source that are not recognized, finish, material or
-    already-extracted words: unknown operations the model may have omitted (D37-08)."""
+    already-extracted words: unknown operations the model may have omitted (intake validation control)."""
     for a, b in spans:
         for m in _REQUEST.finditer(text, a, b):
             word = (m.group("verb") or m.group("gerund")).casefold()
@@ -443,7 +454,7 @@ def _operation_requests(text: str, spans, verified_ops: list[str]):
             if word in _NOT_OPERATIONS or _negated(text, span):
                 continue
             if _codes(_OPERATIONS, word) or any(re.search(pat, word, re.I) for pat in _UNSUPPORTED.values()):  # fmt: skip
-                continue  # recognized, or unsupported (the D37-01 scan reports it)
+                continue  # recognized, or unsupported (the intake validation control scan reports it)
             if _FINISH_TERM.search(word) or _MATERIAL_TERM.search(word):
                 continue
             if any(word in v.casefold() or v.casefold().startswith(word[:4]) for v in verified_ops):
@@ -466,7 +477,7 @@ def _review(part, field, kind, detail=None, evidence=()) -> Finding:
 
 
 def _field_finding(index: int, f: FieldEvidence) -> Finding | None:
-    """A non-verified Day 36 field as a validation finding (None: a model error, not asked)."""
+    """A non-verified intake extraction field as a validation finding (None: a model error, not asked)."""
     if f.status == "verified" or f.field in ("description", "notes", "general_notes"):
         return None  # free text is informational; the part type is asked separately
     if f.reason == "part_association_unverified" or f.reason == "shared_evidence":
@@ -491,7 +502,7 @@ class _Catalog:
         return "unavailable", key, ()
 
     async def search(self, **query: str) -> tuple[CatalogStatus, tuple, tuple]:
-        """Every page of one query (D37-05), each row checked against the query (D37-06).
+        """Every page of one query (intake validation control), each row checked against the query (intake validation control).
         Incomplete, inconsistent or failed results are never a match."""
         key = tuple(sorted(query.items()))
         if self.execute is None:
@@ -618,7 +629,13 @@ def _operations(part: IntakePart, verified: dict, index: int, findings: list, ru
 def _part_type(part: IntakePart, text: str, verified: dict, index, findings, rules) -> str | None:
     sources = [verified["description"].value] if "description" in verified else []
     if part.scope is not None:
-        sources += [m.group() for m in PART_KIND.finditer(text, *part.scope)]
+        # A verified identifier such as P-TEST-BRACKET-001 names the part; words inside
+        # it are not additional type declarations. Keep every declaration outside it.
+        labels = _label_spans(part.label, text) if part.label_verified else []
+        sources += [
+            m.group() for m in PART_KIND.finditer(text, *part.scope)
+            if not any(a < m.end() and m.start() < b for a, b in labels)
+        ]  # fmt: skip
     codes = list(dict.fromkeys(c for s in sources for c in _codes(_PART_TYPES, s)))
     allowed = set(rules.document["allowed_part_types"]) if rules else None
     if len(codes) == 1 and codes[0] != "bracket":
@@ -632,7 +649,15 @@ def _part_type(part: IntakePart, text: str, verified: dict, index, findings, rul
     return None
 
 
-async def _validate_part(part: IntakePart, result: IntakeResult, text: str, rules, cat, requirements=()) -> PartValidation:  # fmt: skip
+async def _validate_part(
+    part: IntakePart,
+    result: IntakeResult,
+    text: str,
+    rules,
+    cat,
+    requirements=(),
+    structured_spec: PartSpecification | None = None,
+) -> PartValidation:
     i, findings = part.index, []
     verified = {f.field: f for f in part.fields if f.status == "verified"}
     for f in part.fields:
@@ -640,7 +665,7 @@ async def _validate_part(part: IntakePart, result: IntakeResult, text: str, rule
         if finding is not None:
             findings.append(finding)
     scans = {}
-    if part.scope is not None:  # cross-clause contradictions inside the part's own segment
+    if part.scope is not None and structured_spec is None:  # unstructured source contradictions
         for field in (*_SCANNED, "material", "material_grade"):
             if field == "material":
                 scans[field] = _scan_material(text, part.scope)
@@ -651,7 +676,7 @@ async def _validate_part(part: IntakePart, result: IntakeResult, text: str, rule
                 scans[field] = _scan(field, text, part.scope)
             values, options, negated = scans[field]
             clash = [v for v in negated if v in values]  # a verified value is always in values
-            if clash:  # requested and prohibited, in different clauses or sentences (D37-04)
+            if clash:  # requested and prohibited, in different clauses or sentences (intake validation control)
                 spans = tuple(s for v in clash for s in (*values.get(v, ()), *negated[v]))
                 findings.append(Finding(
                     part_index=i, field=field, kind="contradiction", action="clarify",
@@ -690,12 +715,21 @@ async def _validate_part(part: IntakePart, result: IntakeResult, text: str, rule
             f = FieldEvidence(field=field, value=text[a:b], evidence=text[a:b], span=(a, b), status="verified", normalized=value, transformation="source_scan")  # fmt: skip
             verified[field] = f
             derived.append(f)
-    part_type = _part_type(part, text, verified, i, findings, rules)
-    if rules is not None:
+    if structured_spec is None:
+        part_type = _part_type(part, text, verified, i, findings, rules)
+    else:
+        part_type = structured_spec.part_type
+        if (
+            rules is not None
+            and part_type is not None
+            and part_type not in rules.document["allowed_part_types"]
+        ):
+            findings.append(_review(i, "part_type", "unsupported_requirement", part_type))
+    if rules is not None and structured_spec is None:
         unsupported = set(rules.document.get("unsupported_operations", ()))
         for name, (a, b) in _unsupported_in_source(text, [part.scope] if part.scope else [], unsupported):  # fmt: skip
             findings.append(Finding(part_index=i, field="operations", kind="unsupported_requirement", detail=name, evidence=(text[a:b],), spans=((a, b),), action="review"))  # fmt: skip
-    if part.scope is not None:
+    if part.scope is not None and structured_spec is None:
         for conflict in _rfq_conflicts(i, verified, requirements, text):
             findings.append(conflict)
             verified.pop(conflict.field, None)  # contested: no catalog lookup, no spec value
@@ -725,6 +759,21 @@ async def _validate_part(part: IntakePart, result: IntakeResult, text: str, rule
     }
     if "hole_count" in verified:
         values["hole_count"] = verified["hole_count"].normalized
+    if structured_spec is not None:
+        # Catalog recognition cannot substitute a different catalog ID. No parsed or
+        # inferred field may fill, remove or overwrite a persisted structured value.
+        for name, check, matched in (
+            ("material_id", material, material.material_id),
+            ("finish_id", finish, finish.finish_id),
+        ):
+            if check.status == "matched" and matched != getattr(structured_spec, name):
+                findings.append(_review(i, name, "catalog_no_match", "source_catalog_mismatch"))
+        values = structured_spec.model_dump(exclude={"part_id"})
+        # Missing catalog wording is not permission to pass an unchecked stored ID.
+        for name, check in (("material_id", material), ("finish_id", finish)):
+            if getattr(structured_spec, name) is not None and check.status == "not_applicable":
+                if name not in {f.field for f in findings}:
+                    findings.append(_review(i, name, "catalog_not_checked"))
     raised = {f.field for f in findings}
     raised |= {"finish_id"} if "finish" in raised else set()
     raised |= {"material_id"} if raised & {"material", "material_grade"} else set()
@@ -844,6 +893,75 @@ def _clarifications(parts, rfq_findings, single: bool) -> tuple[Clarification, .
     )  # fmt: skip
 
 
+def _resolve_part_ids(
+    parts: list[PartValidation],
+    result: IntakeResult,
+    text: str,
+    trusted_part_ids: tuple[str, ...],
+) -> list[PartValidation]:
+    """Resolve verified labels without changing their evidence or source segmentation.
+
+    Only the worker's rendered wrapper and Intake's existing case/whitespace equivalence
+    are admitted. Even an exact spelling must be unique across all trusted representations.
+    A scope containing another trusted identifier is unsafe, including substring collisions.
+    Unknown IDs remain verbatim for SourceGate's existing refusal and diagnostic.
+    """
+    matches = [
+        [
+            part_id for part_id in trusted_part_ids
+            if p.label is not None and _norm(p.label) in (_norm(part_id), _norm(f"Part {part_id}"))
+        ]
+        for p in result.parts
+    ]  # fmt: skip
+    resolved = [m[0] if len(m) == 1 else None for m in matches]
+    output = []
+    for p, extracted, candidates, part_id in zip(
+        parts, result.parts, matches, resolved, strict=True
+    ):
+        if p.specification is None:
+            output.append(p)
+            continue
+        if not candidates:
+            output.append(p)  # no representation resolved; SourceGate must refuse this ID
+            continue
+        scope = extracted.scope
+        owners = {
+            candidate for candidate in trusted_part_ids
+            if scope is not None and any(
+                a < scope[1] and scope[0] < b
+                for a, b in _label_spans(candidate, text)
+            )
+        }  # fmt: skip
+        if (
+            not extracted.label_verified
+            or result.part_boundaries not in {"single_part", "labelled"}
+            or part_id is None
+            or resolved.count(part_id) != 1
+            or owners != {part_id}
+        ):
+            finding = _clarify(
+                p.index, "part_id", "ownership_unverified", "trusted_part_unresolved"
+            )
+            output.append(
+                p.model_copy(
+                    update={
+                        "readiness": "needs_clarification",
+                        "specification": None,
+                        "findings": (*p.findings, finding),
+                    }
+                )
+            )
+        else:
+            output.append(
+                p.model_copy(
+                    update={
+                        "specification": p.specification.model_copy(update={"part_id": part_id}),
+                    }
+                )
+            )
+    return output
+
+
 async def validate_intake(
     result: IntakeResult,
     text: str,
@@ -851,11 +969,16 @@ async def validate_intake(
     rules: RuleVersionDetails | None = None,
     catalog: ToolExecutor | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT,
+    trusted_part_ids: tuple[str, ...] | None = None,
+    structured_source: StructuredIntakeSource | None = None,
 ) -> IntakeValidation:
-    """Deterministic Intake validation of a Day 36 result against its own source text.
+    """Deterministic Intake validation of a intake extraction result against its own source text.
 
     ``text`` must be the exact text the result was extracted from (sha256-checked); ``rules``
-    is the pinned manufacturing rule version; ``catalog`` is a trusted read-only executor."""
+    is the pinned manufacturing rule version; ``catalog`` is a trusted read-only executor.
+    ``trusted_part_ids``, when supplied by the worker, contains only the current RFQ's
+    persisted identifiers. ``structured_source`` is the worker's current portal snapshot,
+    only for submissions without notes. Neither is taken from model output or text."""
     if not isinstance(result, IntakeResult):
         raise ValueError("validate_intake needs an IntakeResult")
     base = {"source_id": result.source_id, "rfq_id": result.rfq_id}
@@ -863,6 +986,18 @@ async def validate_intake(
         return IntakeValidation(**base, readiness="not_evaluated")
     if not isinstance(text, str) or result.source_sha256 != hashlib.sha256(text.encode()).hexdigest():  # fmt: skip
         raise ValueError("text is not the source of this IntakeResult")
+    if structured_source is not None:
+        # Bind validation to A1's exact deterministic output for this source, including
+        # candidate count, order, ownership, every value and every original evidence span.
+        if type(
+            structured_source
+        ) is not StructuredIntakeSource or result != extract_structured_source(
+            structured_source, text, result.source_id, result.rfq_id
+        ):
+            raise ValueError("extraction is not the structured source")
+        ids = tuple(p.part_id for p in structured_source.specifications)
+        if trusted_part_ids is not None and trusted_part_ids != ids:
+            raise ValueError("structured source owners do not match the current RFQ")
     if rules is not None:
         require_manufacturing_rules(rules)
         base |= {"manufacturing_rule_version": rules.rule_version, "manufacturing_rule_fingerprint": rules.fingerprint}  # fmt: skip
@@ -881,7 +1016,9 @@ async def validate_intake(
     requirements = _rfq_requirements(text, gaps, labels) if covered else []
     for word, (a, b) in _operation_requests(text, gaps, []):  # RFQ-wide unknown operations
         rfq_findings.append(Finding(part_index=None, field="operations", kind="unknown_operation", detail="source_request", evidence=(text[a:b],), spans=((a, b),), action="clarify"))  # fmt: skip
-    if rules is not None:  # unsupported requests outside every part's own segment (D37-01)
+    if (
+        rules is not None
+    ):  # unsupported requests outside every part's own segment (intake validation control)
         unsupported = set(rules.document.get("unsupported_operations", ()))
         for name, (a, b) in _unsupported_in_source(text, gaps, unsupported):
             rfq_findings.append(Finding(part_index=None, field="operations", kind="unsupported_requirement", detail=name, evidence=(text[a:b],), spans=((a, b),), action="review"))  # fmt: skip
@@ -890,12 +1027,14 @@ async def validate_intake(
         if finding is not None:
             rfq_findings.append(finding.model_copy(update={"part_index": None}))
     cat = _Catalog(catalog)
+
+    async def validate_part(part, part_catalog):
+        spec = structured_source.specifications[part.index - 1] if structured_source else None
+        return await _validate_part(part, result, text, rules, part_catalog, requirements, spec)
+
     try:
         async with asyncio.timeout(timeout_seconds):
-            parts = [
-                await _validate_part(p, result, text, rules, cat, requirements)
-                for p in result.parts
-            ]
+            parts = [await validate_part(p, cat) for p in result.parts]
     except TimeoutError:
         cat.execute, cat.failed = None, True
         parts = [
@@ -907,11 +1046,11 @@ async def validate_intake(
                     "specification": None,
                 }
             )  # fmt: skip
-            for p in [
-                await _validate_part(p, result, text, rules, _Catalog(None)) for p in result.parts
-            ]  # fmt: skip
+            for p in [await validate_part(p, _Catalog(None)) for p in result.parts]  # fmt: skip
         ]
         rfq_findings.append(_review(None, None, "catalog_unavailable", "timeout"))
+    if trusted_part_ids is not None and structured_source is None:
+        parts = _resolve_part_ids(parts, result, text, trusted_part_ids)
     rfq_findings = list(dict.fromkeys(rfq_findings))
     blocking = {f.kind for f in rfq_findings} & {"unsupported_requirement", "unknown_operation"}
     if blocking:

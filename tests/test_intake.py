@@ -311,6 +311,68 @@ async def test_duplicate_labels_are_kept_separate_and_unverified():
     assert all(intake.candidate_specification(result, p) is None for p in result.parts)
 
 
+@pytest.mark.parametrize(
+    "first,second",
+    [
+        ("Part P-FIRST", "Part P-OTHER"),
+        ("Part P-FIRST", "part p-other"),
+        ("Part P-FIRST", "Part #P-OTHER"),
+        ("Part P-FIRST", "Part P/OTHER"),
+        ("Part P-FIRST", "Part P_OTHER"),
+        ("Part P-FIRST", "Part P.OTHER"),
+        ("Part P-FIRST", "Part P-FIRST-EXTRA"),
+        ("Part A", "Part P-OTHER"),
+        ("Part P", "Part P-OTHER"),
+        ("Part 1", "Part P-OTHER"),
+    ],
+)
+async def test_omitted_compound_part_header_prevents_single_part_ownership(first, second):
+    # Both owners state the same value: a numeric contradiction cannot expose the
+    # omitted owner. IDs without digits must still be recognized in explicit headers.
+    text = f"{first}: thickness 2 mm. {second}: thickness 2 mm."
+    args = {"parts": [{"label": first, "thickness": ev("2 mm", "thickness 2 mm")}]}
+    result = verify_extraction(proposal(args), text, "s")
+    assert result.part_boundaries == "unverified"
+    assert len(result.parts) == 1  # no invented candidate for the omitted source owner
+    (part,) = result.parts
+    assert part.scope is None
+    thickness = part.get("thickness")
+    assert thickness.status == "ambiguous"
+    assert thickness.reason == "part_association_unverified"
+    assert thickness.normalized is None
+    a, b = thickness.span
+    assert text[a:b] == thickness.evidence
+    assert intake.candidate_specification(result, part) is None
+
+
+async def test_existing_short_marker_guard_still_protects_headers_without_colons():
+    text = "Part A-FIRST needs thickness 2 mm. Part B-OTHER needs thickness 2 mm."
+    args = {"parts": [{"label": "Part A-FIRST", "thickness": ev("2 mm", "thickness 2 mm")}]}
+    result = verify_extraction(proposal(args), text, "s")
+    assert result.part_boundaries == "unverified"
+    assert result.parts[0].get("thickness").normalized is None
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "Part P-ONLY: width 60 mm.",
+        "part p-only: width 60 mm.",
+        "Part #P-ONLY: width 60 mm.",
+        "Part type: flat panel, aluminum 5052-H32, M6 holes.",
+        "Use P-OTHER as the drawing reference.",
+    ],
+)
+async def test_compound_part_headers_do_not_invent_owners_from_references_or_repetition(tail):
+    text = f"Part P-ONLY: thickness 2 mm. {tail}"
+    args = {"parts": [{"label": "Part P-ONLY", "thickness": ev("2 mm", "thickness 2 mm")}]}
+    result = verify_extraction(proposal(args), text, "s")
+    assert result.part_boundaries == "single_part"
+    assert len(result.parts) == 1
+    assert result.parts[0].scope == (0, len(text))
+    assert result.parts[0].get("thickness").status == "verified"
+
+
 async def test_unnamed_parts_with_shared_evidence_are_ambiguous():
     text = "200 brackets and 300 plates, both 2 mm thick."
     args = {
@@ -609,7 +671,9 @@ async def test_state_holds_no_credentials_and_errors_drop_content():
         "proposal",
         "result",
         "error",
+        "structured_source",
     }
+    assert state["structured_source"] is None
 
 
 async def test_trusted_scope_comes_only_from_the_caller():
@@ -1324,3 +1388,194 @@ async def test_labelled_split_falls_back_when_a_label_is_a_value():
 async def test_iso_date_year_is_never_a_quantity():
     result, part = labelled("Part A: 2026-12-15 panels.", quantity=ev("2026", "2026-12-15 panels"))
     assert part.get("quantity").status != "verified"
+
+
+# --- numeric evidence: complete tokens and repeated quotes --------------------------------
+
+
+@pytest.mark.parametrize("value", [0, "0", "zero"])
+@pytest.mark.parametrize("quote", ["0", "hole count 0"])
+async def test_numeric_evidence_zero_holes_after_decimal_tolerance(value, quote):
+    text = "Part A: tolerance 0.2 mm, hole count 0."
+    result, part = labelled(text, tolerance=ev("0.2 mm"), hole_count=ev(value, quote))
+    hole = part.get("hole_count")
+    assert (hole.status, hole.normalized) == ("verified", 0)
+    assert part.get("tolerance").normalized == Decimal("0.2")
+    start = text.index(quote, text.index("hole count"))
+    assert hole.span == (start, start + len(quote))
+    assert text[slice(*hole.span)] == hole.evidence == quote
+    assert intake.candidate_specification(result, part).hole_count == 0
+
+
+@pytest.mark.parametrize("token", ["0.2", "0,200", "20.5", "-0", "−0", "+0", "±0"])
+async def test_numeric_evidence_quote_cannot_truncate_decimal_grouping_or_sign(token):
+    value = "20" if token == "20.5" else "0"
+    _, part = labelled(f"Part A: hole count {token}.", hole_count=ev(value))
+    hole = part.get("hole_count")
+    assert (hole.status, hole.reason, hole.normalized) == (
+        "unverified",
+        "value_not_in_evidence",
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "name,value,text,expected",
+    [
+        ("hole_count", "4", "Part A: quantity 4, hole count 4.", 4),
+        ("quantity", "4", "Part A: hole count 4, quantity 4.", 4),
+        ("thickness", "2 mm", "Part A: width 2 mm, thickness 2 mm.", Decimal("2")),
+        ("hole_count", "0", "Part A: hole count 0. Hole count 0.", 0),
+    ],
+)
+async def test_numeric_evidence_repeated_quote_uses_attributable_span(name, value, text, expected):
+    _, part = labelled(text, **{name: ev(value)})
+    evidence = part.get(name)
+    assert (evidence.status, evidence.normalized) == ("verified", expected)
+    cue = {"hole_count": "hole count", "quantity": "quantity", "thickness": "thickness"}[name]
+    start = text.index(value, text.index(cue))
+    assert evidence.span == (start, start + len(value))
+    assert evidence.evidence == text[slice(*evidence.span)] == value
+
+
+@pytest.mark.parametrize("quote", ["0", "hole count 0"])
+async def test_numeric_evidence_repeated_zero_stays_inside_its_part(quote):
+    text = "Part A: tolerance 0.2 mm, hole count 0. Part B: tolerance 0.2 mm, hole count 0."
+    args = {
+        "parts": [{"label": label, "hole_count": ev(0, quote)} for label in ("Part A", "Part B")],
+    }
+    result = verify_extraction(proposal(args), text, "s")
+    assert result.part_boundaries == "labelled"
+    for part in result.parts:
+        hole = part.get("hole_count")
+        assert (hole.status, hole.normalized) == ("verified", 0)
+        assert part.scope[0] <= hole.span[0] < hole.span[1] <= part.scope[1]
+        assert hole.evidence == text[slice(*hole.span)] == quote
+
+
+@pytest.mark.parametrize(
+    "quote,reason",
+    [("0", "value_not_in_evidence"), ("hole count 0", "evidence_outside_part")],
+)
+async def test_numeric_evidence_cannot_borrow_zero_from_another_part(quote, reason):
+    text = "Part A: tolerance 0.2 mm, hole count 4. Part B: tolerance 0.2 mm, hole count 0."
+    args = {
+        "parts": [
+            {"label": "Part A", "hole_count": ev(0, quote)},
+            {"label": "Part B", "hole_count": ev(0, "hole count 0")},
+        ],
+    }
+    result = verify_extraction(proposal(args), text, "s")
+    assert result.part_boundaries == "labelled"
+    hole = field(result, 0, "hole_count")
+    assert (hole.status, hole.reason, hole.normalized) == ("unverified", reason, None)
+    assert field(result, 1, "hole_count").normalized == 0
+
+
+@pytest.mark.parametrize(
+    "text,reason",
+    [
+        ("Part A: hole count 0 or 4. Hole count 0.", "alternatives"),
+        ("Part A: no hole count 0. Hole count 0.", "negated_or_conditional"),
+    ],
+)
+async def test_numeric_evidence_repeated_quote_does_not_skip_meaningful_ambiguity(text, reason):
+    _, part = labelled(text, hole_count=ev(0))
+    hole = part.get("hole_count")
+    assert (hole.status, hole.reason, hole.normalized) == ("ambiguous", reason, None)
+
+
+async def test_numeric_evidence_keeps_existing_reused_value_rejection():
+    _, part = labelled(
+        "Part A: quantity 4, hole count 4.",
+        quantity=ev(4, "quantity 4"),
+        hole_count=ev(4, "hole count 4"),
+    )
+    for name in ("quantity", "hole_count"):
+        evidence = part.get(name)
+        assert (evidence.status, evidence.reason, evidence.normalized) == (
+            "ambiguous",
+            "value_reused",
+            None,
+        )
+
+
+@pytest.mark.parametrize(
+    "value,quote,reason",
+    [
+        (0, "0 holes", "evidence_not_in_source"),
+        (4, "hole count 0", "value_not_in_evidence"),
+        ("0.2", "hole count 0", "unsupported_format"),
+        (-1, "hole count 0", "out_of_range"),
+    ],
+)
+async def test_numeric_evidence_missing_or_unsupported_evidence_stays_untrusted(
+    value, quote, reason
+):
+    _, part = labelled("Part A: hole count 0.", hole_count=ev(value, quote))
+    hole = part.get("hole_count")
+    assert hole.status != "verified" and hole.normalized is None and hole.reason == reason
+
+
+async def test_numeric_evidence_unstated_holes_remain_missing():
+    _, part = labelled("Part A: tolerance 0.2 mm.", tolerance=ev("0.2 mm"))
+    assert part.get("hole_count") is None and "hole_count" in part.missing
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "hole count 0.",
+        "we want 0 holes.",
+        "0 holes at the front.",
+        "paint around 0 holes.",
+    ],
+)
+async def test_numeric_evidence_words_ending_nt_are_not_negations(statement):
+    text = f"Part A: {statement}"
+    _, part = labelled(text, hole_count=ev(0))
+    hole = part.get("hole_count")
+    assert (hole.status, hole.reason, hole.normalized) == ("verified", None, 0)
+    assert text[slice(*hole.span)] == hole.evidence == "0"
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "Don't use",
+        "Dont use",
+        "Don’t use",
+        "Doesn't need",
+        "Doesnt need",
+        "Didn't request",
+        "Didnt request",
+        "Can't use",
+        "Cant use",
+        "Won't use",
+        "Wont use",
+        "Isn't requesting",
+        "Isnt requesting",
+        "Aren't requesting",
+        "Arent requesting",
+        "Shouldn't use",
+        "Shouldnt use",
+        "Mustn't use",
+        "Mustnt use",
+        "not requesting",
+        "never use",
+        "without",
+        "unless needed use",
+        "if required use",
+        "optional",
+    ],
+)
+async def test_numeric_evidence_negation_and_conditionals_still_stop_repeated_quotes(prefix):
+    text = f"Part A: {prefix} hole count 0. Hole count 0."
+    _, part = labelled(text, hole_count=ev(0))
+    hole = part.get("hole_count")
+    assert (hole.status, hole.reason, hole.normalized) == (
+        "ambiguous",
+        "negated_or_conditional",
+        None,
+    )
+    assert hole.span[0] < text.index(". Hole count")

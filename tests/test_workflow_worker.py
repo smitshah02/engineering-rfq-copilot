@@ -2,6 +2,7 @@
 worker's configuration. No database, network or model (the database paths are in
 test_workflow_worker_database)."""
 
+import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -164,3 +165,126 @@ async def test_ollama_smoke_worker_intake_through_the_supervisor(monkeypatch):
     print({"status": status, "disposition": disposition, "error": error, "tools": router.calls})
     assert result.status == "executed" and not result.approved and not result.released
     assert status != "retry" and disposition != "source_mismatch", (status, disposition, error)
+
+
+# --- clarification codes in the workflow.attempt audit event ----------------------------------
+
+from rfq_copilot import workflow_queue as wq  # noqa: E402
+
+_RUN = ww.Claim("11111111-1111-1111-1111-111111111111", "RFQ-" + "a" * 32, "CUST-1", 1, 1)
+_CODES = ("1:finish_id:missing", "0:-:no_parts")
+
+
+def _event(disposition="clarification_required", codes=_CODES):
+    return ww._attempt_event(_RUN, None, "waiting_human", disposition, None, 1, codes).event_data
+
+
+def test_attempt_event_records_validated_clarification_codes():
+    data = _event(codes=_CODES + _CODES)  # duplicates collapse
+    assert data[wq.CLARIFICATION_KEY] == list(_CODES)
+    assert wq.clarification_codes_valid(data[wq.CLARIFICATION_KEY])
+
+
+def test_attempt_event_caps_distinct_valid_codes_at_25():
+    codes = tuple(f"{i}:finish_id:missing" for i in range(26))
+    data = _event(codes=codes + codes)
+    assert data[wq.CLARIFICATION_KEY] == list(codes[:25])
+    assert wq.clarification_codes_valid(data[wq.CLARIFICATION_KEY])
+
+
+def test_attempt_event_drops_invalid_codes_and_free_text():
+    bad = (
+        "Customer wants 5 pcs of 6061",
+        "1:finish_id:missing\nsecret",
+        "../etc",
+        7,
+        "",
+        "x" * 300,
+    )
+    data = _event(codes=bad + ("2:material_id:unknown",))
+    assert data[wq.CLARIFICATION_KEY] == ["2:material_id:unknown"]
+    assert wq.CLARIFICATION_KEY not in _event(codes=bad)  # nothing valid -> no key
+
+
+def test_attempt_event_without_codes_or_other_disposition_matches_the_historical_shape():
+    assert set(_event(codes=())) == wq.ATTEMPT_KEYS
+    assert set(_event(disposition="review_required")) == wq.ATTEMPT_KEYS  # never stored there
+
+
+def test_attempt_event_stores_nothing_but_fixed_codes():
+    blob = repr(_event())
+    assert set(_event()) == wq.ATTEMPT_KEYS | {wq.CLARIFICATION_KEY}
+    assert not any(w in blob for w in ("prompt", "reasoning", "price", "token", "password", "http"))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        [],
+        "1:finish_id:missing",
+        ["bad code"],
+        ["1:a:b", "1:a:b"],
+        [f"{i}:f:k" for i in range(26)],
+        None,
+    ],
+)
+def test_integrity_rejects_malformed_code_lists(value):
+    assert not wq.clarification_codes_valid(value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", ["model_error", "unavailable"])
+@pytest.mark.parametrize("recover", [False, True])
+async def test_continuous_technical_outages_recover_or_exhaust_without_reprocessing(
+    monkeypatch, code, recover
+):
+    """The same bounded settlements for transient LLM/technical and MCP failures."""
+    settings = ww.WorkerSettings(poll_seconds=0.05)
+    worker = ww.Worker(None, settings, ww.Dependencies(object(), lambda p: object()))
+    state = {"status": "queued", "attempts": 0}
+    settlements = []
+
+    async def claim(*args):
+        if state["status"] != "queued":
+            return None
+        state["status"] = "running"
+        state["attempts"] += 1
+        return ww.Claim("run", "rfq", "customer", state["attempts"], state["attempts"])
+
+    async def prepare(*args):
+        rules = {"manufacturing": object(), "pricing": object(), "approval": object()}
+        return ww.Prepared(ALICE, (), "source", rules)
+
+    async def supervisor(context):
+        if recover and state["attempts"] == 2:
+            return SimpleNamespace(
+                status="executed",
+                attempt_id="a" * 32,
+                disposition=SimpleNamespace(
+                    category="draft_ready_for_approval", clarification_codes=()
+                ),
+            )
+        return SimpleNamespace(
+            status="executed", disposition=None, route=SimpleNamespace(reason=code)
+        )
+
+    async def settle(
+        database, settings, run, actor, status, disposition=None, error=None, *a, **kw
+    ):
+        state["status"] = status
+        settlements.append((status, disposition, error))
+        if status in {"failed", "completed"}:
+            worker.stopping.set()
+        return True
+
+    monkeypatch.setattr(ww, "claim", claim)
+    monkeypatch.setattr(ww, "prepare", prepare)
+    monkeypatch.setattr(ww, "settle", settle)
+    monkeypatch.setattr(sv, "run_supervisor_workflow", supervisor)
+    await asyncio.wait_for(worker.serve(), 2)
+    assert state["attempts"] == (2 if recover else ww.MAX_ATTEMPTS)
+    assert settlements[0] == ("queued", None, code)
+    assert settlements[-1] == (
+        ("completed", "ready_for_draft", None) if recover else ("failed", "technical_failure", code)
+    )
+    assert await claim() is None

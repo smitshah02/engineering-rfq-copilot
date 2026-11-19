@@ -20,6 +20,7 @@ import json
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -265,6 +266,129 @@ async def test_customer_cannot_see_the_internal_draft(world, seed_database):
     run = await run_of(seed_database, rfq_id)
     async with seed_database.session() as s:  # the only customer quote path: human release
         assert await get_released_quotation(s, run.quote_id, customer_id=run.customer_id) is None
+
+
+async def test_continuous_submission_to_internal_draft_and_restart(
+    world, seed_database, seed_plan, monkeypatch
+):
+    """Committed test queue + real worker settlement + deterministic draft, no --once.
+
+    Supervisor is mocked at its boundary; source/identity/rules preparation and every DB
+    transition are real. The fixture has one stand-in restricted role, so grant profiles
+    are switched only after each consumer has stopped and disposed its connections.
+    """
+    rfq_id = await submit(seed_database, world)
+    evaluations = []
+
+    async def supervisor(context):
+        evaluations.append(context.rfq_id)
+        return SimpleNamespace(
+            status="executed",
+            attempt_id="a" * 32,
+            disposition=SimpleNamespace(
+                category="draft_ready_for_approval", clarification_codes=()
+            ),
+        )
+
+    async def until_disposition(consumer, disposition):
+        task = asyncio.create_task(consumer.serve())
+        try:
+            async with asyncio.timeout(15):
+                while (await run_of(seed_database, rfq_id)).disposition != disposition:
+                    if task.done():
+                        await task
+                    await asyncio.sleep(0.05)
+        finally:
+            consumer.stopping.set()
+            await asyncio.wait_for(task, 10)
+
+    monkeypatch.setattr(workflow_worker.sv, "run_supervisor_workflow", supervisor)
+    async with as_role(seed_database, worker_block, workflow=True) as database:
+        worker = workflow_worker.Worker(
+            database,
+            workflow_worker.WorkerSettings(poll_seconds=0.05),
+            workflow_worker.Dependencies(object(), lambda principal: object()),
+        )
+        await until_disposition(worker, "ready_for_draft")
+    assert evaluations == [rfq_id]
+
+    async with drafter_db(seed_database) as database:
+        await until_disposition(Drafter(database, settings_()), "draft_created")
+        first = await run_of(seed_database, rfq_id)
+        restarted = Drafter(database, settings_())
+        polls = []
+        real_claim = workflow_drafter.claim
+
+        async def observe(*args):
+            result = await real_claim(*args)
+            assert result is None
+            polls.append(1)
+            if len(polls) == 2:
+                restarted.stopping.set()
+            return result
+
+        monkeypatch.setattr(workflow_drafter, "claim", observe)
+        await asyncio.wait_for(restarted.serve(), 5)
+    final = await run_of(seed_database, rfq_id)
+    assert (final.quote_id, final.claim_generation, final.draft_attempt_count) == (
+        first.quote_id,
+        first.claim_generation,
+        1,
+    )
+    assert await rows(seed_database, Quote, Quote.rfq_id == rfq_id) == 1
+    async with seed_database.session() as session:
+        quote = await session.get(Quote, final.quote_id)
+        assert quote.status == "draft" and quote.approved_version is None
+        assert quote.released_at is None and quote.submitted_by is None
+        assert await get_released_quotation(session, final.quote_id, customer_id=final.customer_id) is None  # fmt: skip
+    assert (await runtime_audit(seed_database, seed_plan))["status"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "status,disposition",
+    [
+        ("queued", None),
+        ("waiting_human", "clarification_required"),
+        ("waiting_human", "review_required"),
+        ("blocked", "not_quotable"),
+        ("failed", "technical_failure"),
+    ],
+)
+async def test_continuous_drafter_never_claims_noneligible_evaluations(
+    world, seed_database, monkeypatch, status, disposition
+):
+    rfq_id = await submit(seed_database, world)
+    if status != "queued":
+        async with as_role(seed_database, worker_block, workflow=True) as database:
+            settings = workflow_worker.WorkerSettings()
+            if status == "failed":
+                for _ in range(workflow_worker.MAX_ATTEMPTS):
+                    run = await workflow_worker.claim(database, settings)
+                    await workflow_worker._settle_failure(
+                        database, settings, run, "U-SVC-A", "unavailable", True
+                    )
+            else:
+                run = await workflow_worker.claim(database, settings)
+                assert await workflow_worker.settle(
+                    database, settings, run, "U-SVC-A", status, disposition
+                )
+    async with drafter_db(seed_database) as database:
+        drafter = Drafter(database, settings_())
+        real_claim, polls = workflow_drafter.claim, []
+
+        async def observe(*args):
+            result = await real_claim(*args)
+            assert result is None
+            polls.append(1)
+            if len(polls) == 2:
+                drafter.stopping.set()
+            return result
+
+        monkeypatch.setattr(workflow_drafter, "claim", observe)
+        await asyncio.wait_for(drafter.serve(), 5)
+    final = await run_of(seed_database, rfq_id)
+    assert (final.status, final.disposition, final.draft_attempt_count) == (status, disposition, 0)
+    assert await rows(seed_database, Quote, Quote.rfq_id == rfq_id) == 0
 
 
 # --- refusals and configuration (A4.4) ------------------------------------------------------------

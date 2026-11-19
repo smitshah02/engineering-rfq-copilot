@@ -1116,3 +1116,40 @@ async def test_grade_scan_notation_and_exclusions():
     assert grades("Need 25 aluminum panels.") == set()  # a count, not a grade
     assert grades("BRK-200 aluminum plates.", frozenset({"brk-200"})) == set()  # a part label
     assert grades("6061-T6 aluminum and aluminum 5052-H32.") == {"6061-t6", "5052-h32"}
+
+
+# --- numeric evidence through deterministic validation -----------------------------------
+
+
+@pytest.mark.parametrize("quote", ["0", "hole count 0"])
+async def test_numeric_evidence_zero_holes_reaches_specification_without_derivation(quote):
+    text = COMPLETE.replace("±0.2", "0.2") + " hole count 0."
+    args = complete_args(tolerance=ev("0.2 mm"), hole_count=ev(0, quote))
+    result, validated = await validate(text, args)
+    assert result.parts[0].get("hole_count").status == "verified"
+    assert validated.readiness == "ready_for_manufacturing_evaluation"
+    spec = validated.parts[0].specification
+    assert spec.hole_count == 0 and spec.tolerance_mm == Decimal("0.2")
+    assert not any(f.field == "hole_count" for f in validated.parts[0].derived)
+    assert validated.clarifications == ()
+
+
+@pytest.mark.parametrize(
+    "name,value,statement,kind",
+    [
+        ("hole_count", 0, "hole count 0 or 4.", "ambiguous"),
+        ("hole_count", 0, "hole count 0. Hole count 4.", "contradiction"),
+        ("hole_count", 0, "hole count 0. Do not use hole count 0.", "contradiction"),
+        ("quantity", 25, "Quantity 25 or 30.", "ambiguous"),
+        ("quantity", 25, "Quantity 30.", "contradiction"),
+    ],
+)
+async def test_numeric_evidence_keeps_count_ambiguities_and_contradictions(name, value, statement, kind):  # fmt: skip
+    text = COMPLETE + " " + statement
+    if name == "quantity" and kind == "ambiguous":
+        text = COMPLETE.replace("25 aluminum", "25 or 30 aluminum")
+    _, validated = await validate(text, complete_args(**{name: ev(value)}))
+    assert (name, kind) in kinds(validated)
+    assert validated.readiness == "needs_clarification"
+    assert validated.parts[0].specification is None
+    assert any(c.field == name and c.kind == kind for c in validated.clarifications)

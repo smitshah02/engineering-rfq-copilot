@@ -1,4 +1,4 @@
-"""Supervisor foundation (Day 44) and deterministic routing (Day 45): typed state, trusted run
+"""Supervisor foundation (Supervisor foundation) and deterministic routing (routing): typed state, trusted run
 context, the A1 -> A5 stage plan, and two compiled graphs. Neither runs a specialist, a model
 or an MCP tool.
 
@@ -8,17 +8,17 @@ or an MCP tool.
                     clarification_required | review_required | blocked | workflow_failed |
                     routing_complete -> END
 
-- Routing (Day 45): ``decide`` picks the next stage from ``STAGE_PLAN`` and the recorded
+- Routing (routing): ``decide`` picks the next stage from ``STAGE_PLAN`` and the recorded
   ``StageOutcome``s, or stops. Outcomes are written only by ``record_outcome``, which derives
-  them from a stage's own result with the Phase 6 checks (``_NEXT``, the handoff checks) plus
+  them from a stage's own result with the specialist workflow checks (``_NEXT``, the handoff checks) plus
   the attempt's source hash and rule fingerprints; it records only the stage the current route
-  delegated, once. Until Day 46 adds a delegation node (``attach_routing(delegate=...)``)
+  delegated, once. Until delegation adds a delegation node (``attach_routing(delegate=...)``)
   nothing records outcomes, so ``run_supervisor_routing`` always routes to
   ``intake_extraction`` and stops at ``await_delegation``. A route is a control decision, never
   a feasibility, price or approval decision.
 
 - Trust: everything with authority arrives in ``SupervisorContext``, the LangGraph run
-  *context* (Phase 5 ``TurnContext`` pattern): the verified ``Principal``, the principal-bound
+  *context* (conversational graph ``TurnContext`` pattern): the verified ``Principal``, the principal-bound
   ``graph.mcp_executor``, the trusted ``rfq_id`` / ``source_id``, the customer text and the
   ``pinned_rules`` results. It is held only for the run, never in state, a result or a
   checkpoint. The customer id comes from the principal only; the source hash is computed here
@@ -34,12 +34,12 @@ or an MCP tool.
   every stage "pending" with no reason and no clarification or review indicator. No
   validated evidence exists yet, so nothing may claim completion. The runner validates the
   final state again before reporting success, so a supplied graph cannot forge a result.
-- Stage plan: ``STAGE_PLAN`` is the code-controlled allow-list of the six Phase 6 stages,
+- Stage plan: ``STAGE_PLAN`` is the code-controlled allow-list of the six specialist workflow stages,
   each naming the existing agent function, the result type it hands off and the stages it
-  consumes. It is a description only; Day 46 delegates through it. ``agent_integration`` (the
+  consumes. It is a description only; delegation delegates through it. ``agent_integration`` (the
   sequential baseline) is untouched and still the only way to evaluate an RFQ.
 - Failure: a fixed error code, never exception text; cancellation propagates; no retries.
-- Parallelism (Day 47, L01): the six stages stay a strict chain. Inside A2, the per-part
+- Parallelism (parallel execution, L01): the six stages stay a strict chain. Inside A2, the per-part
   feasibility checks are independent read-only calls; the trusted ``part_concurrency``
   (default 2, max ``a2.MAX_CONCURRENCY``) bounds how many overlap. A2 joins them back into one
   ``ManufacturingAssessment``, which is the stage's single recorded outcome.
@@ -47,7 +47,7 @@ or an MCP tool.
   assessment, no amount, no draft and no ``customer_view``.
 - Checkpoints: the graph compiles without a checkpointer and ``run_supervisor_foundation``
   refuses one. Its Pydantic state values are outside ``graph.SAFE_SERDE``'s allow-list, so this
-  state is not checkpoint-safe; Day 49 decides what may be persisted.
+  state is not checkpoint-safe; recovery decides what may be persisted.
 """
 
 import asyncio
@@ -87,7 +87,9 @@ from rfq_copilot.agent_integration import DEFAULT_TIMEOUT, Stage
 from rfq_copilot.api.auth import Principal
 from rfq_copilot.api.schemas.common import Identifier
 from rfq_copilot.api.schemas.rfq import MAX_RAW_REQUEST_CHARS
-from rfq_copilot.intake_validation import ToolExecutor  # = graph.ToolExecutor, as Phase 6
+from rfq_copilot.intake_validation import (
+    ToolExecutor,
+)  # = graph.ToolExecutor, as specialist workflow
 from rfq_copilot.mcp.client import FailureCode, McpCallError
 from rfq_copilot.mcp.runtime import MANUFACTURING_RULE_VERSION
 from rfq_copilot.repositories import RuleVersionDetails
@@ -116,8 +118,8 @@ ErrorCode = Literal[
     "no_progress",  # routed to a stage that recorded no outcome: refused, never re-selected
     "execution_limit",
     "internal_error",
-    "paused",  # Day 49: stopped at a requested stage boundary (recovery.SupervisorRecovery)
-    "stale_recovery",  # Day 49: a held result no longer re-records as it did before the pause
+    "paused",  # recovery: stopped at a requested stage boundary (recovery.SupervisorRecovery)
+    "stale_recovery",  # recovery: a held result no longer re-records as it did before the pause
 ]
 _STRICT = ConfigDict(extra="forbid", frozen=True)
 
@@ -244,14 +246,20 @@ class SupervisorContext:
     pricing_rules: RuleVersionDetails | None = field(repr=False)
     approval_rules: RuleVersionDetails | None = field(repr=False)
     timeout_seconds: float = DEFAULT_TIMEOUT
-    # Delegation only (Day 46); the foundation and routing graphs never read them.
+    # Delegation only (delegation); the foundation and routing graphs never read them.
     intake_graph: CompiledStateGraph | None = field(default=None, repr=False)  # A1's graph
-    horizon_start: date | None = None  # trusted planning policy, as Phase 6's horizon_start
-    # Day 47: simultaneous A2 part checks per attempt (1 = sequential, max a2.MAX_CONCURRENCY)
+    horizon_start: date | None = (
+        None  # trusted planning policy, as specialist workflow's horizon_start
+    )
+    # parallel execution: simultaneous A2 part checks per attempt (1 = sequential, max a2.MAX_CONCURRENCY)
     part_concurrency: int = 2
-    # Day 50: optional observability sink (observability.emit). Write-only, never read back,
+    # telemetry: optional observability sink (observability.emit). Write-only, never read back,
     # never authority; None (the default) means no telemetry work at all.
     telemetry: object | None = field(default=None, repr=False)
+    # Worker-only identity resolution; current RFQ persistence, never model/customer input.
+    trusted_part_ids: tuple[str, ...] | None = field(default=None, repr=False)
+    # Worker-only structured portal facts, absent when the request contains free text.
+    structured_source: a1.StructuredIntakeSource | None = field(default=None, repr=False)
 
 
 def _manufacturing_trusted(rules: object) -> bool:
@@ -269,6 +277,11 @@ def _admit(context: object, recursion_limit: int = RECURSION_LIMIT) -> dict:
         raise SupervisorError("invalid_source")
     if len(text) > MAX_RAW_REQUEST_CHARS:
         raise SupervisorError("invalid_source")
+    if context.structured_source is not None and (
+        type(context.structured_source) is not a1.StructuredIntakeSource
+        or context.structured_source.render()[0] != text
+    ):
+        raise SupervisorError("invalid_source")
     try:
         identity = WorkflowIdentity(
             customer_id=context.principal.customer_id,
@@ -282,7 +295,7 @@ def _admit(context: object, recursion_limit: int = RECURSION_LIMIT) -> dict:
         budget = Budget(timeout_seconds=context.timeout_seconds, recursion_limit=recursion_limit)
     except ValidationError:
         raise SupervisorError("invalid_budget") from None
-    checks = (  # the A4 / A5 manifest checks the Phase 6 preflight uses
+    checks = (  # the A4 / A5 manifest checks the specialist workflow preflight uses
         (context.manufacturing_rules, _manufacturing_trusted, "manufacturing_rules_untrusted"),
         (context.pricing_rules, a4._trusted, "pricing_rules_untrusted"),
         (context.approval_rules, a5._approval_trusted, "approval_rules_untrusted"),
@@ -312,7 +325,7 @@ def validate_state(
     plan = tuple((s.stage, s.agent) for s in STAGE_PLAN)
     if tuple((s.stage, s.agent) for s in checked["stages"]) != plan:
         raise SupervisorError("invalid_state")
-    # Day 44 records no evidence, so a status, reason or indicator would be a forged result.
+    # Supervisor foundation records no evidence, so a status, reason or indicator would be a forged result.
     if any((s.status, s.reason) != ("pending", None) for s in checked["stages"]):
         raise SupervisorError("invalid_state")
     if checked["clarifications"] or checked["review_reasons"]:
@@ -320,10 +333,10 @@ def validate_state(
     return checked
 
 
-# --- routing (Day 45) -------------------------------------------------------------------
+# --- routing (routing) -------------------------------------------------------------------
 
 Decision = Literal[
-    "continue",  # Phase 6 _NEXT "continue": the next planned stage may run
+    "continue",  # specialist workflow _NEXT "continue": the next planned stage may run
     "clarification_required",
     "requires_review",
     "not_quotable",
@@ -340,7 +353,7 @@ _ACTION_OF: dict[str, RouteAction] = {
     "error": "failed",
     "draft_ready_for_review": "complete",
 }
-# The node each route action leads to. "delegate" ends at await_delegation until Day 46
+# The node each route action leads to. "delegate" ends at await_delegation until delegation
 # supplies a delegation node (attach_routing(delegate=...)).
 DESTINATIONS: dict[RouteAction, str] = {
     "delegate": "await_delegation",
@@ -391,7 +404,9 @@ class RouteDecision(BaseModel):
     action: RouteAction
     next_stage: Stage | None = None  # eligible for delegation; not executed
     stopped_at: Stage | None = None
-    outcome: Decision | None = None  # the stopping stage's decision (Phase 6 vocabulary)
+    outcome: Decision | None = (
+        None  # the stopping stage's decision (specialist workflow vocabulary)
+    )
     reason: _Code | None = None
     clarifications: _Codes = ()
     review_reasons: _Codes = ()
@@ -458,7 +473,7 @@ def _stage_states(outcomes: tuple[StageOutcome, ...]) -> tuple[StageState, ...]:
 def validate_routing_state(state: Mapping, context: SupervisorContext) -> RoutingState:
     """A routing state bound to this context: outcomes a prefix of ``STAGE_PLAN`` for this
     attempt, stage statuses and indicators derived from them, the route current or one record
-    old. Day 44's ``validate_state`` keeps guarding the initialised state unchanged."""
+    old. Supervisor foundation's ``validate_state`` keeps guarding the initialised state unchanged."""
     try:
         checked = _ROUTING.validate_python(dict(state))
     except (TypeError, ValueError):  # not a mapping, or not this schema
@@ -540,7 +555,7 @@ def record_outcome(
     ``prior`` the results already recorded for this attempt, by stage. A result failing a
     type, status, identity, specification, source or rule check is recorded as an "error"
     outcome (routing fails) and nothing downstream may use it. ``failure`` records a stage
-    that returned nothing (no budget left, or the agent raised), as Phase 6 does."""
+    that returned nothing (no budget left, or the agent raised), as specialist workflow does."""
     if failure is not None and result is not None:
         raise SupervisorError("invalid_state")
     checked = validate_routing_state(state, context)
@@ -554,7 +569,7 @@ def record_outcome(
     spec = _SPEC[route.next_stage]
     if failure is None:
         outcome = _outcome(spec, result, checked, prior)
-    else:  # Phase 6's trace: "not_run" when no budget was left, "error" when the agent raised
+    else:  # specialist workflow's trace: "not_run" when no budget was left, "error" when the agent raised
         status = "not_run" if failure == "timeout" else "error"
         outcome = StageOutcome(stage=spec.stage, agent=spec.agent, attempt_id=checked["attempt_id"], status=status, decision="error", reason=failure)  # fmt: skip
     recorded = (*outcomes, outcome)
@@ -568,7 +583,7 @@ def record_outcome(
 def _foundation(recursion_limit: int, schema: type, attempt: Callable | None = None) -> StateGraph:
     """START -> trusted_entry -> initialize_supervisor, shared by both graphs. Nodes take the
     graph's own schema, so a pre-seeded key of either schema is seen and refused. ``attempt``
-    (Day 49, execution graph only) returns a resumed attempt's own id, or None for a new one."""
+    (recovery, execution graph only) returns a resumed attempt's own id, or None for a new one."""
 
     async def trusted_entry(state, runtime: Runtime[SupervisorContext]) -> dict:
         if state:  # a recognised key was pre-seeded: only the trusted context may seed
@@ -610,7 +625,7 @@ def _route_action(state) -> str:
 def attach_routing(graph: StateGraph, *, after: str, delegate: str | None = None) -> None:
     """Add ``route_supervisor`` after ``after``, its conditional edges and the terminal nodes.
     ``delegate`` names an existing node that records the delegated stage with
-    ``record_outcome`` (Day 46); it gets the only back-edge, to ``route_supervisor``. Without
+    ``record_outcome`` (delegation); it gets the only back-edge, to ``route_supervisor``. Without
     it a "delegate" route ends at ``await_delegation``."""
 
     async def route_supervisor(state, runtime: Runtime[SupervisorContext]) -> dict:
@@ -651,7 +666,7 @@ def attach_routing(graph: StateGraph, *, after: str, delegate: str | None = None
 
 
 def build_routing_graph() -> CompiledStateGraph:
-    """Compile the Day 45 routing graph. No delegation node exists yet, so every run routes to
+    """Compile the routing routing graph. No delegation node exists yet, so every run routes to
     the first eligible stage and ends at ``await_delegation``. No checkpointer."""
     graph = _foundation(ROUTING_RECURSION_LIMIT, RoutingState)
     attach_routing(graph, after="initialize_supervisor")
@@ -662,7 +677,7 @@ def build_routing_graph() -> CompiledStateGraph:
 
 
 class SupervisorFoundationResult(BaseModel):
-    """Day 44 output: initialisation only. No assessment, amount, evidence or draft."""
+    """Supervisor foundation output: initialisation only. No assessment, amount, evidence or draft."""
 
     model_config = _STRICT
     scope: Literal["supervisor_foundation"] = "supervisor_foundation"
@@ -697,7 +712,7 @@ class SupervisorFoundationResult(BaseModel):
 
 
 class SupervisorRoutingResult(SupervisorFoundationResult):
-    """Day 45 output: one routing decision. Not an evaluation, approval or release."""
+    """routing output: one routing decision. Not an evaluation, approval or release."""
 
     scope: Literal["supervisor_routing"] = "supervisor_routing"
     status: Literal["routed", "error"]
@@ -754,7 +769,7 @@ async def run_supervisor_foundation(
 
 
 async def run_supervisor_routing(context: SupervisorContext) -> SupervisorRoutingResult:
-    """Route one attempt from a trusted context. Takes no state and no graph: until Day 46 adds
+    """Route one attempt from a trusted context. Takes no state and no graph: until delegation adds
     delegation, the result is the first eligible stage (a control decision, not an evaluation)."""
     return await _route(build_routing_graph(), context)
 
@@ -776,9 +791,9 @@ async def _route(graph: CompiledStateGraph, context) -> SupervisorRoutingResult:
     return SupervisorRoutingResult(status="error", error=result)
 
 
-# --- delegation (Day 46) ------------------------------------------------------------------
+# --- delegation (delegation) ------------------------------------------------------------------
 
-# Each stage's own default budget, capped by what is left of the attempt's deadline (Phase 6).
+# Each stage's own default budget, capped by what is left of the attempt's deadline (specialist workflow).
 _STAGE_TIMEOUTS: dict[str, float] = {
     "intake_extraction": a1.DEFAULT_TIMEOUT,
     "intake_validation": a1v.DEFAULT_TIMEOUT,
@@ -803,14 +818,14 @@ class _Custody:
         self.identity: WorkflowIdentity | None = None
         self.deadline: float | None = None
         self._results: dict[str, BaseModel] = {}
-        # Day 49 (recovery.SupervisorRecovery only): a stage boundary to pause before, what
+        # recovery (recovery.SupervisorRecovery only): a stage boundary to pause before, what
         # the pause recorded, and the held results a resumed run re-records without agents.
         self.pause_before: str | None = None
         self.paused_at: str | None = None
         self.expected: tuple[StageOutcome, ...] = ()
         self.budget_left: float | None = None
         self.carried: dict[str, BaseModel] = {}
-        # Day 50: this run's telemetry sink and random run id (set by _execute; write-only).
+        # telemetry: this run's telemetry sink and random run id (set by _execute; write-only).
         self.telemetry: object | None = None
         self.run: str | None = None
         self.run_kind: Literal["start", "resume", "restart"] = "start"
@@ -877,14 +892,24 @@ def _require_dependencies(context: SupervisorContext) -> None:
 
 
 def _arguments(stage: str, ctx: SupervisorContext, held: Mapping, execute=None) -> tuple[tuple, dict]:  # fmt: skip
-    """The Phase 6 call for ``stage``: trusted context values and this attempt's own results.
+    """The specialist workflow call for ``stage``: trusted context values and this attempt's own results.
     ``execute`` is ``ctx.execute`` or its transparent timing wrapper (``_observed``)."""
     execute = execute or ctx.execute
     if stage == "intake_extraction":
-        return (ctx.intake_graph, ctx.source_text), {"source_id": ctx.source_id, "rfq_id": ctx.rfq_id}  # fmt: skip
+        kwargs = {"source_id": ctx.source_id, "rfq_id": ctx.rfq_id}
+        if ctx.structured_source is not None:
+            kwargs["structured_source"] = ctx.structured_source
+        return (ctx.intake_graph, ctx.source_text), kwargs
     if stage == "intake_validation":  # the extraction A1 returned in this attempt, same text
-        return (held["intake_extraction"], ctx.source_text), {"rules": ctx.manufacturing_rules, "catalog": execute}  # fmt: skip
-    if stage == "manufacturing":  # independent parts, bounded by the trusted policy (Day 47)
+        kwargs = {"rules": ctx.manufacturing_rules, "catalog": execute}
+        if ctx.trusted_part_ids is not None:
+            kwargs["trusted_part_ids"] = ctx.trusted_part_ids
+        if ctx.structured_source is not None:
+            kwargs["structured_source"] = ctx.structured_source
+        return (held["intake_extraction"], ctx.source_text), kwargs
+    if (
+        stage == "manufacturing"
+    ):  # independent parts, bounded by the trusted policy (parallel execution)
         return (held["intake_validation"], execute), {"max_concurrency": ctx.part_concurrency}
     if stage == "supply":  # the same extraction object, for the verified delivery date
         return (held["manufacturing"], execute), {"horizon_start": ctx.horizon_start, "extraction": held["intake_extraction"]}  # fmt: skip
@@ -896,7 +921,7 @@ def _arguments(stage: str, ctx: SupervisorContext, held: Mapping, execute=None) 
 
 
 def _entry(spec: StageSpec) -> Callable:
-    # The plan's agent function, looked up on its module at call time as Phase 6 does.
+    # The plan's agent function, looked up on its module at call time as specialist workflow does.
     return getattr(sys.modules[spec.entry.__module__], spec.entry.__name__)
 
 
@@ -924,10 +949,10 @@ def _fields(name: str) -> frozenset[str]:
 
 _AGENT_STATUS = _fields("status") | _fields("readiness")
 _STATUS_OF_AGENT = {"manufacturing": a2.Status, "supply": a3.Status, "pricing": a4.Status}
-# Approved telemetry vocabularies (pre-Phase 8, Task 2). A value outside them is exported as
+# Approved telemetry vocabularies (pre-recovery hardening, Task 2). A value outside them is exported as
 # "unlisted": a code-shaped string is not trusted for its shape. Reasons come from the agents'
 # typed error codes and readiness values, the "<stage>_<status>" gate codes, and the fixed
-# codes the Supervisor, the Phase 6 handoff checks and the A2-A5 gates return (enumerated
+# codes the Supervisor, the specialist workflow handoff checks and the A2-A5 gates return (enumerated
 # from source). ``not_evaluated_reason`` is a free ``str`` on A2-A5, hence this boundary.
 _FIXED_REASONS = """
 unexpected_result_type unexpected_stage_status source_mismatch rule_mismatch draft_unavailable
@@ -963,7 +988,7 @@ def telemetry_code(field_name: str, value, event: str = "") -> object:
 
 
 def _emit(custody: _Custody, name: str, **fields) -> None:
-    """Day 50 telemetry for this run (no-op without a sink); never raises, never read back.
+    """telemetry telemetry for this run (no-op without a sink); never raises, never read back.
     Code fields are normalized through the approved vocabularies first."""
     if custody.telemetry is not None:
         fields = {k: telemetry_code(k, v, name) for k, v in fields.items()}
@@ -1034,7 +1059,7 @@ def _delegation_node(custody: _Custody):
         _emit_route(custody, route)
         spec = _SPEC[route.next_stage]
         held = custody.held(checked.get("outcomes", ()))
-        if custody.carried:  # Day 49 continuation: the original result, re-recorded, no agent
+        if custody.carried:  # recovery continuation: the original result, re-recorded, no agent
             update = _re_record(custody, spec.stage, state, ctx, held)
             _emit_stage(custody, spec, update, None, carried=True)
             return update
@@ -1095,13 +1120,13 @@ def _execution_graph(custody: _Custody) -> CompiledStateGraph:
 
 
 def build_execution_graph() -> CompiledStateGraph:
-    """The Day 46 graph, for inspection: the routing graph with ``delegate_stage`` in place of
+    """The delegation graph, for inspection: the routing graph with ``delegate_stage`` in place of
     ``await_delegation``. Runs go through ``run_supervisor_workflow``, which owns custody."""
     return _execution_graph(_Custody())
 
 
 class SupervisorExecutionResult(BaseModel):
-    """Day 46 output: one delegated A1 -> A5 run. Codes, stage statuses and the route; the
+    """delegation output: one delegated A1 -> A5 run. Codes, stage statuses and the route; the
     typed results (A4 costs, raw evidence) stay in custody and are discarded. ``draft`` is
     A5's customer-safe projection, kept out of ``summary()``. Never approved or released."""
 
@@ -1117,7 +1142,7 @@ class SupervisorExecutionResult(BaseModel):
     route: RouteDecision | None = None  # the business outcome: complete, review, ...
     draft_available: bool = False
     draft: a5.CustomerQuotationDraft | None = None
-    # Day 48: what the settled route requires next (clarify, blocked, review, draft, failure).
+    # escalation: what the settled route requires next (clarify, blocked, review, draft, failure).
     disposition: esc.SupervisorDisposition | None = None
     human_approval_required: Literal[True] = True
     approved: Literal[False] = False
@@ -1129,7 +1154,7 @@ class SupervisorExecutionResult(BaseModel):
             trusted = None not in (self.identity, self.attempt_id, self.route)
             settled = trusted and self.route.action != "delegate"
             ok = self.error is None and settled and bool(self.rules) and bool(self.outcomes)
-            try:  # the route is the one Day 45's decide derives from the outcomes (Day 48)
+            try:  # the route is the one routing's decide derives from the outcomes (escalation)
                 ok = ok and self.route == decide(self.outcomes)
             except SupervisorError:
                 ok = False
@@ -1138,7 +1163,7 @@ class SupervisorExecutionResult(BaseModel):
             ok = self.error is not None and empty and not (self.rules or self.stages or self.outcomes)  # fmt: skip
         if not ok or self.draft_available != (self.draft is not None):
             raise ValueError("inconsistent execution result")
-        # Day 48: every disposition field must follow from this route. blocking_findings and
+        # escalation: every disposition field must follow from this route. blocking_findings and
         # unevaluated_conditions are re-used here, so they are bounded only by the model's own
         # invariants (A2 vocabulary, A5's fixed shapes); their exact provenance is established
         # by run_supervisor_workflow, which builds them from custody, not by this check.
@@ -1156,7 +1181,7 @@ class SupervisorExecutionResult(BaseModel):
         return self.draft
 
     def customer_outcome(self) -> esc.CustomerOutcome:
-        """The customer-safe disposition (Day 48): fixed text, questions, blockers and review
+        """The customer-safe disposition (escalation): fixed text, questions, blockers and review
         notices; no codes, amounts, evidence or customer text. Never approved or released."""
         if self.disposition is None:  # not built by the trusted runner: conclude nothing
             return esc.for_result(None, self.error or "disposition_unavailable", False).customer_view()  # fmt: skip
@@ -1175,7 +1200,7 @@ async def run_supervisor_workflow(context: SupervisorContext) -> SupervisorExecu
 
 
 async def _execute(graph: CompiledStateGraph, context, custody: _Custody):
-    """One run, with Day 50 workflow telemetry around the unchanged Day 46 settle/build.
+    """One run, with telemetry workflow telemetry around the unchanged delegation settle/build.
     ``custody.run_kind`` / ``previous_attempt`` are set by recovery (resume, restart)."""
     custody.run = secrets.token_hex(16)  # random per run; never derived from customer data
     custody.telemetry = context.telemetry if isinstance(context, SupervisorContext) else None
@@ -1210,7 +1235,7 @@ async def _run_execute(graph: CompiledStateGraph, context, custody: _Custody):
         draft = None
         if quotation is not None and quotation.status in wf._DRAFT:
             draft = quotation.customer_view()
-        # Day 48: codes from this attempt's own accepted results, for the disposition only.
+        # escalation: codes from this attempt's own accepted results, for the disposition only.
         findings, unevaluated = (), ()
         if route.outcome == "not_quotable":  # A2's verified infeasible parts
             parts = custody.get("manufacturing").parts

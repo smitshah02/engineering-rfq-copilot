@@ -1,4 +1,4 @@
-"""RFQ Intake Agent foundation (Day 36): customer RFQ text -> provisional, evidence-checked
+"""RFQ Intake Agent foundation (intake extraction): customer RFQ text -> provisional, evidence-checked
 part extraction. Not validation, not feasibility, not a quote.
 
     START -> prepare_input -> extract -> verify -> END
@@ -7,15 +7,19 @@ part extraction. Not validation, not feasibility, not a quote.
 - Input is text the authorized caller supplies, with a caller-assigned ``source_id`` (and
   optionally a trusted ``rfq_id``). No MCP tool is offered or called; attachment retrieval is
   deferred until an authorized intake tool exists.
-- One model call (``llm.invoke_structured``) returns an ``ExtractionProposal``: per-part fields
+- For unstructured input, one model call (``llm.invoke_structured``) returns an
+  ``ExtractionProposal``: per-part fields
   as ``{value, quote}`` strings. The proposal is untrusted. ``verify_extraction`` decides
   everything deterministically: the quote must occur in the source (its real span is
   recorded), inside the part's own segment when parts are labelled; the value must occur in
   the quote; numbers are parsed exactly and units converted only by the fixed table
   ``_UNIT_MM``. Anything else is kept with a non-verified status and a fixed reason, never
   silently trusted, defaulted or borrowed from another part.
+- The worker can instead supply ``StructuredIntakeSource`` for persisted portal parts
+  without free-text notes. The same graph records one provisional part per stored part,
+  exact values and source offsets, without asking a model to extract them again.
 - Results are always ``readiness="pending_validation"``. Completeness rules, clarification
-  questions and catalog mapping are Day 37.
+  questions and catalog mapping are intake validation.
 - Security: customer text goes only in an untrusted data block (``llm.build_messages``);
   credential-looking input or output fails as ``unsafe_content``; the proposal schema has
   no identity, customer, price or decision fields (``extra="forbid"``); state holds no
@@ -34,12 +38,20 @@ from langchain_core.messages import BaseMessage
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from rfq_copilot import llm
 from rfq_copilot.api.schemas.common import INT32_MAX, Identifier
 from rfq_copilot.api.schemas.rfq import MAX_PARTS, MAX_RAW_REQUEST_CHARS, PartSpecification
-from rfq_copilot.grounding import ITEM_NUMBER, PART_KIND  # Phase 5 vocabulary, reused
+from rfq_copilot.grounding import ITEM_NUMBER, PART_KIND  # conversational graph vocabulary, reused
 
 RECURSION_LIMIT = 6  # longest path is 4 node steps
 DEFAULT_TIMEOUT = 120.0  # seconds, the one model call included
@@ -158,7 +170,7 @@ class FieldEvidence(BaseModel):
 
     model_config = _STRICT
     field: str
-    value: str  # as proposed by the model
+    value: str  # model wording, or the exact rendered persisted value for structured input
     evidence: str  # the source text at ``span`` when found, else the model's quote
     span: tuple[int, int] | None  # [start, end) offsets into the caller's source text
     status: FieldStatus
@@ -170,7 +182,7 @@ class FieldEvidence(BaseModel):
 class IntakePart(BaseModel):
     model_config = _STRICT
     index: int  # 1-based order in the extraction; not a customer part number
-    label: str | None  # customer's own name for the part, as proposed
+    label: str | None  # proposed customer label, or the exact persisted structured part ID
     label_verified: bool
     fields: tuple[FieldEvidence, ...]
     missing: tuple[str, ...]  # scalar fields the extraction did not state
@@ -193,8 +205,111 @@ class IntakeResult(BaseModel):
     parts: tuple[IntakePart, ...] = ()
     rfq_fields: tuple[FieldEvidence, ...] = ()
     error: ErrorCode | None = None
-    source_sha256: str | None = None  # of the verified source text (Day 37 validation input)
+    source_sha256: str | None = (
+        None  # of the verified source text (intake validation validation input)
+    )
     discarded_empty_entries: int = 0  # model entries with no label and nothing stated
+
+
+class StructuredIntakeSource(BaseModel):
+    """Worker-only facts from current, customer-scoped portal persistence, without notes.
+
+    Never a model proposal or an API input. Catalog wording is a lookup aid; exact IDs and
+    every stated specification value are also rendered and hashed. Missing values stay
+    missing. Validation and SourceGate still decide whether these facts may reach A2.
+    """
+
+    model_config = _STRICT
+    specifications: Annotated[
+        tuple[PartSpecification, ...], Field(min_length=1, max_length=MAX_PARTS)
+    ]
+    material_names: tuple[tuple[str, str], ...] = ()
+    finish_names: tuple[tuple[str, str], ...] = ()
+
+    @model_validator(mode="after")
+    def _unique_owners(self):
+        ids = [p.part_id for p in self.specifications]
+        if len(set(ids)) != len(ids):
+            raise ValueError("structured parts must have distinct owners")
+        for names in (self.material_names, self.finish_names):
+            if len({key for key, _ in names}) != len(names):
+                raise ValueError("catalog names must have distinct keys")
+        return self
+
+    def render(self) -> tuple[str, tuple[IntakePart, ...]]:
+        """Serialize facts deterministically, recording offsets rather than scanning labels.
+
+        Field names provide units/ownership. Exact decimals retain their persisted scale;
+        display wording never replaces a catalog ID or changes a specification.
+        """
+        mapping = {
+            "part_type": "description",
+            "length_mm": "length",
+            "width_mm": "width",
+            "height_mm": "height",
+            "thickness_mm": "thickness",
+            "tolerance_mm": "tolerance",
+        }
+        aliases = {
+            "material_id": ("material", dict(self.material_names)),
+            "finish_id": ("finish", dict(self.finish_names)),
+        }
+        text, parts = "", []
+        for index, spec in enumerate(self.specifications, 1):
+            start, fields = len(text), []
+            for name, value in spec.model_dump().items():
+                if value is None:
+                    continue
+                shown = format(value, "f") if isinstance(value, Decimal) else str(value)
+                entries = [(mapping.get(name, name), name, shown, value)]
+                if name in aliases:
+                    field, names = aliases[name]
+                    if value in names:
+                        entries.append((field, field, names[value], names[value]))
+                for field, key, display, normalized in entries:
+                    evidence = f"{key}: {display}"
+                    at = len(text)
+                    text += evidence + "\n"
+                    fields.append(
+                        FieldEvidence(
+                            field=field,
+                            value=display,
+                            evidence=evidence,
+                            span=(at, at + len(evidence)),
+                            status="verified",
+                            normalized=normalized,
+                            transformation=f"persisted_specification:{name}",
+                        )
+                    )
+            parts.append(
+                IntakePart(
+                    index=index,
+                    label=spec.part_id,
+                    label_verified=True,
+                    fields=tuple(fields),
+                    missing=tuple(n for n in SCALAR_FIELDS if n not in {f.field for f in fields}),
+                    scope=(start, len(text)),
+                )
+            )
+        return text, tuple(parts)
+
+
+def extract_structured_source(
+    source: StructuredIntakeSource, text: str, source_id: str, rfq_id: str | None
+) -> IntakeResult:
+    """A1's deterministic extraction of a trusted structured source, still provisional."""
+    expected, parts = source.render()
+    if text != expected:
+        raise ValueError("text is not the structured source")
+    return IntakeResult(
+        status="extracted",
+        source_id=source_id,
+        rfq_id=rfq_id,
+        parts=parts,
+        part_boundaries="single_part" if len(parts) == 1 else "labelled",
+        source_sha256=hashlib.sha256(text.encode()).hexdigest(),
+        injection_suspected=_INJECTION.search(text) is not None,
+    )
 
 
 # --- deterministic verification ----------------------------------------------------------
@@ -235,12 +350,15 @@ _ALTERNATIVE = re.compile(r"(?i)\b(?:or|either)\b|/")
 _MINUS = str.maketrans(dict.fromkeys("\u2212\u2012\u2013\u2014\ufe63\uff0d", "-"))
 _TOLERANCE_PREFIX = re.compile(r"^\s*(?:±|\+/-|\+-)\s*")
 _BAD_NUMBER = re.compile(r"\+\s*\d")  # an explicit "+5" is never silently read as 5
-# Clause context of a value occurrence (D36-01/02/03/07).
+# Clause context of a value occurrence (intake extraction control/02/03/07).
 _CLAUSE_END = re.compile(r"(?i)[,;\n()\[\]!?]|\.(?!\d)|\b(?:and|with|plus|but|while)\b")
 _NEGATION = re.compile(
     r"(?i)\b(?:not|never|without|avoid\w*|exclud\w*|except|instead|unless|if|optional\w*"
     r"|maybe|perhaps|possibly|prefer\w*|cannot|nor)\b"
-    r"|\bno\b(?!\.|\s*\d)|n'?t\b"
+    r"|\bno\b(?!\.|\s*\d)"
+    # Whole negative contractions, including omitted apostrophes; never the "nt" in "count".
+    r"|\b(?:ai|am|are|ca|could|dare|did|do|does|had|has|have|is|may|might|must"
+    r"|need|ought|sha|should|used|was|were|wo|would)n['’]?t\b"
 )
 _NOT_LATER = re.compile(r"(?i)\b(?:no|not)\s+later\s+than\b")  # a deadline, not a negation
 _CHOICE_WORDS = re.compile(r"(?i)\b(?:or|either|between|alternatively)\b|(?<=\w)/(?=\w)")
@@ -270,11 +388,19 @@ _KEYWORD_ID = re.compile(
 )
 _CODE_ID = re.compile(r"(?i)(?=[\w./-]*\d)[a-z0-9][\w./-]{0,31}|[a-z]{1,2}")
 _PART_MARKER = re.compile(r"\b(?i:part)\s*#?\s*([A-Z]|\d+)\b")
-# A code-style label introducing a part: letters and digits, then a colon (D36-13).
+# Explicit compound IDs need not contain digits ("Part P-OTHER:"). Count whole
+# headers independently of the legacy short-marker guard, which can see just "P"
+# in several different IDs. The prefix and colon distinguish headers from prose
+# such as "part type" or a material grade; short/numeric headers share this namespace.
+_PART_CODE_HEADER = re.compile(
+    r"(?i)(?<![\w./-])part\s*#?\s*"
+    r"([a-z]|\d+|(?=[\w./-]*[-_./])[a-z0-9][\w./-]{0,63})\s*:"
+)
+# A code-style label introducing a part: letters and digits, then a colon (intake extraction control).
 _CODE_LABEL = re.compile(
     r"(?<![\w./-])((?=[\w./-]*[A-Za-z])(?=[\w./-]*\d)[A-Za-z0-9][\w./-]{0,31})\s*:"
 )
-# Narrow recognition aligned with the catalog (master_data materials/finishes), D36-10.
+# Narrow recognition aligned with the catalog (master_data materials/finishes), intake extraction control.
 # Not catalog mapping: an unrecognized word is simply not verified as that field.
 _MATERIAL_TERM = re.compile(
     r"(?i)\b(?:alumin(?:um|ium)|steel|stainless|copper|brass|bronze|titanium|crs|hrs"
@@ -286,7 +412,7 @@ _FINISH_TERM = re.compile(
     r"|unfinished|finish|bare|raw|none)\b|\bno\s+coating\b"
 )
 _GRADE = re.compile(r"(?:[A-Za-z]{1,3}-?)?\d[\w.-]*|[A-Z]{2,4}")  # 304, 6061-T6, A36, C110, CRS
-# A source that marks any statement as wrong or replaced: nothing in it is trusted (D36-12).
+# A source that marks any statement as wrong or replaced: nothing in it is trusted (intake extraction control).
 # A whole count: no sign before it, and not part of a decimal or a code ("5052-H32", "3mm").
 _COUNT_TOKEN = re.compile(
     rf"(?i)(?<![\w.,+±-])(\d{{1,3}}(?:,\d{{3}})+|\d+)(?![.,]?\d)(?!-?[^\W\d])(?!-\d\d-\d\d)|\b({'|'.join(_WORDS)})\b"
@@ -323,18 +449,22 @@ def _identifier(label: str) -> bool:
 
 
 def _label_spans(label: str | None, text: str) -> list[tuple[int, int]]:
-    """Source occurrences of an identifier-shaped label (D36-06); [] for anything else."""
+    """Source occurrences of an identifier-shaped label (intake extraction control); [] for anything else."""
     if label is None or not _identifier(label):
         return []
     return [m.span() for m in _pattern(label).finditer(text)]
 
 
 def _several_parts_named(text: str) -> bool:
-    """The source itself names more than one part (Phase 5 multi-item rule, plus "Part X")."""
-    codes = {c.casefold() for c in _CODE_LABEL.findall(text)}  # "BRK-200:", "BRK-201:" (D36-13)
+    """The source itself names more than one part (conversational graph multi-item rule, plus "Part X")."""
+    codes = {
+        c.casefold() for c in _CODE_LABEL.findall(text)
+    }  # "BRK-200:", "BRK-201:" (intake extraction control)
+    headers = {label.casefold() for label in _PART_CODE_HEADER.findall(text)}
     if (
         len(set(ITEM_NUMBER.findall(text))) > 1
         or len(set(_PART_MARKER.findall(text))) > 1
+        or len(headers) > 1
         or len(codes) > 1
     ):
         return True
@@ -347,7 +477,9 @@ def _segments(text: str, parts: list[PartProposal]):
     if not parts:
         return "none", None
     if len(parts) == 1:
-        if _several_parts_named(text):  # one entry for a multi-part source (D36-05)
+        if _several_parts_named(
+            text
+        ):  # one entry for a multi-part source (intake extraction control)
             return "unverified", None
         return "single_part", [(0, len(text))]
     labels = [p.label for p in parts]
@@ -439,16 +571,20 @@ def _occurrences(field: str, value: str, text: str, span: tuple[int, int], numer
     found = []
     if field in _COUNTS:
         target = _count(value, 0)[0]
-        # Searched in the full string, so the lookbehind sees a sign just before the span.
-        for m in _COUNT_TOKEN.finditer(signed, start, end):
+        # Keep both source boundaries visible: endpos could turn "0.2" into a count "0".
+        for m in _COUNT_TOKEN.finditer(signed, start):
+            if m.end() > end:
+                break
             number = int(m.group(1).replace(",", "")) if m.group(1) else _WORDS[m.group(2).lower()]
             if number == target:
                 found.append(m.span())
     elif numeric:
         own = _MEASURE.search(_TOLERANCE_PREFIX.sub("", value.translate(_MINUS)))
-        for m in _MEASURE.finditer(signed, start, end):
+        for m in _MEASURE.finditer(signed, start):
+            if m.end() > end:
+                break
             # The sign is read from the source just before the digits, even outside the quote
-            # (D36-09): "-3", "\u22123", "+3" never verify "3"; "±"/"+/-"/"+-" only a tolerance.
+            # (intake extraction control): "-3", "\u22123", "+3" never verify "3"; "±"/"+/-"/"+-" only a tolerance.
             head = signed[: m.start(2)]
             plus_minus = head.endswith(("+/-", "+-", "±"))
             signed_value = plus_minus or head.endswith(("-", "+"))
@@ -476,7 +612,7 @@ def _clause(text: str, at: tuple[int, int]) -> tuple[int, int]:
 
 def _context_problem(field: str, text: str, at: tuple[int, int]) -> Reason | None:
     """Why the clause around one value occurrence does not state this field as a firm,
-    single request (D36-01 attribution, D36-02 alternatives, D36-03/07 negation)."""
+    single request (intake extraction control attribution, intake extraction control alternatives, intake extraction control/07 negation)."""
     begin, end = _clause(text, at)
     rest = f"{text[begin : at[0]]} {text[at[1] : end]}"
     clause = text[begin:end]
@@ -489,7 +625,7 @@ def _context_problem(field: str, text: str, at: tuple[int, int]) -> Reason | Non
 
 
 def _attribution_problem(field: str, text: str, at: tuple[int, int]) -> Reason | None:
-    """Whether the clause around ``at`` states this field at all (D36-01/10, D36-07 cues)."""
+    """Whether the clause around ``at`` states this field at all (intake extraction control/10, intake extraction control cues)."""
     begin, end = _clause(text, at)
     clause = text[begin:end]
     cue = _CUES.get(field)
@@ -529,13 +665,34 @@ def _attribution_problem(field: str, text: str, at: tuple[int, int]) -> Reason |
 
 def _check(field: str, item: Evidenced, text: str, segment: tuple[int, int] | None):
     value = str(item.value)
-    found = _pattern(item.quote).search(text)
+    pattern = _pattern(item.quote)
+    found = pattern.search(text)
     if found is not None and segment is not None:
-        found = _pattern(item.quote).search(text, *segment)
+        found = next(
+            (m for m in pattern.finditer(text, segment[0]) if m.end() <= segment[1]),
+            None,
+        )
         if found is None:
             return FieldEvidence(field=field, value=value, evidence=item.quote, span=None, status="unverified", reason="evidence_outside_part")  # fmt: skip
     if found is None:
         return FieldEvidence(field=field, value=value, evidence=item.quote, span=None, status="unverified", reason="evidence_not_in_source")  # fmt: skip
+    checked = _check_match(field, item, text, found)
+    # A repeated numeric quote may first occur inside a decimal or under another field.
+    # Retry only unsupported/unattributable matches, never alternatives or negation.
+    retryable = ("value_not_in_evidence", "field_not_attributable")
+    if (field in _COUNTS or field in _LENGTHS) and checked.reason in retryable:
+        for match in pattern.finditer(text, found.end()):
+            if segment is not None and match.end() > segment[1]:
+                break
+            candidate = _check_match(field, item, text, match)
+            if candidate.reason not in retryable:
+                return candidate
+    return checked
+
+
+def _check_match(field: str, item: Evidenced, text: str, found: re.Match):
+    """Verify one exact quote occurrence with its original source context."""
+    value = str(item.value)
     base = {"field": field, "value": value, "evidence": found.group(), "span": found.span()}
     if field in _CHOICE and (_ALTERNATIVE.search(value) or _ALTERNATIVE.search(found.group())):
         return FieldEvidence(**base, status="ambiguous", reason="alternatives")
@@ -678,11 +835,11 @@ def verify_extraction(
         checked = _check_parts(proposal, text, None)
     if boundaries == "unverified":
         # No established part boundaries: evidence and parsed values are kept for review,
-        # but no value is trusted as belonging to a particular part (D36-05).
+        # but no value is trusted as belonging to a particular part (intake extraction control).
         checked = [[_downgrade(f, "part_association_unverified") for f in fs] for fs in checked]
     if _CORRECTION.search(text):
         # The customer marked something as wrong or replaced; which value survives is a
-        # Day 37 contradiction decision, so no structured value is trusted meanwhile.
+        # intake validation contradiction decision, so no structured value is trusted meanwhile.
         checked = [[f if f.field in _FREE_TEXT else _downgrade(f, "superseded_or_contradicted") for f in fs] for fs in checked]  # fmt: skip
     claimed = [_norm(p.label) for p in proposal.parts if p.label]
 
@@ -738,7 +895,7 @@ def candidate_specification(
 ) -> PartSpecification | None:
     """Verified numeric fields as the downstream contract, when the part is identifiable.
 
-    Material and finish catalog ids, part type and completeness are decided later (Day 37 and
+    Material and finish catalog ids, part type and completeness are decided later (intake validation and
     the Engineering Agent); only an explicit no-finish request maps to ``finish_id="none"``."""
     if not isinstance(result, IntakeResult):
         return None
@@ -783,18 +940,23 @@ class IntakeState(TypedDict, total=False):
     proposal: ExtractionProposal | None
     result: IntakeResult | None
     error: ErrorCode | None
+    structured_source: StructuredIntakeSource | None  # trusted run input only, never model output
 
 
 def build_intake_graph(model: BaseChatModel) -> CompiledStateGraph:
     """Compile the Intake Agent for an injected chat model. No tools, no checkpointer."""
 
     async def prepare_input(state: IntakeState) -> IntakeState:
+        if state.get("structured_source") is not None:
+            return {"messages": []}
         try:
             return {"messages": llm.build_messages(INSTRUCTIONS, {"customer_rfq": state["text"]})}
         except llm.LlmError as error:
             return {"error": error.code}
 
     async def extract(state: IntakeState) -> IntakeState:
+        if state.get("structured_source") is not None:
+            return {}  # authoritative fields need no model proposal
         try:
             proposal = await llm.invoke_structured(model, state["messages"], ExtractionProposal)
             llm.reject_credentials(proposal.model_dump_json())
@@ -803,13 +965,25 @@ def build_intake_graph(model: BaseChatModel) -> CompiledStateGraph:
         return {"proposal": proposal}
 
     async def verify(state: IntakeState) -> IntakeState:
-        result = verify_extraction(
-            state["proposal"], state["text"], state["source_id"], state.get("rfq_id")
-        )
+        source = state.get("structured_source")
+        if source is not None:
+            result = extract_structured_source(
+                source, state["text"], state["source_id"], state.get("rfq_id")
+            )
+        else:
+            result = verify_extraction(
+                state["proposal"], state["text"], state["source_id"], state.get("rfq_id")
+            )
         return {"result": result}
 
     async def safe_error(state: IntakeState) -> IntakeState:
-        return {"text": "", "messages": [], "proposal": None, "result": None}
+        return {
+            "text": "",
+            "messages": [],
+            "proposal": None,
+            "result": None,
+            "structured_source": None,
+        }
 
     def on_error(next_node: str):
         return lambda state: "safe_error" if state.get("error") else next_node
@@ -837,11 +1011,14 @@ async def run_intake(
     source_id: str,
     rfq_id: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT,
+    structured_source: StructuredIntakeSource | None = None,
 ) -> IntakeResult:
-    """One bounded extraction of caller-supplied customer text: one model call, no retries.
+    """One bounded A1 extraction: at most one model call, no retries.
 
     ``source_id`` and ``rfq_id`` are trusted values from the authorized caller (a bad one is a
-    caller bug and raises ``ValueError``); the customer text is untrusted."""
+    caller bug and raises ``ValueError``); the customer text is untrusted. The worker alone
+    supplies ``structured_source`` from persistence when no free-text requirements exist;
+    this input still traverses the graph and returns only pending-validation evidence."""
     try:
         _IDENTIFIER.validate_python(source_id)
         if rfq_id is not None:
@@ -863,10 +1040,21 @@ async def run_intake(
         llm.reject_credentials(text)  # before the text reaches any graph state
     except llm.LlmError as error:
         return failed(error.code)
+    if structured_source is not None and (
+        type(structured_source) is not StructuredIntakeSource
+        or structured_source.render()[0] != text
+    ):
+        return failed("invalid_input")
     try:
         async with asyncio.timeout(timeout_seconds):
             state = await graph.ainvoke(
-                {"text": text, "source_id": source_id, "rfq_id": rfq_id, "error": None},
+                {
+                    "text": text,
+                    "source_id": source_id,
+                    "rfq_id": rfq_id,
+                    "error": None,
+                    "structured_source": structured_source,
+                },
                 {"recursion_limit": RECURSION_LIMIT},
             )
     except (GraphRecursionError, TimeoutError):

@@ -1,15 +1,15 @@
-"""Clarification and escalation dispositions (Day 48): what a settled Supervisor run means
+"""Clarification and escalation dispositions (escalation): what a settled Supervisor run means
 for a person. Derived only from the Supervisor's validated route; never a route, never an
 approval.
 
     SupervisorExecutionResult (route = decide(outcomes)) + trusted custody codes
         -> for_result -> SupervisorDisposition -> customer_view -> CustomerOutcome
 
-- Authority: Day 45's ``decide`` stays the only router. The disposition maps its terminal
+- Authority: routing's ``decide`` stays the only router. The disposition maps its terminal
   action one-to-one (``blocked`` splits on the route's own outcome: ``not_quotable`` is A2's
   verified infeasibility, ``not_evaluated`` is "could not be evaluated", never an
   impossibility). ``failed`` and a run that never settled are ``technical_failure``.
-- Inputs are codes only: the route's clarification and review codes (Phase 6 vocabulary),
+- Inputs are codes only: the route's clarification and review codes (specialist workflow vocabulary),
   A2's finding codes for a ``not_quotable`` stop and A5's unevaluated conditions for a draft,
   both read by the Supervisor from this attempt's custody and checked against the agents'
   own vocabularies here.
@@ -26,7 +26,7 @@ approval.
   original results: that needs the cleared custody or signed evidence (L04/L21/L26).
 - Human boundary: ``automatic_continuation``, ``approved`` and ``released`` are
   ``Literal[False]``; ``human_approval_required`` is ``Literal[True]``. Nothing is assigned,
-  queued, notified, persisted or resumed (resumption is Day 49).
+  queued, notified, persisted or resumed (resumption is recovery).
 """
 
 import re
@@ -88,7 +88,7 @@ _FIXED = {
 }
 NO_PARTS = "Please list each part with its quantity, material, dimensions and finish."
 GENERIC_QUESTION = "Please review your request and provide any missing or unclear details."
-# "<part index | 0>:<field | ->:<kind>" (Intake ids; A2/A3/A5 codes in Phase 6 _clarifications)
+# "<part index | 0>:<field | ->:<kind>" (Intake ids; A2/A3/A5 codes in specialist workflow _clarifications)
 _CLARIFICATION = re.compile(r"(\d{1,3}):([a-z_]{1,40}|-):([a-z_]{1,64})")
 
 
@@ -98,6 +98,11 @@ def _label(field: str) -> str | None:
     if label is None:
         return None
     return f"{label} in millimetres" if base in _MM else label
+
+
+def is_clarification_code(code: object) -> bool:
+    """True only for a structured ``<part>:<field|->:<kind>`` code (never free text)."""
+    return isinstance(code, str) and _CLARIFICATION.fullmatch(code) is not None
 
 
 def question(code: str) -> str:
@@ -136,7 +141,7 @@ _BLOCKER_OF: dict[str, Blocker] = {
 _ENGINEERING_INTAKE = ("engineering_review", "unsupported_requirement", "unknown_operation", "catalog_no_match", "catalog_ambiguous")  # fmt: skip
 _INTAKE_REVIEW = {f"intake_{k}": "engineering" if k in _ENGINEERING_INTAKE else "intake" for k in get_args(a1v.FindingKind)}  # fmt: skip
 _REVIEW_OF: dict[str, ReviewCategory] = {
-    **_INTAKE_REVIEW,  # Phase 6: "intake_<finding kind>" for review findings
+    **_INTAKE_REVIEW,  # specialist workflow: "intake_<finding kind>" for review findings
     "manufacturing_requires_review": "engineering",  # A2: rules differ from Intake's
     "BORDERLINE_BEND_RADIUS": "engineering",  # A5 approval policy
     "supply_requires_review": "supply_delivery",  # A3: drift, contradiction, capacity data

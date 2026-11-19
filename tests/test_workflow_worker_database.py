@@ -347,6 +347,39 @@ async def test_business_outcomes_are_final_and_never_retried(worker_db, committe
     assert (run.status, run.disposition, run.attempt_count, run.last_error) == (status, disposition, 1, None)  # fmt: skip
 
 
+async def test_worker_persists_supervisor_clarification_codes(worker_db, committed, seed_database, seed_plan, monkeypatch):  # fmt: skip
+    """Real offline Supervisor -> worker classification/settlement -> stored audit -> integrity."""
+    results = []
+    original = sv.run_supervisor_workflow
+
+    async def capture(context):
+        result = await original(context)
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(sv, "run_supervisor_workflow", capture)
+    rfq_id = await submit(seed_database, committed)
+    assert await drain(worker_db, deps(complete_args(material=None, material_grade=None))) == [1]
+    (result,) = results
+    assert result.status == "executed" and result.disposition.category == "clarification_required"
+    codes = result.disposition.clarification_codes
+    assert codes and codes == result.route.clarifications == result.outcomes[-1].clarifications
+    (event,) = await trail(seed_database, rfq_id)
+    assert event[workflow_queue.CLARIFICATION_KEY] == list(codes)
+    assert (event["status"], event["disposition"], event["actor"], event["outcome"]) == (
+        "waiting_human",
+        "clarification_required",
+        "U-SVC-A",
+        "success",
+    )
+    run = await run_of(seed_database, rfq_id)
+    assert run.attempt_count == 1 and run.last_error is None and run.quote_id is None
+    async with seed_database.session() as s:
+        assert await s.scalar(text("SELECT count(*) FROM business.quotes WHERE rfq_id = :r"), {"r": rfq_id}) == 0  # fmt: skip
+        report = await audit_integrity(s, seed_database.config, seed_plan, runtime=True)
+    assert report["status"] == "PASS"
+
+
 def hallucinating(monkeypatch, **change):
     """A1's validated output, altered after A1 verified it: the extraction now contradicts the
     persisted RFQ (a hallucinated value or part) while every Supervisor provenance check still
@@ -405,6 +438,57 @@ async def test_technical_failures_retry_up_to_the_attempt_limit(worker_db, commi
     assert statuses == [(1, "queued", "error"), (2, "queued", "error"), (3, "failed", "error")]
 
 
+@pytest.mark.parametrize("outage", ["model", "mcp"])
+async def test_continuous_worker_recovers_from_temporary_dependencies(
+    worker_db, committed, seed_database, outage, caplog
+):
+    from test_llm import FakeToolModel
+
+    calls = []
+
+    class FlakyModel(FakeToolModel):
+        async def _agenerate(self, *args, **kwargs):
+            calls.append("model")
+            if len(calls) == 1:
+                raise OSError("secret provider failure")
+            return await super()._agenerate(*args, **kwargs)
+
+    class FlakyRouter(Router):
+        async def __call__(self, tool, request):
+            if tool == "check_inventory":
+                calls.append("mcp")
+                if len(calls) == 1:
+                    raise McpCallError("unavailable")
+            return await super().__call__(tool, request)
+
+    if outage == "mcp":
+        dependencies = deps(router=FlakyRouter())
+    else:
+        graph = build_intake_graph(FlakyModel(messages=iter([reply(complete_args())] * 3)))
+        dependencies = replace(deps(), intake_graph=graph)
+    rfq_id = await submit(seed_database, committed)
+    worker = Worker(worker_db, settings_(), dependencies)
+    task = asyncio.create_task(worker.serve())
+    try:
+        async with asyncio.timeout(20):
+            while (await run_of(seed_database, rfq_id)).status != "completed":
+                if task.done():
+                    await task
+                await asyncio.sleep(0.05)
+    finally:
+        worker.stopping.set()
+        await asyncio.wait_for(task, 10)
+    run = await run_of(seed_database, rfq_id)
+    assert (run.disposition, run.attempt_count, run.last_error) == ("ready_for_draft", 2, None)
+    events = await trail(seed_database, rfq_id)
+    expected = "model_error" if outage == "model" else "unavailable"
+    assert [(e["status"], e["error"]) for e in events] == [
+        ("queued", expected),
+        ("completed", None),
+    ]
+    assert "secret provider failure" not in caplog.text
+
+
 async def test_permission_failures_are_configuration_errors_not_retries(worker_db, committed, seed_database):  # fmt: skip
     rfq_id = await submit(seed_database, committed)
     await drain(worker_db, deps(router=Failing("forbidden")))
@@ -441,6 +525,37 @@ async def test_two_workers_never_claim_the_same_run(worker_db, committed, seed_d
     assert {r.status for r in runs} == {"completed"} and {r.claim_generation for r in runs} == {1}
     actors = {e["actor"] for r in rfq_ids for e in await trail(seed_database, r)}
     assert actors == {"U-SVC-A"}
+
+
+async def test_two_continuous_workers_discover_new_submissions_once(
+    worker_db, committed, seed_database
+):
+    workers = [
+        Worker(worker_db, settings_(worker_id=f"continuous-{i}"), deps(router=Slow(0.05)))
+        for i in range(2)
+    ]
+    tasks = [asyncio.create_task(worker.serve()) for worker in workers]
+    try:
+        await asyncio.sleep(0.1)  # both consumers start on an empty queue
+        rfq_ids = [await submit(seed_database, committed) for _ in range(3)]
+        async with asyncio.timeout(20):
+            while True:
+                runs = [await run_of(seed_database, rfq_id) for rfq_id in rfq_ids]
+                if all(run.disposition == "ready_for_draft" for run in runs):
+                    break
+                for task in tasks:
+                    if task.done():
+                        await task
+                await asyncio.sleep(0.05)
+        await asyncio.sleep(0.15)  # several more polls: finished evaluations stay terminal
+    finally:
+        for worker in workers:
+            worker.stopping.set()
+        await asyncio.wait_for(asyncio.gather(*tasks), 10)
+    runs = [await run_of(seed_database, rfq_id) for rfq_id in rfq_ids]
+    assert {(run.attempt_count, run.claim_generation) for run in runs} == {(1, 1)}
+    trails = [await trail(seed_database, rfq_id) for rfq_id in rfq_ids]
+    assert all(len(events) == 1 for events in trails)
 
 
 async def test_expired_lease_is_reclaimed_and_the_stale_worker_is_fenced(worker_db, committed, seed_database):  # fmt: skip

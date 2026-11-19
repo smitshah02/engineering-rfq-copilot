@@ -38,7 +38,8 @@ accepted only in ``RUNTIME_TABLES`` and only when the audited write paths explai
   pinned rules, contiguous lines summing to its total, its own calculation record), with
   exactly one ``create_quote_draft`` receipt keyed ``wf-<run>``, one ``quote_draft.create``
   event and the run's settling ``workflow.draft`` event, all in the one draft transaction.
-  Any later human lifecycle row on a runtime quote is not explained here and fails.
+  Human lifecycle rows are reconstructed by runtime_quote_lifecycle before the original
+  service-draft checks, which still validate each workflow's initial version.
 - audit_events: anything not explained above (or an operator-tool refusal) fails.
 
 Every other table must still equal the seed exactly. Binding activity is replayed per
@@ -58,7 +59,8 @@ from rfq_copilot.repositories.attachments import SOURCE_ROLE as UPLOAD_SOURCE_RO
 
 RUNTIME_TABLES = frozenset(
     {"users", "user_customer_bindings", "rfqs", "rfq_line_items", "rfq_attachments", "idempotency_records", "audit_events",
-     "workflow_runs", "quotes", "quote_versions", "quote_line_items", "pricing_calculations"}
+     "workflow_runs", "quotes", "quote_versions", "quote_line_items", "pricing_calculations",
+     "approval_requests", "approval_history"}
 )  # fmt: skip
 _RFQ_ID = re.compile(r"^RFQ-[0-9a-f]{32}$")
 _ATTACHMENT_ID = re.compile(r"^ATT-[0-9A-F]{32}$")  # attachments.new_attachment_id
@@ -143,19 +145,25 @@ def _active_at(timeline, instant) -> bool:
     return state
 
 
-def verify_runtime(extras: dict[str, list[dict]], users: dict[str, dict], overlay: str) -> dict:
+def verify_runtime(
+    extras: dict[str, list[dict]], users: dict[str, dict], overlay: str, *, authority=None
+) -> dict:
     """Explain every non-seed row of RUNTIME_TABLES or raise IntegrityVerificationError.
 
     ``extras``: per table, the stored rows outside the seed (seed rows are verified by the
     caller). ``users``: every stored user by id. ``overlay``: the audited overlay state.
     """
+    from rfq_copilot import quote_approval, quote_versions
+    from rfq_copilot.runtime_quote_lifecycle import verify_lifecycles
+
+    quote_operations = {*quote_versions.CREATION_OPERATIONS, *quote_approval.AUDIT.values()}
     events = extras["audit_events"]
     explained = set()
     by_kind = defaultdict(list)
     for event in events:
         check(
             event["agent_name"] is None
-            and (event["operation"] == quote_drafts.AUDIT_OPERATION or (event["quote_id"] is None and event["quote_version"] is None)),
+            and (event["operation"] in quote_operations or (event["quote_id"] is None and event["quote_version"] is None)),
             EVENTS,
             "unexplained audit event",
         )  # fmt: skip
@@ -290,6 +298,8 @@ def verify_runtime(extras: dict[str, list[dict]], users: dict[str, dict], overla
         if receipt["operation"] == quote_drafts.OPERATION:  # A4: verified by _verify_drafts
             draft_receipts.append(receipt)
             continue
+        if receipt["operation"] in {*quote_approval.AUDIT, quote_versions.OPERATION}:
+            continue  # verified individually, with exact event/history bindings below
         check(receipt["operation"] == rfq_submission.OPERATION, RECEIPTS, "receipt outside the runtime vocabulary")  # fmt: skip
         receipts[receipt["correlation_id"]].append(receipt)
     for event in by_kind[(rfq_submission.AUDIT_OPERATION, "success")]:
@@ -352,7 +362,8 @@ def verify_runtime(extras: dict[str, list[dict]], users: dict[str, dict], overla
         )
 
     _verify_queue(extras["workflow_runs"], rfqs, by_kind, users, services, explained)
-    _verify_drafts(extras, rfqs, by_kind, services, draft_receipts, explained)
+    initial = verify_lifecycles(extras, users, authority or {}, timelines, explained)
+    _verify_drafts(initial, rfqs, by_kind, services, draft_receipts, explained)
 
     # --- Refusals by the operator tools, then nothing else -------------------------------
     for event in events:
@@ -464,7 +475,9 @@ def _verify_queue(runs, rfqs, by_kind, users, services, explained) -> None:
             data, actor = attempt["event_data"], attempt["actor_id"]
             service = services.get(actor)
             check(
-                set(data) == wq.ATTEMPT_KEYS
+                wq.ATTEMPT_KEYS <= set(data) <= wq.ATTEMPT_KEYS | {wq.CLARIFICATION_KEY}
+                and (wq.CLARIFICATION_KEY not in data
+                     or (data["disposition"] == "clarification_required" and wq.clarification_codes_valid(data[wq.CLARIFICATION_KEY])))
                 and (attempt["customer_id"], attempt["rfq_id"], attempt["correlation_id"]) == (run["customer_id"], run["rfq_id"], run["rfq_id"])
                 and (actor is None or (service is not None and service["event_data"]["customer_id"] == run["customer_id"]))
                 and isinstance(data["claim_generation"], int) and 1 <= data["claim_generation"] <= run["claim_generation"]

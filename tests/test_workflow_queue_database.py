@@ -24,7 +24,7 @@ from test_database_seeding_integration import session as session
 from test_operator_assignment_admin_database import admin, first_operator, staff
 from test_runtime_integrity_database import eligible, fails, runtime_audit
 
-from rfq_copilot import identity_admin, workflow_queue
+from rfq_copilot import identity_admin, workflow_queue, workflow_worker
 from rfq_copilot import operator_admin as operators
 from rfq_copilot.models import RFQ, AuditEvent, IdempotencyRecord, RFQLineItem, User, WorkflowRun
 from rfq_copilot.seeding.policy import register_policy
@@ -318,5 +318,195 @@ async def test_runtime_integrity_detects_forged_duplicate_or_orphaned_queue_reco
         populated.add(AuditEvent(actor_id=user, customer_id=mine, rfq_id=rfq_id, operation="workflow.attempt", outcome="success", correlation_id=rfq_id, event_data=data))  # fmt: skip
     elif change == "activation":
         populated.add(AuditEvent(actor_id=await admin(populated), operation="workflow.queue_activate", outcome="success", correlation_id="workflow-queue-activation", event_data={"historical_rfq_ids": [], "graph_version": workflow_queue.GRAPH_VERSION}))  # fmt: skip
+    await populated.flush()
+    await fails(populated, seed_database, seed_plan, rule)
+
+
+# --- optional clarification diagnostics in the stored attempt trail -------------------------------
+
+
+CLARIFICATION_CODES = (
+    "1:material:missing",  # Intake
+    "1:finish_id:missing",  # manufacturing / quotation
+    "0:requested_delivery_date:requested_delivery_date_unverified",  # supply
+    "0:-:no_parts",
+)
+
+
+async def clarification_attempt(populated, seed_plan, trust, database, codes=()):
+    """A settled run and an uninserted event in the rolled-back test transaction.
+
+    Tamper before INSERT: audit rows are immutable, even for the test owner. The full
+    worker/settlement path is covered in test_workflow_worker_database.
+    """
+    user, _, subject, _ = await customer(populated, seed_plan)
+    await activate(populated)
+    created = await submit(populated, trust, database, subject, "q-clarification-audit")
+    assert created.status_code == 201
+    settings = workflow_worker.WorkerSettings()
+    claim = await workflow_worker.claim(database, settings)
+    assert claim is not None and claim.rfq_id == created.json()["rfq_id"]
+    await populated.execute(
+        update(WorkflowRun)
+        .where(WorkflowRun.workflow_run_id == claim.workflow_run_id)
+        .values(
+            status="waiting_human",
+            disposition="clarification_required",
+            lease_owner=None,
+            lease_expires_at=None,
+        )
+    )
+    event = workflow_worker._attempt_event(
+        claim, None, "waiting_human", "clarification_required", None, 1, codes
+    )
+    return event, user
+
+
+@pytest.mark.parametrize(
+    "codes",
+    [(), CLARIFICATION_CODES, tuple(f"{i}:finish_id:missing" for i in range(25))],
+    ids=["historical-no-field", "generated-code-shapes", "maximum-25"],
+)
+async def test_runtime_integrity_accepts_attempt_clarification_diagnostics(populated, seed_database, seed_plan, trust, database, codes):  # fmt: skip
+    event, _ = await clarification_attempt(populated, seed_plan, trust, database, codes)
+    if codes:
+        assert event.event_data[workflow_queue.CLARIFICATION_KEY] == list(codes)
+        assert set(event.event_data) == workflow_queue.ATTEMPT_KEYS | {
+            workflow_queue.CLARIFICATION_KEY
+        }
+    else:
+        assert set(event.event_data) == workflow_queue.ATTEMPT_KEYS
+    populated.add(event)
+    await populated.flush()
+    report = await runtime_audit(populated, seed_database, seed_plan)
+    assert report["status"] == "PASS" and report["runtime_records"]["workflow_runs"] == 1
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        True,
+        7,
+        1.5,
+        "1:finish_id:missing",
+        {"code": "1:finish_id:missing"},
+        [],
+        [["1:finish_id:missing"]],
+        [{"code": "1:finish_id:missing"}],
+        ["customer free text"],
+        ["1:finish_id:missing\nsecret"],
+        ["1:finish_id:missing", 7],
+        ["1:finish_id:missing"] * 2,
+        [f"{i}:finish_id:missing" for i in range(26)],
+    ],
+    ids=[
+        "null",
+        "boolean",
+        "integer",
+        "float",
+        "string",
+        "object",
+        "empty",
+        "nested-list",
+        "object-element",
+        "free-text",
+        "trailing-newline",
+        "mixed-types",
+        "duplicate",
+        "over-25",
+    ],
+)
+async def test_runtime_integrity_rejects_malformed_attempt_clarification_codes(populated, seed_database, seed_plan, trust, database, value):  # fmt: skip
+    event, _ = await clarification_attempt(populated, seed_plan, trust, database)
+    # Bypass the writer's sanitizer so the real database audit must detect the tampering.
+    event.event_data = {**event.event_data, workflow_queue.CLARIFICATION_KEY: value}
+    populated.add(event)
+    await populated.flush()
+    await fails(populated, seed_database, seed_plan, "attempt event is inconsistent")
+
+
+@pytest.mark.parametrize(
+    "status,disposition",
+    [
+        ("waiting_human", "review_required"),
+        ("blocked", "not_quotable"),
+        ("blocked", "not_evaluated"),
+        ("blocked", "source_mismatch"),
+        ("blocked", "configuration_error"),
+        ("completed", "ready_for_draft"),
+        ("failed", "technical_failure"),
+        ("queued", None),
+    ],
+)
+async def test_runtime_integrity_rejects_codes_on_incompatible_attempt_dispositions(populated, seed_database, seed_plan, trust, database, status, disposition):  # fmt: skip
+    event, _ = await clarification_attempt(
+        populated, seed_plan, trust, database, CLARIFICATION_CODES
+    )
+    event.event_data = {**event.event_data, "status": status, "disposition": disposition}
+    populated.add(event)
+    await populated.flush()
+    await fails(populated, seed_database, seed_plan, "attempt event is inconsistent")
+
+
+@pytest.mark.parametrize("key", sorted(workflow_queue.ATTEMPT_KEYS))
+async def test_runtime_integrity_still_requires_every_attempt_key_with_codes(populated, seed_database, seed_plan, trust, database, key):  # fmt: skip
+    event, _ = await clarification_attempt(
+        populated, seed_plan, trust, database, CLARIFICATION_CODES
+    )
+    event.event_data = {k: v for k, v in event.event_data.items() if k != key}
+    populated.add(event)
+    await populated.flush()
+    rule = (
+        "attempt event without its run"
+        if key == "workflow_run_id"
+        else "attempt event is inconsistent"
+    )
+    await fails(populated, seed_database, seed_plan, rule)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "extra-key",
+        "actor",
+        "customer",
+        "rfq",
+        "correlation",
+        "generation",
+        "attempt",
+        "status",
+        "error",
+        "agent",
+    ],
+)
+async def test_runtime_integrity_keeps_attempt_requirements_with_codes(populated, seed_database, seed_plan, trust, database, change):  # fmt: skip
+    event, user = await clarification_attempt(
+        populated, seed_plan, trust, database, CLARIFICATION_CODES
+    )
+    rule = "attempt event is inconsistent"
+    if change == "extra-key":
+        event.event_data = {**event.event_data, "prompt": "forged text"}
+    elif change == "actor":
+        event.actor_id = user  # a customer cannot settle a worker attempt
+    elif change == "customer":
+        event.customer_id = eligible(seed_plan)[1]
+    elif change == "rfq":
+        event.rfq_id = seed_plan.rows["rfqs"][0]["rfq_id"]
+    elif change == "correlation":
+        event.correlation_id = "wrong-rfq"
+    elif change == "generation":
+        event.event_data = {**event.event_data, "claim_generation": 2}  # beyond the fence
+    elif change == "attempt":
+        event.event_data = {**event.event_data, "attempt": 2}  # beyond the run's count
+    elif change == "status":
+        event.event_data = {**event.event_data, "status": "completed"}  # invalid pairing
+    elif change == "error":
+        event.event_data = {**event.event_data, "error": "internal_error"}
+        rule = "settled run without its attempt record"
+    elif change == "agent":
+        event.agent_name = "forged-agent"
+        rule = "unexplained audit event"
+    populated.add(event)
     await populated.flush()
     await fails(populated, seed_database, seed_plan, rule)
